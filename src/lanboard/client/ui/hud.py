@@ -189,7 +189,7 @@ class HudPanel(QWidget):
         if rtt is not None:
             self.metric_labels["rtt"].setText(f"{rtt:.1f} ms")
         self.metric_labels["total"].setText(
-            f"{human_bytes(s.get('total_in', 0))} / {human_bytes(s.get('total_out', 0))}")
+            f"{human_bytes(s.get('total_bytes_in', 0))} / {human_bytes(s.get('total_bytes_out', 0))}")
 
     def on_rtt(self, ms: float) -> None:
         self.metric_labels["rtt"].setText(f"{ms:.1f} ms")
