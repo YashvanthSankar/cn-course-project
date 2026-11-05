@@ -16,6 +16,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# bundled UI fonts (Inter, JetBrains Mono; SIL OFL 1.1) loaded at startup by ui/theme.py
+"lanboard.client" = ["assets/fonts/*.ttf", "assets/fonts/*.txt"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

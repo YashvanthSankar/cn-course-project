@@ -12,18 +12,25 @@ Design for heavy traffic (cursor + live strokes can be hundreds of frames/s):
   and a filtered row list on top of it. A batch costs one ``beginRemoveRows``
   for frames that fell off the ring and one ``beginInsertRows`` for new rows, so
   the view never resets during capture and memory stays bounded.
+
+Presentation: message types are drawn as colour-coded chips by family
+(handshake, ordered ops, recovery, chat, liveness, errors, blobs; see
+``theme.MSG_FAMILY``), numbers use JetBrains Mono, and the decoded JSON payload
+is syntax highlighted by :class:`JsonHighlighter`.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections import deque
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QTimer
-from PySide6.QtGui import QColor, QFont
-from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QPlainTextEdit,
-                               QSplitter, QTableView, QToolButton, QVBoxLayout, QWidget)
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QRectF, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat
+from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit,
+                               QSplitter, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTableView,
+                               QToolButton, QVBoxLayout, QWidget)
 
 from lanboard.common.messages import EPHEMERAL, MsgType, type_name
 
@@ -38,9 +45,15 @@ NOISY_TYPES = frozenset(int(t) for t in EPHEMERAL if t != MsgType.SIGNAL) | {int
 
 
 def frame_seq(payload) -> str:
-    """The seq shown in the table: payload seq, or the range of an OP_BATCH."""
+    """The seq shown in the table: payload seq, the range of an OP_BATCH, or the
+    chunk number ("part 2/5") of a large SNAPSHOT/HISTORY sent in several frames."""
     if not isinstance(payload, dict):
         return ""
+    if "part" in payload and "parts" in payload:
+        try:
+            return f"{int(payload['part']) + 1}/{int(payload['parts'])}"
+        except (TypeError, ValueError):
+            pass
     if "seq" in payload:
         return str(payload["seq"])
     ops = payload.get("ops")
@@ -76,9 +89,7 @@ class FrameModel(QAbstractTableModel):
         self.type_filter: int | None = None
         self.hide_noisy = False
         self._t0: float | None = None
-        self._mono = QFont("Menlo")
-        self._mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._mono.setPixelSize(11)
+        self._mono = theme.mono_font(10)
 
     # -- filtering -----------------------------------------------------------------
     def accepts(self, f: dict) -> bool:
@@ -187,18 +198,15 @@ class FrameModel(QAbstractTableModel):
                 return QColor(t["danger"] if "drop" in str(f.get("chaos")) else t["warn"])
             if col == 0:
                 return QColor(t["muted"])
+            if col in (3, 4):
+                return QColor(t["text2"])
         elif role == Qt.ItemDataRole.BackgroundRole:
             if f.get("chaos"):
                 t = theme.tokens()
-                return QColor(t["danger_soft"] if "drop" in str(f.get("chaos")) else t["warn_soft"])
+                return theme.alpha(t["danger"] if "drop" in str(f.get("chaos")) else t["warn"], 0.12)
         elif role == Qt.ItemDataRole.FontRole:
-            if col in (0, 3, 4):
+            if col in (0, 3, 4, 5):
                 return self._mono
-            if col == 2:
-                bf = QFont()
-                bf.setPixelSize(12)
-                bf.setWeight(QFont.Weight.DemiBold)
-                return bf
         elif role == Qt.ItemDataRole.TextAlignmentRole:
             if col in (1,):
                 return int(Qt.AlignmentFlag.AlignCenter)
@@ -207,20 +215,90 @@ class FrameModel(QAbstractTableModel):
         return None
 
 
+class TypeChipDelegate(QStyledItemDelegate):
+    """Paints the Type column as a rounded chip tinted by the message family."""
+
+    def paint(self, p: QPainter, option, index) -> None:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        name = opt.text
+        opt.text = ""
+        style = opt.widget.style() if opt.widget else None
+        if style is not None:                       # row background / selection as usual
+            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, p, opt.widget)
+        t = theme.tokens()
+        c = QColor(t.get(theme.MSG_FAMILY.get(name, "muted"), t["muted"]))
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        f = theme.mono_font(10, QFont.Weight.Bold)
+        p.setFont(f)
+        w = min(option.rect.width() - 6, p.fontMetrics().horizontalAdvance(name) + 12)
+        r = QRectF(option.rect.left() + 3, option.rect.center().y() - 8, w, 16)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(theme.alpha(c, 0.2 if theme.manager().dark else 0.13))
+        p.drawRoundedRect(r, 5, 5)
+        p.setPen(c)
+        p.drawText(r, Qt.AlignmentFlag.AlignCenter,
+                   p.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, int(w - 6)))
+        p.restore()
+
+    def sizeHint(self, option, index) -> QSize:  # noqa: N802
+        return QSize(80, 24)
+
+
+class JsonHighlighter(QSyntaxHighlighter):
+    """Colours keys, strings, numbers and literals in the pretty-printed payload."""
+
+    # applied in order, later rules win: digits inside strings end up string-coloured
+    RULES = (
+        (re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?"), "chart_out"),   # numbers
+        (re.compile(r"\b(?:true|false|null)\b"), "accent2"),                       # literals
+        (re.compile(r'"(?:[^"\\]|\\.)*"'), "success"),                              # strings
+        (re.compile(r'"(?:[^"\\]|\\.)*"(?=\s*:)'), "accent"),                     # keys
+    )
+
+    def __init__(self, doc) -> None:
+        super().__init__(doc)
+        self._formats: dict[str, QTextCharFormat] = {}
+        self.retheme()
+
+    def retheme(self) -> None:
+        t = theme.tokens()
+        self._formats = {}
+        for _rx, tok in self.RULES:
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor(t[tok]))
+            self._formats[tok] = fmt
+        head = QTextCharFormat()
+        head.setForeground(QColor(t["text"]))
+        head.setFontWeight(QFont.Weight.Bold)
+        self._formats["head"] = head
+        self.rehighlight()
+
+    def highlightBlock(self, text: str) -> None:  # noqa: N802
+        if self.currentBlock().blockNumber() == 0:           # the summary line
+            self.setFormat(0, len(text), self._formats["head"])
+            return
+        for rx, tok in self.RULES:
+            for m in rx.finditer(text):
+                start, end = (m.start(1), m.end(1)) if m.lastindex else (m.start(), m.end())
+                self.setFormat(start, end - start, self._formats[tok])
+
+
 class InspectorPanel(QWidget):
     """Filter bar + frame table + pretty JSON detail pane."""
 
     def __init__(self, net, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("SidePage")
+        self.setObjectName("ConsoleBody")
         self.net = net
         self.pending: list[dict] = []
         self.paused = False
         self.total_seen = 0
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 4, 10, 8)
-        lay.setSpacing(6)
+        lay.setContentsMargins(12, 4, 12, 8)
+        lay.setSpacing(8)
 
         bar = QHBoxLayout()
         bar.setSpacing(6)
@@ -240,10 +318,17 @@ class InspectorPanel(QWidget):
         self.clear_btn.clicked.connect(self.clear)
         bar.addWidget(self.clear_btn)
         lay.addLayout(bar)
-        self.hide_switch = ToggleSwitch("Hide cursor / live / ping frames")
+        srow = QHBoxLayout()
+        self.hide_switch = ToggleSwitch("Hide cursor / live / ping")
         self.hide_switch.setChecked(True)
         self.hide_switch.toggled.connect(self._apply_filter)
-        lay.addWidget(self.hide_switch)
+        srow.addWidget(self.hide_switch)
+        srow.addStretch(1)
+        self.count_label = QLabel("0 frames")
+        self.count_label.setProperty("role", "mono")
+        self.count_label.setStyleSheet("font-size: 11px;")
+        srow.addWidget(self.count_label)
+        lay.addLayout(srow)
 
         self.model = FrameModel(RING_SIZE, self)
         self.model.hide_noisy = True
@@ -254,14 +339,15 @@ class InspectorPanel(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(22)
+        self.table.verticalHeader().setDefaultSectionSize(24)
+        self.table.setItemDelegateForColumn(2, TypeChipDelegate(self.table))
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.table.setShowGrid(False)
         self.table.setWordWrap(False)
         self.table.setAlternatingRowColors(True)
         hh = self.table.horizontalHeader()
         hh.setHighlightSections(False)
-        for col, width in enumerate((94, 20, 76, 46, 50)):
+        for col, width in enumerate((90, 18, 80, 40, 40)):
             hh.resizeSection(col, width)
         hh.setStretchLastSection(True)
         self.table.selectionModel().currentRowChanged.connect(self._show_detail)
@@ -269,16 +355,14 @@ class InspectorPanel(QWidget):
         self.detail = QPlainTextEdit()
         self.detail.setReadOnly(True)
         self.detail.setPlaceholderText("Select a frame to see its decoded JSON payload")
-        mono = QFont("Menlo")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        mono.setPixelSize(11)
-        self.detail.setFont(mono)
+        self.detail.setFont(theme.mono_font(11))
+        self.highlighter = JsonHighlighter(self.detail.document())
 
         split = QSplitter(Qt.Orientation.Vertical)
         split.addWidget(self.table)
         split.addWidget(self.detail)
         split.setStretchFactor(0, 3)
-        split.setStretchFactor(1, 1)
+        split.setStretchFactor(1, 2)
         split.setChildrenCollapsible(False)
         lay.addWidget(split, 1)
 
@@ -287,11 +371,17 @@ class InspectorPanel(QWidget):
         self.timer.timeout.connect(self.flush)
         self.timer.start()
         net.frame_logged.connect(self.on_frame)
-        theme.manager().changed.connect(lambda *_: self.retheme())
+        theme.on_theme_change(self, self.retheme)
         self.retheme()
 
     def retheme(self) -> None:
         t = theme.tokens()
+        self.table.setStyleSheet(f"QTableView {{ background: {t['console']}; border: 1px solid {t['console_line']};"
+                                 f" alternate-background-color: {theme.rgba(t['text'], 0.025)}; }}")
+        self.detail.setStyleSheet(f"QPlainTextEdit {{ background: {t['console']}; font-family: {theme.mono_css()};"
+                                  f" font-size: 11px; border: 1px solid {t['console_line']}; }}")
+        if hasattr(self, "highlighter"):
+            self.highlighter.retheme()
         self.pause_btn.setIcon(theme.icon("play" if self.paused else "pause", t["text2"], 16))
         self.clear_btn.setIcon(theme.icon("trash", t["text2"], 16))
 
@@ -312,6 +402,7 @@ class InspectorPanel(QWidget):
         sb = self.table.verticalScrollBar()
         follow = sb.value() >= sb.maximum() - 2
         self.model.add_frames(batch)
+        self.count_label.setText(f"{self.total_seen:,} captured · {self.model.rowCount():,} shown")
         if follow and not self.table.selectionModel().hasSelection():
             self.table.scrollToBottom()
 

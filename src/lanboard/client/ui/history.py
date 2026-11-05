@@ -191,7 +191,7 @@ class HistoryPanel(QWidget):
         self.timer.timeout.connect(self._tick)
 
         controller.history_ready.connect(self.load_payload)
-        theme.manager().changed.connect(lambda *_: self._update_play_icon())
+        theme.on_theme_change(self, lambda: self._update_play_icon())
         self._update_play_icon()
 
     # -- loading -------------------------------------------------------------
@@ -207,7 +207,10 @@ class HistoryPanel(QWidget):
         tl = self.timeline
         self.load_btn.setEnabled(True)
         self.load_btn.setText("Reload history")
-        self.info.setText(f"{len(tl):,} ops · seq {tl.base_seq} → {tl.seq_at(tl.end)}")
+        text = f"{len(tl):,} ops · seq {tl.base_seq} → {tl.seq_at(tl.end)}"
+        if tl.base_seq > 0:                     # the server compacts old log entries into a base snapshot
+            text += f"\nOlder history trimmed. Starts at seq {tl.base_seq + 1}"
+        self.info.setText(text)
         self.slider.blockSignals(True)
         self.slider.setRange(0, tl.end)
         self.slider.setValue(tl.end)

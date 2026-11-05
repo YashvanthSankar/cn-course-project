@@ -8,7 +8,7 @@ Usage::
     lanboard-client --create --room DEMO --name "CN Lab" --password secret --user owner
     lanboard-client --theme dark
 
-Flow: create the QApplication, apply the theme, show the :class:`ConnectDialog`
+Flow: create the QApplication, register the bundled fonts, apply the theme, show the :class:`ConnectDialog`
 (skipped when ``--room`` is given), then build ``NetClient`` →
 ``SessionController(net)`` → ``MainWindow(controller)`` and call
 ``net.connect_to(...)``. When a session ends (Leave, kicked, room not found...)
@@ -125,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationDomain("lanboard.local")
     app.setQuitOnLastWindowClosed(False)            # the shell decides when to quit
     settings = QSettings()
+    theme.load_fonts()                              # bundled Inter / JetBrains Mono (falls back to system fonts)
     theme.apply_theme(app, args.theme or str(settings.value("ui/theme", "light")))
     app.setWindowIcon(theme.app_icon())
     app.aboutToQuit.connect(terminate_all)

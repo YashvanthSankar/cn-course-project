@@ -45,7 +45,7 @@ At startup it prints the LAN address that clients should use. It also answers LA
 
 **Stress test**: `python -m lanboard.tools.bot --port 5050 --room DEMO --bots 8 --seconds 30`
 
-**Tests**: `.venv/bin/python -m pytest -q` (227 tests, including end-to-end runs of the real server and client).
+**Tests**: `.venv/bin/python -m pytest -q` (266 tests, including end-to-end runs of the real server and client).
 
 ## Standalone executables
 ```bash
@@ -78,5 +78,6 @@ The authoritative message catalogue is the docstring of [`src/lanboard/common/me
 - [pypdfium2](https://github.com/pypdfium2-team/pypdfium2) (PDF page rendering), Apache-2.0 / BSD-3-Clause
 - [PyInstaller](https://pyinstaller.org/) (build only), GPL-2.0 with bootloader exception
 - [pytest](https://pytest.org/) / pytest-asyncio (tests only), MIT / Apache-2.0
+- [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) fonts (bundled in `src/lanboard/client/assets/fonts`), SIL OFL 1.1
 
 AI assistance (Claude) was used during development. Commits made with it carry a `Co-Authored-By` trailer.

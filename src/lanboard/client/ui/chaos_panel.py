@@ -36,14 +36,14 @@ class ChaosPanel(QWidget):
 
     def __init__(self, net, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("SidePage")
+        self.setObjectName("ConsoleBody")
         self.net = net
         self.sliders: dict[str, QSlider] = {}
         self.value_labels: dict[str, QLabel] = {}
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 4, 10, 10)
-        lay.setSpacing(6)
+        lay.setContentsMargins(12, 4, 12, 12)
+        lay.setSpacing(8)
         intro = QLabel("Inject faults into frames this client <b>receives</b> and watch sync recover.")
         intro.setProperty("role", "hint")
         intro.setWordWrap(True)
@@ -55,17 +55,17 @@ class ChaosPanel(QWidget):
         lay.addWidget(self.enable)
 
         grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(2)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(3)
         row = 0
         for attr, text, maximum, unit, help_text in KNOBS:
             name = QLabel(text)
             name.setStyleSheet("font-weight: 600;")
             grid.addWidget(name, row, 0)
             val = QLabel()
-            val.setProperty("role", "mono")
-            val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            val.setMinimumWidth(56)
+            val.setObjectName("ChaosValue")
+            val.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            val.setMinimumWidth(64)
             grid.addWidget(val, row, 2)
             s = QSlider(Qt.Orientation.Horizontal)
             s.setRange(0, maximum)
@@ -78,7 +78,8 @@ class ChaosPanel(QWidget):
             self.value_labels[attr] = val
             self._show_value(attr, s.value(), unit)
             hint = QLabel(help_text)
-            hint.setProperty("role", "hint")
+            hint.setProperty("role", "muted")
+            hint.setStyleSheet("font-size: 11px;")
             hint.setWordWrap(True)
             grid.addWidget(hint, row + 1, 0, 1, 3)
             row += 2
@@ -92,7 +93,8 @@ class ChaosPanel(QWidget):
 
         self.cut_btn = QPushButton("  Cut the cable")
         self.cut_btn.setProperty("role", "danger")
-        self.cut_btn.setMinimumHeight(44)
+        self.cut_btn.setMinimumHeight(46)
+        self.cut_btn.setStyleSheet("font-size: 14px;")
         self.cut_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cut_btn.setToolTip("Abort the TCP connection right now. The client reconnects, resumes its session "
                                 "and receives only the ops it missed. Edits made meanwhile are queued.")
@@ -101,6 +103,7 @@ class ChaosPanel(QWidget):
         # live counters kept by the FaultInjector (if it has them)
         self.counters = QLabel("")
         self.counters.setProperty("role", "mono")
+        self.counters.setStyleSheet("font-size: 11px;")
         lay.addWidget(self.counters)
         self._counter_timer = QTimer(self)
         self._counter_timer.setInterval(1000)
@@ -114,7 +117,7 @@ class ChaosPanel(QWidget):
         lay.addStretch(1)
 
         self._sync_enabled_ui()
-        theme.manager().changed.connect(lambda *_: self.retheme())
+        theme.on_theme_change(self, self.retheme)
         self.retheme()
 
     @property
@@ -122,7 +125,15 @@ class ChaosPanel(QWidget):
         return getattr(self.net, "chaos", None)
 
     def retheme(self) -> None:
+        t = theme.tokens()
         self.cut_btn.setIcon(theme.icon("scissors", "#ffffff", 20))
+        # value read-outs are small monospace chips that turn amber while a fault is active
+        for attr, lab in self.value_labels.items():
+            active = self.enable.isChecked() and self.sliders[attr].value() > 0
+            tok = "warn" if active else "muted"
+            lab.setStyleSheet(f"QLabel#ChaosValue {{ font-family: {theme.mono_css()}; font-size: 11px;"
+                              f" font-weight: 700; color: {t[tok]}; background: {theme.rgba(t[tok], 0.13)};"
+                              f" border-radius: 6px; padding: 2px 6px; }}")
 
     def _set_enabled(self, on: bool) -> None:
         if self.chaos is not None:
@@ -133,6 +144,7 @@ class ChaosPanel(QWidget):
         on = self.enable.isChecked()
         for s in self.sliders.values():
             s.setEnabled(on)
+        self.retheme()
 
     def _show_value(self, attr: str, v: int, unit: str) -> None:
         self.value_labels[attr].setText(f"{v} {unit}")
@@ -141,6 +153,7 @@ class ChaosPanel(QWidget):
         if self.chaos is not None:
             setattr(self.chaos, attr, int(v))
         self._show_value(attr, v, unit)
+        self.retheme()
 
     def update_counters(self) -> None:
         c = self.chaos

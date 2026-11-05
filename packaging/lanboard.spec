@@ -24,7 +24,12 @@ QT_EXCLUDES = [
 
 server_a = Analysis([os.path.join(SPECPATH, "server_entry.py")], pathex=[SRC],
                     excludes=["PySide6", "shiboken6", "tkinter"], noarchive=False)
+# UI fonts (Inter + JetBrains Mono, SIL OFL 1.1): theme.load_fonts() finds them under
+# sys._MEIPASS/lanboard/client/assets/fonts in the frozen app
+CLIENT_DATAS = [(os.path.join(SRC, "lanboard", "client", "assets"), os.path.join("lanboard", "client", "assets"))]
+
 client_a = Analysis([os.path.join(SPECPATH, "client_entry.py")], pathex=[SRC],
+                    datas=CLIENT_DATAS,
                     hiddenimports=["PySide6.QtSvg", "pypdfium2"],
                     excludes=QT_EXCLUDES, noarchive=False)
 

@@ -1,21 +1,28 @@
 """Small reusable widgets that give the client a consistent, modern look.
 
-* :class:`ToggleSwitch`: an animated iOS-style on/off switch (a QCheckBox underneath,
+* :class:`ToggleSwitch`: an animated on/off switch (a QCheckBox underneath,
   so ``toggled``/``isChecked`` work as usual).
 * :class:`Segmented`: a two-or-more option pill selector ("Join room | Host new room").
-* :class:`ToastHost`: stacks short-lived notifications in a corner of a parent widget.
-* :class:`Banner`: a persistent strip across the top of a parent widget (e.g. "reconnecting").
+* :class:`FloatingCard`: a rounded card with a soft painted shadow. Base class of
+  everything that floats over the canvas (tool palette, style bar, toasts, popovers).
+* :class:`ToastHost`: stacks short-lived notifications at the top centre of a widget.
+* :class:`Banner`: a persistent pill across the top of a widget (e.g. "reconnecting").
+* :class:`Popover`: a card that opens under a button and closes on outside click / Esc.
 * :class:`Section`: a titled block whose body can be collapsed.
 * :func:`hline`, :func:`label`: tiny helpers for building layouts.
+
+All animations are ``QPropertyAnimation`` / ``QVariantAnimation`` of a few
+hundred milliseconds; nothing blocks the event loop and nothing animates while
+idle.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import (QEasingCurve, QEvent, QObject, QPointF, QPropertyAnimation, QRectF,
-                            QSize, Qt, QTimer, QVariantAnimation, Signal)
+from PySide6.QtCore import (QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QRectF, QSize, Qt,
+                            QTimer, QVariantAnimation, Signal)
 from PySide6.QtGui import QColor, QIntValidator, QPainter, QPen
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGraphicsOpacityEffect, QHBoxLayout,
-                               QLabel, QLineEdit, QPushButton, QToolButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QGraphicsOpacityEffect,
+                               QHBoxLayout, QLabel, QLineEdit, QPushButton, QToolButton, QVBoxLayout, QWidget)
 
 from . import theme
 
@@ -35,7 +42,15 @@ def hline() -> QFrame:
     f = QFrame()
     f.setFixedHeight(1)
     f.setStyleSheet(f"background: {theme.tokens()['border']};")
-    theme.manager().changed.connect(lambda t: f.setStyleSheet(f"background: {t['border']};"))
+    theme.on_theme_change(f, lambda: f.setStyleSheet(f"background: {theme.tokens()['border']};"))
+    return f
+
+
+def vsep(height: int = 22) -> QFrame:
+    """A thin vertical divider used between groups of buttons."""
+    f = QFrame()
+    f.setObjectName("VSep")
+    f.setFixedSize(1, height)
     return f
 
 
@@ -46,13 +61,13 @@ def hline() -> QFrame:
 class ToggleSwitch(QCheckBox):
     """A painted on/off switch with a sliding knob and an optional text label."""
 
-    TRACK_W, TRACK_H = 36, 20
+    TRACK_W, TRACK_H = 34, 20
 
     def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._pos = 0.0                                    # 0 = off, 1 = on (animated)
-        self._anim = QVariantAnimation(self, duration=140)
+        self._anim = QVariantAnimation(self, duration=160)
         self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._anim.valueChanged.connect(self._set_pos)
         self.toggled.connect(self._animate)
@@ -86,18 +101,19 @@ class ToggleSwitch(QCheckBox):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         y0 = (self.height() - self.TRACK_H) / 2
         track = QRectF(1, y0, self.TRACK_W, self.TRACK_H)
-        off_c, on_c = QColor(t["border_strong"]), QColor(t["accent"])
-        mix = QColor(
-            int(off_c.red() + (on_c.red() - off_c.red()) * self._pos),
-            int(off_c.green() + (on_c.green() - off_c.green()) * self._pos),
-            int(off_c.blue() + (on_c.blue() - off_c.blue()) * self._pos))
-        if not self.isEnabled():
-            mix.setAlphaF(0.45)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(mix)
+        # off track, then the gradient "on" track faded in by the knob position
+        p.setBrush(QColor(t["border_strong"]))
         p.drawRoundedRect(track, self.TRACK_H / 2, self.TRACK_H / 2)
+        if self._pos > 0:
+            p.setOpacity(self._pos * (1.0 if self.isEnabled() else 0.45))
+            p.setBrush(theme.accent_gradient(track, t))
+            p.drawRoundedRect(track, self.TRACK_H / 2, self.TRACK_H / 2)
+            p.setOpacity(1.0)
         d = self.TRACK_H - 4
         x = track.left() + 2 + (self.TRACK_W - 4 - d) * self._pos
+        p.setBrush(QColor(0, 0, 0, 40))
+        p.drawEllipse(QRectF(x, y0 + 2.6, d, d))
         p.setBrush(QColor("white"))
         p.drawEllipse(QRectF(x, y0 + 2, d, d))
         if self.text():
@@ -172,47 +188,127 @@ class Segmented(QFrame):
 
 
 # ---------------------------------------------------------------------------
+# floating card
+# ---------------------------------------------------------------------------
+
+class FloatingCard(QWidget):
+    """A widget that paints itself as a rounded card with a soft shadow.
+
+    ``SHADOW`` pixels around the card are kept transparent for the shadow, so
+    the content layout must use :meth:`inner_margins`. Children are laid out
+    normally on top of the painted card.
+    """
+
+    SHADOW = 10
+
+    def __init__(self, parent: QWidget | None = None, radius: float = 14, padding: tuple = (8, 8, 8, 8)) -> None:
+        super().__init__(parent)
+        self.radius = radius
+        self.fill_token = "float"
+        self.border_color: str | QColor | None = None
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self._padding = padding
+        # a bound method (not a lambda) so Qt drops the connection when the card is deleted
+        theme.manager().changed.connect(self._theme_changed)
+
+    def _theme_changed(self, *_args) -> None:
+        self.update()
+
+    def inner_margins(self) -> tuple[int, int, int, int]:
+        s = self.SHADOW
+        l, t, r, b = self._padding
+        return l + s, t + s - 2, r + s, b + s + 2
+
+    def card_rect(self) -> QRectF:
+        s = self.SHADOW
+        return QRectF(self.rect()).adjusted(s, s - 2, -s, -s - 2)
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        t = theme.tokens()
+        theme.paint_card(p, self.card_rect(), self.radius, t[self.fill_token],
+                         self.border_color or t["border"])
+        self.paint_extra(p)
+        p.end()
+
+    def paint_extra(self, p: QPainter) -> None:
+        """Hook for subclasses that paint on top of the card background."""
+
+
+# ---------------------------------------------------------------------------
 # overlays: toasts + banner
 # ---------------------------------------------------------------------------
 
-class _Toast(QFrame):
-    """One notification bubble; fades in, waits, fades out, then deletes itself."""
+LEVEL_TOKEN = {"error": "danger", "warn": "warn", "success": "success", "info": "accent"}
+LEVEL_ICON = {"error": "warn", "warn": "warn", "success": "check", "info": "info"}
+
+
+class _Toast(FloatingCard):
+    """One notification card: slides in, waits, fades out, then deletes itself."""
 
     def __init__(self, text: str, level: str, parent: QWidget, timeout_ms: int) -> None:
-        super().__init__(parent)
-        self.setObjectName("Toast")
+        super().__init__(parent, radius=12, padding=(10, 8, 14, 8))
+        self.level = level if level in LEVEL_TOKEN else "info"
+        self.text = text
         t = theme.tokens()
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(12, 9, 14, 9)
-        lay.setSpacing(9)
-        accent = {"error": t["danger"], "warn": t["warn"], "success": t["success"]}.get(level, t["accent"])
-        ic = QLabel()
-        name = {"error": "warn", "warn": "warn", "success": "check"}.get(level, "info")
-        ic.setPixmap(theme.icon(name, accent if theme.manager().dark else
-                                {"error": "#ff8a8a", "warn": "#ffc75a", "success": "#5fe0a0"}.get(level, "#9fb0ff"),
-                                18).pixmap(18, 18))
-        lay.addWidget(ic)
-        msg = QLabel(text)
-        msg.setWordWrap(len(text) > 50)          # short notices stay on one line
-        msg.setMaximumWidth(340)
-        lay.addWidget(msg)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        lay.setContentsMargins(*self.inner_margins())
+        lay.setSpacing(10)
+        self.ic = QLabel()
+        self.ic.setFixedSize(26, 26)
+        self.ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tok = LEVEL_TOKEN[self.level]
+        self.ic.setPixmap(theme.icon(LEVEL_ICON[self.level], t[tok], 16).pixmap(16, 16))
+        self.ic.setStyleSheet(f"background: {theme.rgba(t[tok], 0.16)}; border-radius: 13px;")
+        lay.addWidget(self.ic, 0, Qt.AlignmentFlag.AlignTop)
+        self.msg = QLabel(text)
+        self.msg.setWordWrap(len(text) > 56)          # short notices stay on one line
+        self.msg.setMaximumWidth(420)
+        self.msg.setStyleSheet("font-weight: 500;")
+        lay.addWidget(self.msg, 1)
         self._fx = QGraphicsOpacityEffect(self)
         self._fx.setOpacity(0.0)
         self.setGraphicsEffect(self._fx)
         self._fade = QPropertyAnimation(self._fx, b"opacity", self)
-        self._fade.setDuration(180)
+        self._fade.setDuration(200)
         self._fade.setStartValue(0.0)
         self._fade.setEndValue(1.0)
         self._fade.start()
+        self._move = QPropertyAnimation(self, b"pos", self)
+        self._move.setDuration(240)
+        self._move.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._placed = False
+        self._closing = False
         QTimer.singleShot(timeout_ms, self.dismiss)
+
+    def paint_extra(self, p: QPainter) -> None:
+        # a slim coloured accent on the left edge tells the level at a glance
+        t = theme.tokens()
+        r = self.card_rect()
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(t[LEVEL_TOKEN[self.level]]))
+        p.drawRoundedRect(QRectF(r.left() + 6, r.top() + 10, 3, r.height() - 20), 1.5, 1.5)
+
+    def glide_to(self, pos: QPoint) -> None:
+        if not self._placed:                         # first placement: drop in from above
+            self._placed = True
+            self.move(pos.x(), pos.y() - 14)
+        if self._move.endValue() == pos and self._move.state() == QPropertyAnimation.State.Running:
+            return
+        self._move.stop()
+        self._move.setStartValue(self.pos())
+        self._move.setEndValue(pos)
+        self._move.start()
 
     def mousePressEvent(self, _ev) -> None:  # noqa: N802 - click to dismiss
         self.dismiss()
 
     def dismiss(self) -> None:
-        if self._fade.endValue() == 0.0:
+        if self._closing:
             return
+        self._closing = True
         self._fade.stop()
         self._fade.setStartValue(self._fx.opacity())
         self._fade.setEndValue(0.0)
@@ -221,22 +317,63 @@ class _Toast(QFrame):
 
 
 class ToastHost(QObject):
-    """Shows toasts stacked in the bottom-right corner of ``parent``."""
+    """Stacks toasts at the top centre of ``parent`` (newest on top).
+
+    ``top_offset`` (optional callable) returns how far below the parent's top
+    edge the stack starts, so toasts never cover a visible banner.
+    """
 
     MAX = 4
 
-    def __init__(self, parent: QWidget) -> None:
+    def __init__(self, parent: QWidget, top_offset=None) -> None:
         super().__init__(parent)
         self._parent = parent
         self._toasts: list[_Toast] = []
+        self._groups: dict[str, dict] = {}
+        self.top_offset = top_offset or (lambda: 14)
         parent.installEventFilter(self)
 
-    def show(self, text: str, level: str = "info", timeout_ms: int = 3800) -> None:
+    def show(self, text: str, level: str = "info", timeout_ms: int = 4200) -> None:
+        # the same text twice in a row (e.g. repeated warnings) only refreshes the stack
+        for old in self._toasts:
+            if old.text == text and not old._closing:
+                return
+        self._show(text, level, timeout_ms)
+
+    def show_grouped(self, group: str, item: str, verb: str, level: str = "info", window_ms: int = 900) -> None:
+        """Collect bursts ("Asha joined", "Ravi joined"...) into one toast.
+
+        Items arriving within ``window_ms`` of each other are shown as
+        "Asha, Ravi and 3 others joined" once the burst is over.
+        """
+        pend = self._groups.setdefault(group, {"items": [], "timer": None})
+        pend["items"].append(item)
+        if pend["timer"] is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(lambda g=group, v=verb, lv=level: self._flush_group(g, v, lv))
+            pend["timer"] = timer
+        pend["timer"].start(window_ms)
+
+    def _flush_group(self, group: str, verb: str, level: str) -> None:
+        pend = self._groups.pop(group, None)
+        if not pend or not pend["items"]:
+            return
+        items = list(dict.fromkeys(pend["items"]))
+        if len(items) == 1:
+            text = f"{items[0]} {verb}"
+        elif len(items) == 2:
+            text = f"{items[0]} and {items[1]} {verb}"
+        else:
+            text = f"{items[0]}, {items[1]} and {len(items) - 2} other{'s' if len(items) > 3 else ''} {verb}"
+        self._show(text, level, 4200)
+
+    def _show(self, text: str, level: str, timeout_ms: int) -> None:
         toast = _Toast(text, level, self._parent, timeout_ms)
         toast.destroyed.connect(lambda *_: self._forget(toast))
-        self._toasts.append(toast)
+        self._toasts.insert(0, toast)
         while len(self._toasts) > self.MAX:
-            self._toasts.pop(0).dismiss()
+            self._toasts.pop().dismiss()
         toast.adjustSize()
         toast.show()
         toast.raise_()
@@ -244,11 +381,7 @@ class ToastHost(QObject):
 
     def texts(self) -> list[str]:
         """Texts of visible toasts (used by tests)."""
-        out = []
-        for t in self._toasts:
-            lab = t.findChildren(QLabel)
-            out.append(lab[-1].text() if lab else "")
-        return out
+        return [t.text for t in self._toasts]
 
     def _forget(self, toast) -> None:
         if toast in self._toasts:
@@ -259,15 +392,19 @@ class ToastHost(QObject):
             pass
 
     def _layout(self) -> None:
-        y = self._parent.height() - 16
-        for toast in reversed(self._toasts):
+        y = int(self.top_offset()) - FloatingCard.SHADOW + 2
+        for toast in self._toasts:
             try:
                 toast.adjustSize()
-                y -= toast.height()
-                toast.move(self._parent.width() - toast.width() - 16, y)
-                y -= 8
+                x = (self._parent.width() - toast.width()) // 2
+                toast.glide_to(QPoint(x, y))
+                toast.raise_()
+                y += toast.height() - FloatingCard.SHADOW - 4
             except RuntimeError:              # C++ object already gone
                 pass
+
+    def relayout(self) -> None:
+        self._layout()
 
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802
         if obj is self._parent and ev.type() == QEvent.Type.Resize:
@@ -275,17 +412,17 @@ class ToastHost(QObject):
         return False
 
 
-class Banner(QFrame):
-    """A rounded strip centred at the top of its parent, with an optional action button."""
+class Banner(FloatingCard):
+    """A pill centred at the top of its parent, with an optional action button."""
 
     action = Signal()
 
     def __init__(self, parent: QWidget, offset: int = 12) -> None:
-        super().__init__(parent)
+        super().__init__(parent, radius=18, padding=(12, 5, 6, 5))
         self.offset = offset                       # distance from the parent's top edge
         self.setObjectName("Banner")
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(14, 8, 8, 8)
+        lay.setContentsMargins(*self.inner_margins())
         lay.setSpacing(10)
         self._icon = QLabel()
         lay.addWidget(self._icon)
@@ -293,24 +430,30 @@ class Banner(QFrame):
         self._text.setStyleSheet("font-weight: 600;")
         lay.addWidget(self._text)
         self._button = QPushButton()
-        self._button.setProperty("role", "ghost")
+        self._button.setProperty("role", "soft")
         self._button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._button.clicked.connect(self.action)
         lay.addWidget(self._button)
         self._kind = "warn"
         self.hide()
         parent.installEventFilter(self)
+        theme.on_theme_change(self, lambda: self._restyle())
 
     def text(self) -> str:
         return self._text.text()
 
-    def show_message(self, text: str, kind: str = "warn", action_text: str | None = None) -> None:
+    def _restyle(self) -> None:
         t = theme.tokens()
+        tok = "warn" if self._kind == "warn" else ("danger" if self._kind == "error" else "accent")
+        self.border_color = theme.alpha(t[tok], 0.55)
+        self._icon.setPixmap(theme.icon("warn" if self._kind in ("warn", "error") else "info",
+                                        t[tok], 18).pixmap(18, 18))
+        self.update()
+
+    def show_message(self, text: str, kind: str = "warn", action_text: str | None = None) -> None:
         self._kind = kind
         self.setProperty("kind", kind)
-        theme.repolish(self)
-        self._icon.setPixmap(theme.icon("warn" if kind == "warn" else "info",
-                                        t["warn"] if kind == "warn" else t["accent"], 18).pixmap(18, 18))
+        self._restyle()
         self._text.setText(text)
         self._button.setVisible(bool(action_text))
         self._button.setText(action_text or "")
@@ -319,14 +462,81 @@ class Banner(QFrame):
         self.show()
         self.raise_()
 
+    def bottom(self) -> int:
+        """Bottom edge of the visible card (for stacking toasts under it)."""
+        return self.y() + self.height() - self.SHADOW if self.isVisible() else 0
+
     def _place(self) -> None:
         par = self.parentWidget()
         self.adjustSize()
-        self.move(max(8, (par.width() - self.width()) // 2), self.offset)
+        self.move(max(0, (par.width() - self.width()) // 2), self.offset - self.SHADOW + 2)
 
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802
         if obj is self.parentWidget() and ev.type() == QEvent.Type.Resize and self.isVisible():
             self._place()
+        return False
+
+
+# ---------------------------------------------------------------------------
+# popover
+# ---------------------------------------------------------------------------
+
+class Popover(FloatingCard):
+    """A card shown under an anchor widget inside the same top-level window.
+
+    It is a child widget (not a separate popup window), so it is themed like
+    everything else and shows up in window screenshots. A click outside it or
+    Esc closes it. It fades in for 140 ms.
+    """
+
+    closed = Signal()
+
+    def __init__(self, window: QWidget, radius: float = 16, padding: tuple = (18, 16, 18, 16)) -> None:
+        super().__init__(window, radius=radius, padding=padding)
+        self.hide()
+        self._anchor: QWidget | None = None
+        self._fx = QGraphicsOpacityEffect(self)
+        self._fx.setOpacity(1.0)
+        self.setGraphicsEffect(self._fx)
+        self._fade = QPropertyAnimation(self._fx, b"opacity", self)
+        self._fade.setDuration(140)
+
+    def open_below(self, anchor: QWidget, align_right: bool = True) -> None:
+        win = self.parentWidget()
+        self._anchor = anchor
+        self.adjustSize()
+        a = anchor.mapTo(win, QPoint(0, anchor.height()))
+        x = a.x() + anchor.width() - self.width() + self.SHADOW if align_right else a.x() - self.SHADOW
+        x = max(4, min(x, win.width() - self.width() - 4))
+        self.move(x, a.y() + 2)
+        self.show()
+        self.raise_()
+        self._fade.stop()
+        self._fade.setStartValue(0.0)
+        self._fade.setEndValue(1.0)
+        self._fade.start()
+        QApplication.instance().installEventFilter(self)
+
+    def close_popover(self) -> None:
+        if self.isVisible():
+            self.hide()
+            self.closed.emit()
+        app = QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
+
+    def eventFilter(self, obj, ev) -> bool:  # noqa: N802
+        et = ev.type()
+        if et == QEvent.Type.MouseButtonPress and self.isVisible():
+            gp = ev.globalPosition().toPoint()
+            inside = self.rect().contains(self.mapFromGlobal(gp))
+            on_anchor = self._anchor is not None and self._anchor.rect().contains(self._anchor.mapFromGlobal(gp))
+            if not inside:
+                self.close_popover()
+                return on_anchor                # swallow the click that would re-open it
+        elif et == QEvent.Type.KeyPress and self.isVisible() and ev.key() == Qt.Key.Key_Escape:
+            self.close_popover()
+            return True
         return False
 
 
@@ -338,24 +548,24 @@ class Section(QWidget):
     """A section with an uppercase title row (click to collapse) and a body widget."""
 
     def __init__(self, title: str, body: QWidget, parent: QWidget | None = None,
-                 extra: QWidget | None = None) -> None:
+                 extra: QWidget | None = None, icon_name: str | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("SidePage")
+        self.icon_name = icon_name
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         header = QFrame()
         header.setObjectName("SectionHeader")
         hl = QHBoxLayout(header)
-        hl.setContentsMargins(10, 6, 10, 4)
+        hl.setContentsMargins(12, 10, 12, 4)
         self.toggle = QToolButton()
         self.toggle.setText(title.upper())
         self.toggle.setCheckable(True)
         self.toggle.setChecked(True)
+        self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toggle.setArrowType(Qt.ArrowType.DownArrow)
-        self.toggle.setStyleSheet("QToolButton { font-size: 11px; font-weight: 700; letter-spacing: 1px;"
-                                  " background: transparent; padding: 2px; }")
+        self.toggle.setIconSize(QSize(14, 14))
         self.toggle.toggled.connect(self._on_toggle)
         hl.addWidget(self.toggle)
         hl.addStretch(1)
@@ -364,10 +574,22 @@ class Section(QWidget):
         lay.addWidget(header)
         self.body = body
         lay.addWidget(body)
+        self._retheme()
+        theme.on_theme_change(self, lambda: self._retheme())
+
+    def _retheme(self) -> None:
+        t = theme.tokens()
+        self.toggle.setStyleSheet(
+            "QToolButton { font-size: 11px; font-weight: 700; background: transparent; border: none;"
+            f" padding: 2px; color: {t['text2']}; }}"
+            f" QToolButton:checked {{ background: transparent; color: {t['text2']}; }}"
+            f" QToolButton:hover {{ color: {t['accent']}; }}")
+        self.toggle.setIcon(theme.icon("chevron_down" if self.toggle.isChecked() else "chevron_right",
+                                       t["muted"], 14))
 
     def _on_toggle(self, open_: bool) -> None:
         self.body.setVisible(open_)
-        self.toggle.setArrowType(Qt.ArrowType.DownArrow if open_ else Qt.ArrowType.RightArrow)
+        self._retheme()
 
 
 class ColorDot(QWidget):
@@ -396,4 +618,3 @@ class ColorDot(QWidget):
             p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawEllipse(r)
         p.end()
-

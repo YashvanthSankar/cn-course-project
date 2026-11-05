@@ -168,7 +168,7 @@ class ParticipantsPanel(QWidget):
         controller.participants_changed.connect(self.refresh)
         controller.me_changed.connect(lambda *_: self.refresh())
         controller.room_changed.connect(lambda *_: self.refresh())
-        theme.manager().changed.connect(lambda *_: self.list.viewport().update())
+        theme.on_theme_change(self, lambda: self.list.viewport().update())
         self.refresh()
 
     # -- data ---------------------------------------------------------------
