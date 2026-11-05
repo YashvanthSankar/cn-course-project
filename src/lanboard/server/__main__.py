@@ -1,0 +1,118 @@
+"""Command line entry point: ``python -m lanboard.server`` / ``lanboard-server``.
+
+Usage::
+
+    python -m lanboard.server [--host 0.0.0.0] [--port 5050] [--data ./lanboard-data]
+                              [--name NAME] [--no-discovery] [--dashboard]
+                              [--tls-cert cert.pem --tls-key key.pem] [-v]
+
+Ctrl+C (SIGINT) or SIGTERM shuts down gracefully: every room's board is
+snapshotted to disk first. A hard kill is also safe, because accepted ops are
+in ``ops.jsonl`` and are replayed on the next start.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+import signal
+import ssl
+import sys
+
+from lanboard.common import config as C
+
+from .dashboard import Dashboard, RingLogHandler
+from .discovery import lan_ipv4_addresses
+from .server import Server
+
+LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(prog="lanboard-server",
+                                 description="LANBoard collaborative whiteboard server (LAN only)")
+    ap.add_argument("--host", default="0.0.0.0", help="interface to bind (default: all)")
+    ap.add_argument("--port", type=int, default=C.TCP_PORT, help=f"TCP port (default {C.TCP_PORT})")
+    ap.add_argument("--data", default="./lanboard-data", help="data directory")
+    ap.add_argument("--name", default=None, help="server name shown to clients (default: hostname)")
+    ap.add_argument("--no-discovery", action="store_true",
+                    help=f"do not answer UDP discovery probes on port {C.DISCOVERY_PORT}")
+    ap.add_argument("--dashboard", action="store_true", help="live terminal dashboard")
+    ap.add_argument("--tls-cert", metavar="FILE", help="PEM certificate (enables TLS)")
+    ap.add_argument("--tls-key", metavar="FILE", help="PEM private key")
+    ap.add_argument("-v", "--verbose", action="store_true", help="debug logging")
+    args = ap.parse_args(argv)
+    if bool(args.tls_cert) != bool(args.tls_key):
+        ap.error("--tls-cert and --tls-key must be given together")
+    return args
+
+
+def make_ssl_context(cert: str, key: str) -> ssl.SSLContext:
+    """Server-side TLS context. Clients pin the certificate fingerprint (self-signed is fine)."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_cert_chain(cert, key)
+    return ctx
+
+
+def setup_logging(verbose: bool, dashboard: bool) -> RingLogHandler | None:
+    level = logging.DEBUG if verbose else logging.INFO
+    root = logging.getLogger()
+    root.setLevel(level)
+    if dashboard:
+        # logs go into the dashboard's ring buffer instead of scrolling the terminal
+        ring = RingLogHandler(size=10)
+        ring.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S"))
+        root.addHandler(ring)
+        return ring
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    root.addHandler(handler)
+    return None
+
+
+async def run(args: argparse.Namespace) -> None:
+    ring = setup_logging(args.verbose, args.dashboard)
+    ctx = make_ssl_context(args.tls_cert, args.tls_key) if args.tls_cert else None
+    server = Server(args.host, args.port, args.data, args.name,
+                    discovery=not args.no_discovery, ssl_context=ctx)
+    await server.start()
+
+    wildcard = args.host in ("", "0.0.0.0", "::")
+    addrs = lan_ipv4_addresses() if wildcard else [args.host]
+    print(f"LANBoard server {server.name!r} listening on {args.host}:{server.port}"
+          f"{' (TLS)' if ctx else ''}", flush=True)
+    if addrs:
+        print("Clients on this LAN can connect to: "
+              + ", ".join(f"{ip}:{server.port}" for ip in addrs), flush=True)
+    else:
+        print("No LAN IPv4 address found; is this machine connected to a network?", flush=True)
+
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except (NotImplementedError, RuntimeError):     # Windows: KeyboardInterrupt instead
+            pass
+    dash_task = asyncio.create_task(Dashboard(server, ring).run()) if args.dashboard else None
+    try:
+        await stop.wait()
+    finally:
+        if dash_task is not None:
+            dash_task.cancel()
+        logging.getLogger("lanboard.server").info("shutting down, saving rooms...")
+        await server.stop(flush=True)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
+    try:
+        asyncio.run(run(args))
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()
