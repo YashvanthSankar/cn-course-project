@@ -155,7 +155,7 @@ def test_hash_mismatch_heals(env):
     net.message.emit(int(MsgType.HASH), {"seq": 1, "hash": srv.board.hash()})
     assert not net.of(MsgType.RESYNC)
     net.message.emit(int(MsgType.HASH), {"seq": 1, "hash": "deadbeefdeadbeef"})
-    assert net.of(MsgType.RESYNC) == [{"last_seq": 0}]
+    assert net.of(MsgType.RESYNC) == [{"last_seq": -1}]
     net.message.emit(int(MsgType.SNAPSHOT), {"seq": 1, "board": srv.board.snapshot(), "hash": srv.board.hash()})
     assert ctl.board.hash() == srv.board.hash()
 

@@ -109,6 +109,7 @@ class SessionController(QObject):
         self._hash_checks: dict[int, str] = {}              # future seq -> expected hash
         self._mismatch = False
         self._healing = False
+        self._resend_queue: list[tuple[str, dict]] = []
 
         # blobs: content-addressed image store
         self._blobs: dict[str, bytes] = {}
@@ -456,13 +457,24 @@ class SessionController(QObject):
         self.chat_reset.emit(self.chat)
         # offline-first: replay everything not yet acknowledged, in original order.
         # The server drops op_ids it already accepted and re-echoes them.
-        for op_id, op in self._wire.items():
-            self.net.send(MsgType.OP_SUBMIT, {"op_id": op_id, "op": op})
+        self._resend_queue = list(self._wire.items())
+        self._pump_resend()
         for h in self._blob_uploads:
             self._upload_blob(h)
         self._blob_uploads.clear()
         self._blob_requested.clear()                       # re-request anything still missing
         self._emit_sync()
+
+    RESEND_PER_TICK = 100          # stay under the server's 120 ops/s token bucket
+
+    def _pump_resend(self) -> None:
+        """Replay queued offline ops in order, paced to respect the server's rate limit."""
+        batch, self._resend_queue = self._resend_queue[:self.RESEND_PER_TICK], self._resend_queue[self.RESEND_PER_TICK:]
+        for op_id, op in batch:
+            if op_id in self._wire and self.net.is_joined():
+                self.net.send(MsgType.OP_SUBMIT, {"op_id": op_id, "op": op})
+        if self._resend_queue:
+            QTimer.singleShot(1000, self._pump_resend)
 
     def _on_message(self, t: int, p: dict) -> None:
         handler = self._HANDLERS.get(t)
@@ -558,10 +570,9 @@ class SessionController(QObject):
         self._healing = True
         self._reorder.clear()
         self._gap_timer.stop()
-        if from_scratch:
-            self.board = Board()
         if self.net.is_joined():
-            self.net.send(MsgType.RESYNC, {"last_seq": self.board.seq})
+            # last_seq -1 asks the server for a full SNAPSHOT (used to heal a divergence)
+            self.net.send(MsgType.RESYNC, {"last_seq": -1 if from_scratch else self.board.seq})
         self._emit_sync()
 
     def _on_hash(self, p: dict) -> None:
