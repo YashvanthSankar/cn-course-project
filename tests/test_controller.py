@@ -227,3 +227,70 @@ def test_update_many_single_batch(env):
     ctl.undo()
     ack_all(net, ctl, srv)
     assert all(ctl.board.get(o)["off"] == [0, 0] for o in "abc")
+
+
+def _parts(msg_type, payload, monkeypatch, budget=300):
+    """Encode ``payload`` as multi-part frames (small budget) and decode them again."""
+    from lanboard.common import config as C
+    from lanboard.common.protocol import FrameDecoder, encode_parts
+    monkeypatch.setattr(C, "PART_BYTES", budget)
+    dec = FrameDecoder()
+    out = []
+    for f in encode_parts(msg_type, payload):
+        out += dec.feed(f)
+    return [p for _, p in out]
+
+
+def test_multipart_snapshot_applied_atomically(env, monkeypatch):
+    net, ctl, srv, _ = env
+    for i in range(30):
+        srv.accept({"k": "add", "obj": stroke(f"s{i}")}, user="u2")
+    parts = _parts(MsgType.SNAPSHOT, {"seq": srv.board.seq, "board": srv.board.snapshot(),
+                                      "hash": srv.board.hash()}, monkeypatch)
+    assert len(parts) > 3 and all(p["parts"] == len(parts) for p in parts)
+    resets = []
+    ctl.reset.connect(lambda: resets.append(len(ctl.board)))
+    # out of order, with a duplicate: nothing is applied until the last part arrives
+    order = parts[1:] + parts[:1]
+    for p in [order[0]] + order[:-1]:
+        net.message.emit(int(MsgType.SNAPSHOT), p)
+        assert ctl.board.seq == 0 and not resets
+    net.message.emit(int(MsgType.SNAPSHOT), order[-1])
+    assert resets == [30] and ctl.board.hash() == srv.board.hash() and ctl.board.seq == 30
+
+
+def test_multipart_history_emitted_once_merged(env, monkeypatch):
+    net, ctl, srv, _ = env
+    base = Board()
+    base.apply({"k": "add", "obj": stroke("b0")}, 1)
+    ops = []
+    for i in range(20):
+        m = srv.accept({"k": "add", "obj": stroke(f"h{i}")}, user="u2")
+        ops.append(m)
+    payload = {"base_seq": 1, "base": base.snapshot(), "ops": ops}
+    parts = _parts(MsgType.HISTORY, payload, monkeypatch)
+    got = []
+    ctl.history_ready.connect(got.append)
+    for p in reversed(parts):
+        net.message.emit(int(MsgType.HISTORY), p)
+    assert len(got) == 1
+    assert got[0]["base_seq"] == 1 and [o["id"] for o in got[0]["base"]["objects"]] == ["b0"]
+    assert [m["seq"] for m in got[0]["ops"]] == [m["seq"] for m in ops]
+    assert "part" not in got[0] and "xid" not in got[0]
+
+
+def test_unsendable_op_is_rolled_back(env):
+    from lanboard.common.messages import Err
+    from lanboard.common.protocol import ProtocolError
+    net, ctl, _, _ = env
+    notices = []
+    ctl.notice.connect(lambda level, text: notices.append(text))
+
+    def too_big(t, payload):
+        raise ProtocolError("frame too large")
+    net.send = too_big
+    ctl.add_object(stroke("huge"))
+    assert not ctl.pending and not ctl.view.is_live("huge")
+    assert notices and "too large" in notices[-1]
+    ctl._on_reject({"op_id": "x:1", "code": Err.TOO_LARGE, "msg": "edit too large"})
+    assert notices[-1] == "That edit is too large to share."

@@ -574,6 +574,94 @@ async def test_killed_server_recovers_from_log(tmp_path):
         await srv.stop()
 
 
+@pytest.mark.parametrize("flush", [True, False], ids=["clean-stop", "crash-stop"])
+async def test_history_after_restart_starts_at_seq_1(tmp_path, flush):
+    """The time-lapse covers the whole session even after the server restarted."""
+    data = str(tmp_path / "data")
+    srv = Server("127.0.0.1", 0, data, discovery=False)
+    await srv.start()
+    a = await make(srv, "alice", create=True)
+    n = 2 * C.AUTOSAVE_EVERY_OPS + 7                      # past two compactions, plus a tail
+    for i in range(n):
+        a.submit(stroke(a, i))
+        if i % 100 == 99:
+            await a.settle()                              # stay under the ops/s rate limit
+    await a.settle()
+    room = srv.rooms["R"]
+    for _ in range(100):                                  # let the autosave task finish
+        if not room._saving and room.archived_seq >= C.AUTOSAVE_EVERY_OPS:
+            break
+        await asyncio.sleep(0.02)
+    assert room.archived_seq >= C.AUTOSAVE_EVERY_OPS      # ops really left ops.jsonl
+    assert len(room.store.load_ops()) < n
+    want = room.board.hash()
+    await a.close()
+    await srv.stop(flush=flush)                           # flush=False: no final snapshot
+
+    srv2 = Server("127.0.0.1", 0, data, discovery=False)
+    await srv2.start()
+    try:
+        b = await make(srv2, "bob")
+        b.send(MsgType.HISTORY_REQ, {})
+        h = await b.wait_for(MsgType.HISTORY)
+        assert h["base_seq"] == 0 and h["base"]["objects"] == []
+        assert [m["seq"] for m in h["ops"]] == list(range(1, n + 1))
+        replay = Board.from_snapshot({"seq": h["base_seq"], "objects": h["base"]["objects"]})
+        for m in h["ops"]:
+            replay.apply(m["op"], m["seq"])
+        assert replay.hash() == want == srv2.rooms["R"].board.hash() == b.board.hash()
+        await b.close()
+    finally:
+        await srv2.stop()
+
+
+async def test_late_join_when_snapshot_exceeds_max_frame(server, monkeypatch):
+    """A board bigger than MAX_FRAME still reaches late joiners (SNAPSHOT parts),
+    and so do a long resume (several OP_BATCH frames) and the HISTORY."""
+    from lanboard.common import protocol
+    monkeypatch.setattr(protocol, "MAX_FRAME", 64 * 1024)  # every encode() now refuses > 64 KiB
+    a = await make(server, "alice", create=True)
+    c = await make(server, "carol")
+    c.drop()                                               # will resume after a long gap
+    pts = [v for i in range(150) for v in (i * 7, 1000 + i * 3)]
+    for batch in range(12):                               # 12 batches x 25 strokes of ~1 KB
+        a.submit({"k": "batch", "ops": [
+            {"k": "add", "obj": {"id": a.new_id(), "type": "stroke",
+                                 "style": {"color": "#123456", "width": 3}, "geom": {"pts": pts}}}
+            for _ in range(25)]})
+    await a.settle()
+    room = server.rooms["R"]
+    assert not a.rejects and len(room.board) == 300
+    whole = len(json.dumps(room.board.snapshot()))
+    assert whole > protocol.MAX_FRAME                      # one SNAPSHOT frame could not carry it
+    b = await make(server, "bob")                          # late join: SNAPSHOT in parts
+    assert len(room.snapshot_frames()) > 1
+    assert b.board.seq == room.seq and b.board.hash() == room.board.hash()
+    await c.connect()                                      # resume: 12 big ops, split by bytes
+    assert c.joined["resumed"] is True and c.snapshots == 1  # healed by OP_BATCH frames
+    await c.wait_until(lambda: c.board.seq == room.seq)
+    assert c.board.hash() == room.board.hash()
+    b.send(MsgType.HISTORY_REQ, {})
+    h = await b.wait_for(MsgType.HISTORY)
+    assert len(h["ops"]) == room.seq
+    await a.close(); await b.close(); await c.close()
+
+
+async def test_oversized_op_rejected_connection_stays_up(server):
+    a = await make(server, "alice", create=True)
+    # ~5 MiB: fits in one frame (MAX_FRAME 8 MiB) but exceeds MAX_OP_BYTES (4 MiB)
+    objs = [{"id": f"t{i}", "type": "text", "geom": {"x": i, "y": 0, "text": "x" * 180}}
+            for i in range(25_000)]
+    op_id = a.submit({"k": "replace", "objects": objs})
+    rej = await a.wait_for(MsgType.OP_REJECT)
+    assert rej["op_id"] == op_id and rej["code"] == Err.TOO_LARGE and "too large" in rej["msg"]
+    assert server.rooms["R"].seq == 0
+    a.submit(stroke(a))                                    # same connection still works
+    await a.settle()
+    assert a.connected and server.rooms["R"].seq == 1
+    await a.close()
+
+
 # ---------------------------------------------------------------------------
 # discovery
 # ---------------------------------------------------------------------------

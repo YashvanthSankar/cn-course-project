@@ -11,6 +11,10 @@ DISCOVERY_MAGIC = "LANBOARD_DISCOVER_V1"
 
 MAX_FRAME = 8 * 1024 * 1024       # bytes, type byte + payload; larger frames => disconnect
 READ_CHUNK = 64 * 1024
+PART_BYTES = 1024 * 1024          # target size of one part of a multi-part SNAPSHOT / HISTORY /
+                                  # OP_BATCH (bigger payloads are split, see messages.py)
+MAX_OP_BYTES = MAX_FRAME // 2     # one committed op (its OP frame) may not exceed this:
+                                  # OP_REJECT TOO_LARGE, the connection stays up
 
 # --- Liveness ----------------------------------------------------------------
 PING_INTERVAL = 3.0               # seconds between client PINGs
@@ -26,7 +30,9 @@ OPS_PER_SEC_LIMIT = 120           # per-client committed-op rate limit (token bu
 HASH_EVERY_OPS = 25               # server broadcasts a board hash every N ops
 
 # --- History / persistence ---------------------------------------------------
-HISTORY_MAX_OPS = 100_000         # ops kept in memory for resume + timeline
+HISTORY_MAX_OPS = 100_000         # ops kept per room (memory + history.jsonl) for resume + timeline
+HISTORY_MAX_BYTES = 32 * 1024 * 1024   # ... and at most this much op JSON; older ops are folded
+                                  # into the history base board ("history starts at base_seq")
 AUTOSAVE_EVERY_OPS = 50           # snapshot to disk after this many ops ...
 AUTOSAVE_INTERVAL = 10.0          # ... or this many seconds, whichever first
 

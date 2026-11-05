@@ -5,7 +5,9 @@ streams (no Qt): HELLO/CHALLENGE/JOIN with password proofs, a replica
 :class:`Board` fed by SNAPSHOT / OP / OP_BATCH with **gap detection** (an OP
 whose seq skips ahead is buffered and a RESYNC is sent) and **duplicate
 suppression** (an OP with ``seq <= board.seq`` is ignored), pending op tracking
-(an op is pending until its echo arrives), PING/RTT, and session resume.
+(an op is pending until its echo arrives), PING/RTT, session resume, and
+reassembly of multi-part SNAPSHOT / HISTORY messages (``inbox`` only ever
+holds complete payloads, so tests can ``wait_for(MsgType.SNAPSHOT)``).
 It is used by the integration and convergence tests and by the stress tool.
 
 Stress tool::
@@ -34,7 +36,7 @@ from lanboard.common import auth
 from lanboard.common import config as C
 from lanboard.common.messages import Err, MsgType, Reason
 from lanboard.common.model import Board
-from lanboard.common.protocol import FrameDecoder, encode
+from lanboard.common.protocol import FrameDecoder, PartAssembler, encode
 
 
 class JoinError(Exception):
@@ -244,6 +246,7 @@ class BotClient:
 
     async def _read_loop(self) -> None:
         dec = FrameDecoder()
+        parts = PartAssembler()                 # per connection: transfer ids restart
         reader = self._reader
         assert reader is not None
         try:
@@ -254,6 +257,10 @@ class BotClient:
                 self.bytes_in += len(data)
                 for t, p in dec.feed(data):
                     self.frames_in += 1
+                    if t in (MsgType.SNAPSHOT, MsgType.HISTORY):
+                        p = parts.add(t, p)
+                        if p is None:
+                            continue            # wait for the remaining parts
                     self._on_message(t, p)
                     self.inbox.append((t, p))
                 self._notify()

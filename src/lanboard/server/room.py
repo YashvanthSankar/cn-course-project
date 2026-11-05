@@ -30,6 +30,16 @@ seconds so a client whose Wi-Fi dropped can reconnect, present its
 ``resume_token`` and continue as the same user, receiving only the ops it
 missed. A connection object is attached to at most one session at a time.
 
+Durable history
+---------------
+``history_base`` + ``history`` is the time-lapse: a base board (empty, seq 0,
+for a new room) plus every op after it, contiguous in seq. It is also the
+resume log. It survives restarts: the snapshot task archives the ops it
+compacts out of ``ops.jsonl`` into ``history.jsonl`` (see persistence.py), and
+:meth:`Room.load` rebuilds both. It is bounded by ``HISTORY_MAX_OPS`` and
+``HISTORY_MAX_BYTES``; past that the oldest ops are folded into the base, so
+the history then starts at ``base_seq`` instead of 0.
+
 The connection object is duck-typed (see ``server.ClientConnection``); the room
 only uses ``send``, ``send_frame``, ``close``, and the attributes ``session``,
 ``room``, ``uploads``, ``rtt``.
@@ -53,7 +63,8 @@ from lanboard.common import auth
 from lanboard.common import config as C
 from lanboard.common.messages import Err, MsgType, Reason
 from lanboard.common.model import Board, InvalidOp, validate_op
-from lanboard.common.protocol import ProtocolError, encode
+from lanboard.common.protocol import (HEADER_SIZE, ProtocolError, encode, encode_parts,
+                                     pack_ranges, part_budget)
 
 from .persistence import RoomStore
 
@@ -61,7 +72,7 @@ log = logging.getLogger("lanboard.room")
 
 DEDUPE_MAX = 4096          # remembered op_ids per session (bounded LRU)
 CATCHUP_MAX_OPS = 5000     # longer gaps are healed with a SNAPSHOT instead of OP_BATCH
-OP_BATCH_CHUNK = 500       # ops per OP_BATCH frame (keeps frames well below MAX_FRAME)
+OP_BATCH_CHUNK = 500       # at most this many ops per OP_BATCH frame (and <= PART_BYTES)
 JOIN_CHAT_TAIL = 200       # chat messages included in JOINED
 LIVE_PER_SEC = 240         # ephemeral frames per client per second (excess silently dropped)
 CHAT_PER_SEC = 5           # chat messages per client per second (burst 2x)
@@ -218,9 +229,15 @@ class Room:
         self.created = time.time()
 
         self.board = Board()
-        # history = every OpMsg after history_base.seq, contiguous in seq
+        # history = every OpMsg after history_base.seq, contiguous in seq:
+        # history[i]["seq"] == history_base.seq + 1 + i
         self.history_base = Board()
         self.history: list[dict] = []
+        self.history_sizes: list[int] = []      # JSON bytes of each history entry (byte cap)
+        self.history_bytes = 0
+        self.archived_seq = 0                   # last seq already in history.jsonl
+        self._rewrite_history = True            # history files must be rewritten from memory
+        self._history_busy: set[str] = set()    # user_ids with a HISTORY being built
 
         self.sessions: dict[str, Session] = {}
         self.by_token: dict[str, Session] = {}
@@ -236,7 +253,7 @@ class Room:
         self._saving = False
         self._meta_writing = False
         self._tasks: set[asyncio.Task] = set()
-        self._snap_frame: tuple[int, bytes] | None = None
+        self._snap_frames: tuple[int, list[bytes]] | None = None
 
         self._handlers: dict[int, Callable[[Session, dict], Any]] = {
             MsgType.OP_SUBMIT: self.on_op_submit,
@@ -301,7 +318,9 @@ class Room:
         the recipient's bounded queue, so a slow receiver cannot stall the room
         (it is disconnected as ``lagging`` instead).
         """
-        frame = encode(msg_type, payload)
+        self.broadcast_frame(encode(msg_type, payload), exclude)
+
+    def broadcast_frame(self, frame: bytes, exclude: Session | None = None) -> None:
         for s in list(self.sessions.values()):
             if s.conn is not None and s is not exclude:
                 s.conn.send_frame(frame)
@@ -437,22 +456,32 @@ class Room:
                 self.remove_session(s, Reason.EXPIRED)
 
     # ------------------------------------------------------------------ catch-up
-    def snapshot_frame(self) -> bytes:
-        """Encoded SNAPSHOT for the current seq (cached: many late joiners, one encode)."""
-        if self._snap_frame is None or self._snap_frame[0] != self.seq:
+    def snapshot_frames(self) -> list[bytes]:
+        """Encoded SNAPSHOT for the current seq (cached: many late joiners, one encode).
+
+        A board bigger than ``PART_BYTES`` becomes several SNAPSHOT parts
+        (``part``/``parts``/``xid``, see messages.py) that the client
+        reassembles before applying, so a board of any size fits through
+        ``MAX_FRAME``-sized frames. All parts are queued in one synchronous
+        call, so no OP can be sequenced in between them.
+        """
+        if self._snap_frames is None or self._snap_frames[0] != self.seq:
             board = {"seq": self.seq, "objects": list(self.board.objects.values())}
-            self._snap_frame = (self.seq, encode(MsgType.SNAPSHOT, {
+            self._snap_frames = (self.seq, encode_parts(MsgType.SNAPSHOT, {
                 "seq": self.seq, "board": board, "hash": self.board.hash()}))
-        return self._snap_frame[1]
+        return self._snap_frames[1]
 
     def send_snapshot(self, s: Session) -> None:
         if s.conn is None:
             return
         try:
-            s.conn.send_frame(self.snapshot_frame())
-        except ProtocolError:
-            log.error("[%s] board too large for one SNAPSHOT frame", self.code)
-            self._error(s, Err.TOO_LARGE, "board snapshot exceeds MAX_FRAME")
+            frames = self.snapshot_frames()
+        except ProtocolError:                   # one object larger than a frame: cannot happen
+            log.error("[%s] board object too large for a SNAPSHOT frame", self.code)
+            self._error(s, Err.TOO_LARGE, "board snapshot cannot be encoded")
+            return
+        for f in frames:
+            s.conn.send_frame(f)
 
     def send_catch_up(self, s: Session, last_seq: Any) -> None:
         """Send the ops after ``last_seq`` (OP_BATCH) or, if that tail is gone, a SNAPSHOT."""
@@ -464,11 +493,12 @@ class Room:
         if not ok:
             self.send_snapshot(s)
             return
-        tail = self.history[last_seq - self.base_seq:]      # history[i].seq == base_seq + 1 + i
+        start = last_seq - self.base_seq                    # history[i].seq == base_seq + 1 + i
+        tail = self.history[start:]
+        # split by count *and* bytes: 500 big strokes could exceed one frame
+        ranges = pack_ranges(self.history_sizes[start:], part_budget(), OP_BATCH_CHUNK)
         try:
-            frames = [encode(MsgType.OP_BATCH, {"ops": tail[i:i + OP_BATCH_CHUNK]})
-                      for i in range(0, len(tail), OP_BATCH_CHUNK)] or \
-                     [encode(MsgType.OP_BATCH, {"ops": []})]
+            frames = [encode(MsgType.OP_BATCH, {"ops": tail[a:b]}) for a, b in ranges]
         except ProtocolError:
             self.send_snapshot(s)
             return
@@ -513,7 +543,7 @@ class Room:
         """The op pipeline. Returns the committed OpMsg, or None if rejected/duplicate.
 
         Steps (see messages.py): joined -> permission -> rate limit -> validate
-        -> dedupe -> normalise -> seq+apply -> log -> broadcast (+HASH).
+        -> dedupe -> normalise -> size check -> seq+apply -> log -> broadcast (+HASH).
         """
         # 1. joined
         if self.sessions.get(s.user_id) is not s:
@@ -543,23 +573,38 @@ class Room:
         # 6. normalise (clear -> delete of live ids, add.owner forced to the sender)
         kind = op["k"]
         op = self.board.normalise(op, s.user_id)
-        # 7. sequence + apply
+        # 7. size check: encode the OP frame once, before committing. An op whose
+        #    frame is absurdly large is refused here with a clear error; the
+        #    connection stays up and no seq is used. (Frames above MAX_FRAME never
+        #    get this far: the decoder treats them as a broken stream.)
         seq = self.seq + 1
-        self.board.apply(op, seq)
         msg = {"seq": seq, "user_id": s.user_id, "op_id": op_id,
                "ts": round(time.time(), 3), "op": op}
-        # 8. log: memory (resume/timeline) and disk (crash recovery) before anyone sees it
-        self.history.append(msg)
-        self._trim_history()
         try:
-            self.store.append_op(msg)
+            frame = encode(MsgType.OP, msg)
+        except ProtocolError:
+            frame = None
+        if frame is None or len(frame) > C.MAX_OP_BYTES:
+            what = f"{len(frame):,} bytes" if frame is not None else "more than a frame"
+            self._reject(s, op_id, Err.TOO_LARGE,
+                         f"edit too large ({what}; the limit is {C.MAX_OP_BYTES:,} bytes)")
+            return None
+        # 8. sequence + apply (apply copies what it keeps, so ``msg`` stays as encoded)
+        self.board.apply(op, seq)
+        # 9. log: disk (crash recovery) and memory (resume/timeline) before anyone sees it.
+        #    The log line is the frame's JSON payload, so nothing is encoded twice.
+        raw = frame[HEADER_SIZE + 1:]
+        try:
+            size = self.store.append_op(msg, raw)
         except OSError as exc:                  # disk full etc.: keep serving, shout in the log
+            size = len(raw) + 1
             log.error("[%s] cannot append to ops.jsonl: %s (seq %d not durable until the "
                       "next snapshot)", self.code, exc, seq)
+        self._add_history(msg, size)
         s.remember(op_id, msg)
         self.ops_since_snapshot += 1
-        # 9. broadcast to everyone, sender included (its echo is the ack)
-        self.broadcast(MsgType.OP, msg)
+        # 10. broadcast to everyone, sender included (its echo is the ack)
+        self.broadcast_frame(frame)
         if kind == "replace" or seq % C.HASH_EVERY_OPS == 0:
             self.broadcast(MsgType.HASH, {"seq": seq, "hash": self.board.hash()})
         if kind == "clear":
@@ -574,49 +619,77 @@ class Room:
         if adds and len(self.board.objects) + adds > C.MAX_OBJECTS:
             raise InvalidOp("board is full")
 
+    def _add_history(self, msg: dict, size: int) -> None:
+        self.history.append(msg)
+        self.history_sizes.append(size)
+        self.history_bytes += size
+        self._trim_history()
+
     def _trim_history(self) -> None:
-        """Keep at most HISTORY_MAX_OPS ops; fold the oldest ones into the base board."""
-        limit = C.HISTORY_MAX_OPS
-        if len(self.history) <= limit:
+        """Enforce the history caps by folding the oldest ops into the base board.
+
+        Caps: ``HISTORY_MAX_OPS`` ops and ``HISTORY_MAX_BYTES`` of op JSON per
+        room, in memory and on disk alike. When either is exceeded, about 10 %
+        more than the excess is dropped at once, so the (expensive) rewrite of
+        the history files happens rarely: amortised O(1) per op. Afterwards
+        ``base_seq`` > 0 tells clients that the time-lapse starts later than
+        the room's first op.
+        """
+        max_ops, max_bytes = C.HISTORY_MAX_OPS, C.HISTORY_MAX_BYTES
+        n = len(self.history)
+        if n <= max_ops and self.history_bytes <= max_bytes:
             return
-        drop = len(self.history) - limit + max(1, limit // 10)   # trim in chunks (amortised)
+        keep_ops = max_ops - max(1, max_ops // 10)
+        keep_bytes = max_bytes - max_bytes // 10
+        drop, freed = 0, 0
+        while drop < n and (n - drop > keep_ops or self.history_bytes - freed > keep_bytes):
+            freed += self.history_sizes[drop]
+            drop += 1
         for m in self.history[:drop]:
             self.history_base.apply(m["op"], m["seq"])
         del self.history[:drop]
+        del self.history_sizes[:drop]
+        self.history_bytes -= freed
+        self._rewrite_history = True            # the files still start at the old base
 
     def on_resync(self, s: Session, p: dict) -> None:
         self.send_catch_up(s, p.get("last_seq"))
 
-    def history_payload(self) -> dict | None:
-        built = self._history()
-        return built[0] if built else None
+    def history_payload(self) -> dict:
+        """The (logical) HISTORY reply: base board + every op after it.
 
-    def _history(self) -> tuple[dict, bytes] | None:
-        """HISTORY reply and its frame. If too big for one frame, the base moves forward."""
-        ops, n = self.history, len(self.history)
-        keep = n
-        while True:
-            base = self.history_base
-            if keep < n:
-                base = self.history_base.copy()
-                for m in ops[:n - keep]:
-                    base.apply(m["op"], m["seq"])
-            payload = {"base_seq": base.seq,
-                       "base": {"seq": base.seq, "objects": list(base.objects.values())},
-                       "ops": ops[n - keep:]}
+        ``base_seq == 0`` means the history is complete since the room was
+        created; ``base_seq > 0`` means older ops were dropped by the caps
+        and the time-lapse starts from the base board at that seq.
+        """
+        base = self.history_base.snapshot()     # deep copy: safe to encode in a thread
+        return {"base_seq": base["seq"], "base": base, "ops": list(self.history)}
+
+    async def on_history_req(self, s: Session, p: dict) -> None:
+        """Send the whole time-lapse, split into HISTORY parts when it is large.
+
+        Encoding tens of MB of ops would stall every room for a moment, so it
+        runs in a worker thread. That is safe: the payload is a deep copy of
+        the base plus a list of OpMsg dicts, which are never mutated after
+        they are committed. One request per user at a time (no DoS by spam).
+        """
+        conn = s.conn
+        if conn is None or s.user_id in self._history_busy:
+            return
+        self._history_busy.add(s.user_id)
+        try:
+            payload = self.history_payload()
+            sizes = {("ops",): self.history_sizes[:len(payload["ops"])]}
             try:
-                return payload, encode(MsgType.HISTORY, payload)
+                frames = await asyncio.to_thread(encode_parts, MsgType.HISTORY, payload, sizes)
             except ProtocolError:
-                if keep == 0:
-                    return None
-                keep //= 2
-
-    def on_history_req(self, s: Session, p: dict) -> None:
-        built = self._history()
-        if built is None:
-            self._error(s, Err.TOO_LARGE, "history does not fit in a frame")
-        elif s.conn is not None:
-            s.conn.send_frame(built[1])
+                self._error(s, Err.TOO_LARGE, "history cannot be encoded")
+                return
+            if s.conn is conn:                  # still the same connection after the await
+                for f in frames:
+                    conn.send_frame(f)
+        finally:
+            self._history_busy.discard(s.user_id)
 
     # ------------------------------------------------------------------ ephemeral relay
     def _may_draw(self, s: Session) -> bool:
@@ -813,7 +886,9 @@ class Room:
         sha = get_str(p, "hash", 64)
         mime = get_str(p, "mime", 100)
         size = get_int(p, "size", 0, 2 ** 40)
-        count = get_int(p, "count", 1, 1 << 20)
+        # chunks are at least 1 KiB (clients use BLOB_CHUNK), so the count is bounded by the
+        # size: otherwise a client could announce a million empty chunks and fill our memory
+        count = get_int(p, "count", 1, max(1, -(-size // 1024)))
         index = get_int(p, "index", 0, count - 1)
         data = get_str(p, "data", 2 * C.BLOB_CHUNK + 1024)
         conn = s.conn
@@ -896,7 +971,7 @@ class Room:
 
     @classmethod
     def load(cls, store: RoomStore) -> "Room | None":
-        """Rebuild a room from disk: meta + snapshot + replay of ops.jsonl."""
+        """Rebuild a room from disk: meta, board, durable history, sessions, chat."""
         meta = store.load_meta()
         if not meta or not isinstance(meta.get("code"), str):
             return None
@@ -909,21 +984,7 @@ class Room:
         room.presenter = meta.get("presenter")
         room._order = int(meta.get("order", 0))
 
-        snap = store.load_snapshot()
-        room.board = Board.from_snapshot(snap) if snap else Board()
-        room.history_base = room.board.copy()
-        replayed = 0
-        for msg in store.load_ops():
-            seq = msg.get("seq")
-            if not isinstance(seq, int) or seq <= room.seq:
-                continue                                    # already inside the snapshot
-            if seq != room.seq + 1:
-                log.warning("[%s] gap in ops.jsonl at seq %s (have %d); stopping replay",
-                            room.code, seq, room.seq)
-                break
-            room.board.apply(msg["op"], seq)
-            room.history.append(msg)
-            replayed += 1
+        replayed = room._load_board(store)
         room.ops_since_snapshot = replayed
 
         # sessions survive restarts, so clients can resume as the same user/role
@@ -946,9 +1007,80 @@ class Room:
         room.chat.extend(store.load_chat(C.CHAT_HISTORY_MAX))
         room.chat_seq = max([int(meta.get("chat_seq", 0))] +
                             [m.get("id", 0) for m in room.chat if isinstance(m.get("id"), int)])
-        log.info("[%s] loaded: seq %d (%d ops replayed), %d objects, %d sessions",
-                 room.code, room.seq, replayed, len(room.board), len(room.sessions))
+        log.info("[%s] loaded: seq %d (%d ops replayed), %d objects, %d sessions, "
+                 "history from seq %d (%d ops)", room.code, room.seq, replayed, len(room.board),
+                 len(room.sessions), room.base_seq, len(room.history))
         return room
+
+    def _extend_history(self, records: list[tuple[dict, int]]) -> int | None:
+        """Append the records that continue the history; return the seq of a gap, if any.
+
+        Records at or below the current end are skipped: an op may be in two
+        files after a crash in the middle of a compaction.
+        """
+        last = self.base_seq + len(self.history)
+        for msg, size in records:
+            seq = msg.get("seq")
+            if not isinstance(seq, int) or seq <= last or not isinstance(msg.get("op"), dict):
+                continue
+            if seq != last + 1:
+                return seq
+            self.history.append(msg)
+            self.history_sizes.append(size)
+            self.history_bytes += size
+            last = seq
+        return None
+
+    def _load_board(self, store: RoomStore) -> int:
+        """Rebuild board + history from the files; return the ops not yet in snapshot.json.
+
+        1. History: ``history_base.json`` (absent: an empty board at seq 0),
+           then every op of ``history.jsonl`` and ``ops.jsonl`` that continues
+           the sequence. A gap ends the history.
+        2. Board: the snapshot, if it lies inside the history, plus the history
+           ops after it (the fast path); else base + all history ops (snapshot
+           lost, or older than a trimmed base).
+        3. If the history cannot reach the snapshot (a data directory written
+           before the archive existed, or a damaged history.jsonl), snapshot +
+           ops.jsonl are the truth, exactly as before: the history restarts at
+           the snapshot and the files are rewritten at the next compaction.
+        """
+        snap = store.load_snapshot()
+        snap_seq = int(snap.get("seq", 0)) if snap else 0
+        base_snap, archived = store.load_history()
+        logged = store.load_ops_sized()
+        self.history_base = Board.from_snapshot(base_snap) if base_snap else Board()
+        self._rewrite_history = base_snap is None           # create the files at the next checkpoint
+        gap = self._extend_history(archived)
+        self.archived_seq = self.base_seq + len(self.history)
+        if gap is None:
+            gap = self._extend_history(logged)
+        end = self.base_seq + len(self.history)
+
+        if snap and self.base_seq <= snap_seq <= end:
+            self.board = Board.from_snapshot(snap)          # fast path: replay only the tail
+            start = snap_seq - self.base_seq
+        elif snap is None or snap_seq < self.base_seq:
+            self.board = self.history_base.copy()
+            start = 0
+        else:
+            if base_snap is not None or archived:
+                log.warning("[%s] history ends at seq %d (gap at %s) before the snapshot (%d); "
+                            "the time-lapse restarts there", self.code, end, gap, snap_seq)
+            self.board = Board.from_snapshot(snap)
+            self.history_base = self.board.copy()
+            self.history, self.history_sizes, self.history_bytes = [], [], 0
+            gap = self._extend_history(logged)
+            self.archived_seq = snap_seq
+            self._rewrite_history = True
+            start = 0
+        if gap is not None:
+            log.warning("[%s] gap in the op log at seq %s (have %d); stopped replay there",
+                        self.code, gap, self.base_seq + len(self.history))
+        for m in self.history[start:]:
+            self.board.apply(m["op"], m["seq"])
+        self._trim_history()                                # the caps may have been lowered
+        return self.board.seq - snap_seq
 
     def _spawn(self, coro) -> None:
         task = asyncio.get_running_loop().create_task(coro)
@@ -966,25 +1098,47 @@ class Room:
         self._spawn(self.write_snapshot())
 
     async def write_snapshot(self) -> None:
-        """Snapshot the board to disk and truncate the op log.
+        """Compaction: archive the logged ops, snapshot the board, truncate the log.
 
-        The board is copied on the loop thread (a consistent point-in-time
-        image at ``seq``), written by a worker thread, and only then is the
-        log truncated to the ops sequenced *while* the write was in flight.
-        A crash at any point leaves either the old snapshot + full log or the
-        new snapshot + a log whose older entries are skipped on replay.
+        The board and the ops to archive are captured on the loop thread (a
+        consistent point-in-time image at ``seq``), written by a worker thread
+        (history first, then the snapshot), and only then is ``ops.jsonl``
+        truncated to the ops sequenced *while* the write was in flight. A
+        crash at any point leaves either the old snapshot + full log or the
+        new snapshot + a log whose older entries are skipped on replay; the
+        history never loses an op because it is written before the log
+        forgets it.
         """
         self._saving = True
         try:
             snap = self.board.snapshot()
             seq = snap["seq"]
-            await asyncio.to_thread(self.store.write_snapshot, snap)
-            tail = self.history[max(0, seq - self.base_seq):]
+            base_seq = self.base_seq
+            upto = max(0, seq - base_seq)                   # history[:upto] has seq <= snapshot
+            if self._rewrite_history:
+                # trimmed (or first checkpoint): base + every op up to the snapshot
+                self._rewrite_history = False               # a trim during the await sets it again
+                base = self.history_base.snapshot()
+                archive = self.history[:upto]
+            else:
+                base = None                                 # just append the new ops
+                archive = self.history[max(0, self.archived_seq - base_seq):upto]
+            await asyncio.to_thread(self.store.write_checkpoint, snap, archive, base)
+            self.archived_seq = max(seq, base_seq)
+            if self.base_seq > seq:
+                # The history was trimmed past the snapshot while it was being
+                # written, so memory no longer holds every op after ``seq``. The
+                # log on disk still does: keep it until the next checkpoint.
+                log.debug("[%s] snapshot @%d written, log kept (history moved on)", self.code, seq)
+                return
+            tail = self.history[seq - self.base_seq:]
             self.store.rewrite_ops(tail)
             self.ops_since_snapshot = len(tail)
             self.last_snapshot = time.monotonic()
-            log.debug("[%s] snapshot @%d written, %d ops kept in log", self.code, seq, len(tail))
+            log.debug("[%s] snapshot @%d written, %d ops archived, %d kept in log",
+                      self.code, seq, len(archive), len(tail))
         except Exception:
+            self._rewrite_history = True                    # state of the files is unknown
             log.exception("[%s] snapshot failed", self.code)
         finally:
             self._saving = False

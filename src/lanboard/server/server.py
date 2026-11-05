@@ -50,7 +50,7 @@ from lanboard.common import config as C
 from lanboard.common.messages import Err, MsgType, Reason, type_name
 from lanboard.common.protocol import FrameDecoder, ProtocolError, encode
 
-from .persistence import Storage
+from .persistence import Storage, default_data_dir
 from .room import BadMessage, Room, clean_password, clean_text
 
 log = logging.getLogger("lanboard.server")
@@ -358,14 +358,15 @@ class Server:
     """Listener plus the registry of rooms and connections."""
 
     def __init__(self, host: str = "0.0.0.0", port: int = C.TCP_PORT,
-                 data_dir: str = "./lanboard-data", name: str | None = None, *,
+                 data_dir: str | None = None, name: str | None = None, *,
                  discovery: bool = True, discovery_port: int | None = None,
                  ssl_context: ssl.SSLContext | None = None, max_clients: int = 512) -> None:
         self.host = host
         self.requested_port = port
         self.port = port
         self.name = name or socket.gethostname().split(".")[0] or "LANBoard"
-        self.storage = Storage(data_dir)
+        # no data_dir: the per-user app-data folder, never the current directory
+        self.storage = Storage(data_dir or default_data_dir())
         self.discovery_enabled = discovery
         self.discovery_port = C.DISCOVERY_PORT if discovery_port is None else discovery_port
         self.ssl_context = ssl_context
@@ -400,9 +401,13 @@ class Server:
                         self._next_user = max(self._next_user, int(uid[1:]) + 1)
         self._save_server_meta()
 
+        # reuse_address=None = the platform default: SO_REUSEADDR on POSIX (so a restart
+        # does not wait for old TIME_WAIT sockets), but *not* on Windows, where
+        # SO_REUSEADDR would let a second server bind the same port and silently
+        # share (steal) its connections instead of failing with "address in use".
         self._listener = await asyncio.start_server(
             self._on_client, self.host, self.requested_port, ssl=self.ssl_context,
-            limit=C.READ_CHUNK, reuse_address=True)
+            limit=C.READ_CHUNK, reuse_address=None)
         self.port = self._listener.sockets[0].getsockname()[1]
         log.info("listening on %s:%d (%s)%s", self.host, self.port, self.name,
                  " with TLS" if self.ssl_context else "")

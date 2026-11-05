@@ -17,7 +17,7 @@ cn-course-project/
 │   │   ├── geometry.py       # RDP simplification, hit-testing helpers, bounds
 │   │   └── config.py         # ports, timeouts, limits (single source of truth)
 │   ├── server/
-│   │   ├── __main__.py       # `python -m lanboard.server --port 5050 --data ./data [--tls]`
+│   │   ├── __main__.py       # `python -m lanboard.server --port 5050 [--data DIR] [--dashboard]` (default data dir: per-user app data)
 │   │   ├── server.py         # asyncio.start_server, ClientConnection (reader/writer tasks)
 │   │   ├── room.py           # Room: members, roles, Board, op log, seq, chat, broadcast
 │   │   ├── auth.py           # scrypt hashing, challenge nonces, HMAC verify, resume tokens

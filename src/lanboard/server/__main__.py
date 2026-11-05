@@ -2,13 +2,18 @@
 
 Usage::
 
-    python -m lanboard.server [--host 0.0.0.0] [--port 5050] [--data ./lanboard-data]
+    python -m lanboard.server [--host 0.0.0.0] [--port 5050] [--data DIR]
                               [--name NAME] [--no-discovery] [--dashboard]
                               [--tls-cert cert.pem --tls-key key.pem] [-v]
 
+Rooms are stored in ``--data``; by default that is the per-user app-data
+folder (``~/Library/Application Support/LANBoard`` on macOS,
+``%APPDATA%\\LANBoard`` on Windows, ``~/.local/share/lanboard`` on Linux), so
+it does not matter which directory the server is started from.
+
 Ctrl+C (SIGINT) or SIGTERM shuts down gracefully: every room's board is
 snapshotted to disk first. A hard kill is also safe, because accepted ops are
-in ``ops.jsonl`` and are replayed on the next start.
+in ``ops.jsonl`` and are replayed on the next start (see ``persistence.py``).
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from lanboard.common import config as C
 
 from .dashboard import Dashboard, RingLogHandler
 from .discovery import lan_ipv4_addresses
+from .persistence import default_data_dir
 from .server import Server
 
 LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
@@ -34,7 +40,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                                  description="LANBoard collaborative whiteboard server (LAN only)")
     ap.add_argument("--host", default="0.0.0.0", help="interface to bind (default: all)")
     ap.add_argument("--port", type=int, default=C.TCP_PORT, help=f"TCP port (default {C.TCP_PORT})")
-    ap.add_argument("--data", default="./lanboard-data", help="data directory")
+    ap.add_argument("--data", default=None, metavar="DIR",
+                    help=f"data directory (default: {default_data_dir()})")
     ap.add_argument("--name", default=None, help="server name shown to clients (default: hostname)")
     ap.add_argument("--no-discovery", action="store_true",
                     help=f"do not answer UDP discovery probes on port {C.DISCOVERY_PORT}")
@@ -83,6 +90,7 @@ async def run(args: argparse.Namespace) -> None:
     addrs = lan_ipv4_addresses() if wildcard else [args.host]
     print(f"LANBoard server {server.name!r} listening on {args.host}:{server.port}"
           f"{' (TLS)' if ctx else ''}", flush=True)
+    print(f"Data directory: {server.storage.root}", flush=True)
     if addrs:
         print("Clients on this LAN can connect to: "
               + ", ".join(f"{ip}:{server.port}" for ip in addrs), flush=True)

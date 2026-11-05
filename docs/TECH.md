@@ -9,7 +9,7 @@
 | Client networking | `QTcpSocket` (signal-driven, `LowDelayOption`) | Native to the Qt event loop → no Qt/asyncio thread juggling. Speaks the same framed protocol as the server. |
 | Discovery | UDP broadcast (`socket` SOCK_DGRAM) | Zero-config "Nearby servers" list on the LAN. |
 | Security | `hashlib.scrypt`, `hmac`, `secrets`; optional `ssl` | Salted password hashes, challenge–response so passwords never cross the wire, optional TLS. |
-| Persistence | JSON snapshot + JSONL op log per room | Human-readable, crash-safe (append-only), trivially replayable for history. |
+| Persistence | JSON snapshot + JSONL op log + JSONL history archive per room, in the per-user app-data dir | Human-readable, crash-safe (append-only), trivially replayable for history (§10). |
 | Tests | `pytest`, `pytest-asyncio` | Protocol codec, op application, server room logic, multi-client integration. |
 | Packaging | **PyInstaller** one-dir builds (`server`, `client`) | Standalone executables; one-dir avoids Qt plugin & macOS start-up issues of `--onefile`. |
 
@@ -59,6 +59,17 @@ Third-party dependencies are credited in `README.md` (PySide6 LGPL-3.0, PyInstal
 ```
   `length` counts type + payload. Max frame 8 MiB (reject + disconnect above). Decoder is
   incremental (handles partial reads and multiple frames per read).
+- **Multi-part messages.** A board or a time-lapse can be bigger than any one frame, so a
+  `SNAPSHOT` or `HISTORY` payload above `PART_BYTES` (1 MiB) is sent as several frames of the
+  same type tagged `{part, parts, xid}`. Each part repeats the scalar fields (`seq`, `hash`,
+  `base_seq`) and carries a slice of the big lists (`board.objects`; `base.objects`, `ops`).
+  The receiver (`protocol.PartAssembler`) buffers the parts by `xid` (any order, duplicates
+  ignored) and applies the merged payload only when all have arrived, so a late joiner never
+  sees a half-loaded board. A long catch-up is several `OP_BATCH` frames, split by count
+  (≤ 500) and by bytes (≈ `PART_BYTES`). Small payloads stay single frames without the tags.
+- **Per-op size cap.** One op's `OP` frame may not exceed `MAX_OP_BYTES` (4 MiB): the server
+  answers `OP_REJECT {code: TOO_LARGE}` and the connection stays up; the client rolls the op
+  back. Only a frame above `MAX_FRAME`, which cannot even be parsed, still closes the link.
 - `type` byte groups messages: `0x0_` control, `0x1_` presence, `0x2_` board ops, `0x3_` chat,
   `0x4_` admin, `0x5_` history/persistence. JSON payload keeps it debuggable; point arrays are
   compact integer lists.
@@ -70,7 +81,7 @@ S→C CHALLENGE    {nonce}                         (always sent; used if room ha
 C→S JOIN_ROOM    {room, create?:bool, proof?, resume_token?, last_seq?}
                    proof = HMAC-SHA256(scrypt(password, room_salt), nonce)
 S→C JOINED       {user_id, color, role, resume_token, room_info, participants}
-S→C SNAPSHOT     {seq, objects, chat_tail}       ─┐ either full snapshot …
+S→C SNAPSHOT     {seq, board:{seq, objects}, hash, part?, parts?, xid?}  ─┐ either full snapshot …
 S→C OP_BATCH     {ops:[…]}                       ─┘ … or only ops after last_seq (resume)
 S→C ERROR        {code, msg}   e.g. BAD_PASSWORD, ROOM_NOT_FOUND, FORBIDDEN, PROTO_MISMATCH
 ```
@@ -79,7 +90,7 @@ S→C ERROR        {code, msg}   e.g. BAD_PASSWORD, ROOM_NOT_FOUND, FORBIDDEN, P
 ```
 C→S OP_SUBMIT    {op_id, op}                 op_id = "<client_id>:<counter>"
 S→* OP           {seq, user_id, op_id, ts, op}   broadcast to all incl. sender (= ack)
-S→C OP_REJECT    {op_id, reason}             (forbidden, invalid, board locked)
+S→C OP_REJECT    {op_id, code, msg}          (FORBIDDEN, LOCKED, INVALID_OP, RATE_LIMITED, TOO_LARGE)
 ```
 Op kinds (`op.k`):
 | k | fields | inverse (for undo) |
@@ -107,7 +118,7 @@ S→* USER_JOINED {user_id, username, color, role}   S→* USER_LEFT {user_id, r
 C→S CHAT_SEND {cmid, text}  → S→* CHAT {chat_seq, user_id, username, ts, text}
 C→S SET_ROLE {user_id, role} | KICK {user_id} | LOCK {locked} | SET_PASSWORD {…}   (owner only)
 C→S SAVE {name} / LOAD {name} / LIST_SAVES   → server-side named saves
-C→S HISTORY_RANGE {from_seq, to_seq}         → for the timeline view
+C→S HISTORY_REQ {}  → S→C HISTORY {base_seq, base:{seq, objects}, ops:[OpMsg]}   (time-lapse, §10)
 C→S VIEWPORT {x,y,zoom}  (presenter)         → S→* VIEWPORT (followers)
 ```
 
@@ -120,7 +131,9 @@ C→S VIEWPORT {x,y,zoom}  (presenter)         → S→* VIEWPORT (followers)
 4. **Gaps**: if an `OP` arrives with `seq > last_seq + 1`, client sends `RESYNC {last_seq}` and
    buffers until filled.
 5. **Late join / reconnect**: `resume_token + last_seq`; if the op log still contains `last_seq+1`
-   → send the tail; else → full `SNAPSHOT`. Log compacted into a snapshot every 2 000 ops.
+   → send the tail; else → full `SNAPSHOT`. The log is compacted into a snapshot every
+   `AUTOSAVE_EVERY_OPS` (50) ops or `AUTOSAVE_INTERVAL` (10 s); the compacted ops move to the
+   history archive, so resume and time-lapse still reach back past the snapshot (§10).
 6. **Concurrent edits on the same object**: ops are applied in `seq` order; `update` is
    last-writer-wins per property *by server order*; `update`/`delete` on a tombstoned object is a no-op.
 
@@ -138,7 +151,7 @@ C→S VIEWPORT {x,y,zoom}  (presenter)         → S→* VIEWPORT (followers)
 
 ## 6. Concurrency model (server)
 - Single asyncio event loop; each connection = reader coroutine + writer coroutine.
-- Outbound: per-client `asyncio.Queue(maxsize=1000)`; if full → client is too slow → disconnect
+- Outbound: per-client `asyncio.Queue(maxsize=SEND_QUEUE_MAX)` (4 000 frames); if full → client is too slow → disconnect
   with `USER_LEFT{reason:"lagging"}` (it will resume via reconnect). One slow client never stalls a room.
 - Disk I/O (snapshots) via `asyncio.to_thread` so the loop never blocks.
 
@@ -165,3 +178,39 @@ C→S VIEWPORT {x,y,zoom}  (presenter)         → S→* VIEWPORT (followers)
   unsigned apps — ad-hoc `codesign -s -`. Demo on a phone hotspot/switch (campus Wi-Fi often has
   client isolation).
 - Never trust client-sent `user_id`/role — server assigns them.
+
+## 10. Persistence & durable time-lapse history
+Data directory: `--data DIR`, default the per-user app-data folder
+(`~/Library/Application Support/LANBoard` on macOS, `%APPDATA%\LANBoard` on Windows,
+`~/.local/share/lanboard` on Linux), never the current directory. Per room:
+
+| File | Contents | Written |
+|---|---|---|
+| `snapshot.json` | board at seq S | atomically (tmp + fsync + `os.replace`) at each compaction |
+| `ops.jsonl` | every op after S (write-ahead log) | appended *before* the op is broadcast |
+| `history_base.json` | board at the start of the history, seq B (empty, B = 0, for a new room) | when the history is trimmed |
+| `history.jsonl` | every op in (B, A], A ≤ S | compaction appends the ops leaving `ops.jsonl` |
+
+`history_base + history.jsonl + ops.jsonl` is the gap-free sequence of every op since B, so
+`HISTORY` after a restart still replays from the room's first op, and a resume after a restart
+can still be served from the log.
+
+- **Compaction order** (one task per room at a time): capture board + ops on the loop thread →
+  worker thread appends the ops to `history.jsonl` (fsync) → writes `snapshot.json` → loop
+  truncates `ops.jsonl`. A crash between any two steps loses nothing: the loader skips ops it
+  already has (by seq) and stops at a gap.
+- **Loader**: history = base + contiguous ops from both JSONL files; board = snapshot + history
+  ops after it (or base + all ops if the snapshot is missing). A data directory from before the
+  archive existed (no `history_base.json`) loads exactly as before, with the history starting at
+  its snapshot; the archive files are created at the next compaction.
+- **Bounds**: at most `HISTORY_MAX_OPS` (100 000) ops and `HISTORY_MAX_BYTES` (32 MiB) of op
+  JSON per room, in memory and on disk. Past either cap the oldest ~10 % are folded into the base
+  board and `history.jsonl` is rewritten (atomically) without them. Clients see this as
+  `HISTORY.base_seq > 0`: "history starts at seq base_seq + 1".
+- **Torn lines**: appends are flushed, not fsync-ed (a killed process loses nothing; a power cut
+  may tear the last line). The loader skips a torn line, and before appending to such a file the
+  server terminates it with a newline so the next record is not glued onto it.
+- **Windows**: `os.replace` maps to `MoveFileEx(MOVEFILE_REPLACE_EXISTING)`, atomic for our
+  purposes, but it fails with a sharing violation while another process (virus scanner, indexer)
+  holds the target open. `replace_file()` retries for up to ~1 s; open log files are closed
+  before they are replaced; temp files are deleted if a write fails.

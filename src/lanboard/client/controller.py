@@ -27,6 +27,14 @@ Ops submitted while disconnected stay in ``pending`` and are resent, in order,
 after every (re)join. The server de-duplicates by ``op_id``, so resending an op
 it already accepted is harmless.
 
+Large transfers
+---------------
+A big board's SNAPSHOT (and a long HISTORY) arrives as several parts. They are
+collected by a ``PartAssembler`` and only the complete payload is applied, so
+the replica jumps from the old board straight to the new one and is never
+half-loaded. A catch-up of many ops arrives as several OP_BATCH frames, which
+need no reassembly (each op is applied by seq as usual).
+
 Self-healing
 ------------
 If a HASH checkpoint does not match our confirmed board, we discard the replica
@@ -49,6 +57,7 @@ from ..common import auth
 from ..common import config as C
 from ..common.messages import Err, MsgType
 from ..common.model import Board, get_key, op_object_ids
+from ..common.protocol import PartAssembler, ProtocolError
 from ..common.undo import UndoManager
 
 GAP_TIMEOUT_MS = 400        # how long to wait for a missing seq before RESYNC
@@ -95,6 +104,7 @@ class SessionController(QObject):
         self.pending: OrderedDict[str, dict] = OrderedDict()   # op_id -> local (normalised) op
         self._wire: dict[str, dict] = {}        # op_id -> op as sent on the wire
         self._reorder: dict[int, dict] = {}     # seq -> OpMsg waiting for its predecessors
+        self._parts = PartAssembler()           # multi-part SNAPSHOT / HISTORY in progress
         self.undo_mgr = UndoManager()
 
         self.participants: dict[str, dict] = {}
@@ -206,10 +216,24 @@ class SessionController(QObject):
         if undoable:
             self.undo_mgr.record(local)
             self._emit_undo_state()
-        if self.net.is_joined():
-            self.net.send(MsgType.OP_SUBMIT, {"op_id": op_id, "op": op})
+        if self.net.is_joined() and not self._send_op(op_id, op):
+            return None
         self._emit_sync()
         return op_id
+
+    def _send_op(self, op_id: str, op: dict) -> bool:
+        """OP_SUBMIT one op. An op too big for any frame is rolled back right here.
+
+        (Ops below MAX_FRAME but above the server's MAX_OP_BYTES come back as
+        OP_REJECT TOO_LARGE and are rolled back in ``_on_reject``.)
+        """
+        try:
+            self.net.send(MsgType.OP_SUBMIT, {"op_id": op_id, "op": op})
+            return True
+        except ProtocolError:
+            self._on_reject({"op_id": op_id, "code": Err.TOO_LARGE,
+                             "msg": "That edit is too large to send."})
+            return False
 
     def add_object(self, obj: dict) -> None:
         obj = copy.deepcopy(obj)
@@ -449,6 +473,7 @@ class SessionController(QObject):
         self.me = self.participants[self.me["user_id"]]
         self.chat = list(p.get("chat", []))
         self._reorder.clear()
+        self._parts.clear()                     # transfer ids restart on every connection
         self._healing = False
         self._mismatch = False
         self.me_changed.emit(self.me)
@@ -472,7 +497,7 @@ class SessionController(QObject):
         batch, self._resend_queue = self._resend_queue[:self.RESEND_PER_TICK], self._resend_queue[self.RESEND_PER_TICK:]
         for op_id, op in batch:
             if op_id in self._wire and self.net.is_joined():
-                self.net.send(MsgType.OP_SUBMIT, {"op_id": op_id, "op": op})
+                self._send_op(op_id, op)
         if self._resend_queue:
             QTimer.singleShot(1000, self._pump_resend)
 
@@ -483,6 +508,9 @@ class SessionController(QObject):
 
     # --- board sync -------------------------------------------------------------
     def _on_snapshot(self, p: dict) -> None:
+        p = self._parts.add(MsgType.SNAPSHOT, p)
+        if p is None:
+            return                              # more parts to come: keep the old board for now
         snap = p.get("board") or {}
         self.board = Board.from_snapshot({"seq": p.get("seq", snap.get("seq", 0)),
                                           "objects": snap.get("objects", [])})
@@ -606,7 +634,8 @@ class SessionController(QObject):
         msgs = {Err.FORBIDDEN: "You can't do that in this room.",
                 Err.LOCKED: "The board is locked by the owner.",
                 Err.RATE_LIMITED: "Slow down: too many edits per second.",
-                Err.INVALID_OP: "That edit was rejected as invalid."}
+                Err.INVALID_OP: "That edit was rejected as invalid.",
+                Err.TOO_LARGE: "That edit is too large to share."}
         self.notice.emit("warn", msgs.get(code, p.get("msg") or code))
         self._emit_sync()
 
@@ -666,6 +695,13 @@ class SessionController(QObject):
     def _on_error(self, p: dict) -> None:
         self.notice.emit("error", p.get("msg") or p.get("code", "error"))
 
+    def _on_history(self, p: dict) -> None:
+        """Re-emit HISTORY once complete. The payload is always the merged one:
+        ``{base_seq, base:{seq, objects}, ops}`` (``base_seq > 0``: older ops were trimmed)."""
+        p = self._parts.add(MsgType.HISTORY, p)
+        if p is not None:
+            self.history_ready.emit(p)
+
     _HANDLERS = {
         MsgType.SNAPSHOT: _on_snapshot,
         MsgType.OP_BATCH: _on_op_batch,
@@ -684,7 +720,7 @@ class SessionController(QObject):
         MsgType.LASER: lambda s, p: s.laser.emit(p.get("user_id", ""), list(p.get("pts", []))),
         MsgType.VIEWPORT: lambda s, p: s.viewport.emit(p.get("user_id", ""), p),
         MsgType.SIGNAL: lambda s, p: s.signal_received.emit(p.get("user_id", ""), p.get("kind", "")),
-        MsgType.HISTORY: lambda s, p: s.history_ready.emit(p),
+        MsgType.HISTORY: _on_history,
         MsgType.SAVES: lambda s, p: s.saves_ready.emit(list(p.get("saves", []))),
         MsgType.BLOB_DATA: _on_blob_data,
         MsgType.BLOB_STORED: lambda s, p: None,

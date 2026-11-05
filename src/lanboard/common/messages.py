@@ -23,8 +23,11 @@ Control
                      server_time}
                JOINED is always followed by SNAPSHOT (fresh join, or resume too old)
                or OP_BATCH (resume: ops with seq > last_seq, possibly empty).
-  SNAPSHOT     S->C {seq, board:{seq, objects:[obj]}, hash}
-  OP_BATCH     S->C {ops:[OpMsg]}                 catch-up after resume / RESYNC
+  SNAPSHOT     S->C {seq, board:{seq, objects:[obj]}, hash, part?, parts?, xid?}
+               a big board comes as several parts (see "Multi-part messages")
+  OP_BATCH     S->C {ops:[OpMsg]}                 catch-up after resume / RESYNC; a long
+               catch-up is several OP_BATCH frames (<= 500 ops and ~PART_BYTES each),
+               each applied as it arrives (no reassembly needed: ops carry their seq)
   ERROR        S->C {code, msg, salt?, nonce?}    see ``Err``
   PING         C->S {t}   PONG S->C {t, server_time}
   LEAVE        C->S {}
@@ -48,6 +51,9 @@ Board ops (logged, ordered by seq)
   OP_REJECT    S->C {op_id, code, msg}
   Permissions: viewers cannot submit; a locked room accepts ops only from the owner;
   ``clear`` needs owner (or editors_can_clear); ``replace`` (restore a version) is owner only.
+  Size: an op whose OP frame would exceed ``MAX_OP_BYTES`` (4 MiB) is refused with
+  OP_REJECT {code: TOO_LARGE}; the connection stays up and no seq is consumed. (A frame
+  above ``MAX_FRAME`` cannot be parsed at all and still closes the connection.)
 
 Chat
   CHAT_SEND    C->S {cmid, text}
@@ -64,7 +70,13 @@ Saves / history
   SAVE         C->S {name}                  -> SAVES reply to sender, CHAT system note to all
   LIST_SAVES   C->S {}                      SAVES S->C {saves:[{name, ts, objects}]}
   LOAD         C->S {name}                  owner: server submits a ``replace`` op
-  HISTORY_REQ  C->S {}                      HISTORY S->C {base_seq, base:{objects}, ops:[OpMsg]}
+  HISTORY_REQ  C->S {}                      HISTORY S->C {base_seq, base:{seq, objects},
+                                                          ops:[OpMsg], part?, parts?, xid?}
+               base = the board at base_seq; ops = every op after it, in seq order.
+               The history is durable (survives server restarts) and capped per room
+               (HISTORY_MAX_OPS / HISTORY_MAX_BYTES): base_seq == 0 means it is complete
+               since the room was created, base_seq > 0 means older ops were dropped and
+               the history starts at seq base_seq + 1. Long histories come in parts.
 
 Blobs (images; content-addressed by sha256 hex)
   BLOB_PUT     C->S {hash, mime, size, index, count, data(b64)}
@@ -75,6 +87,18 @@ Blobs (images; content-addressed by sha256 hex)
 Shared shapes
   RoomInfo     {code, name, locked, protected, editors_can_clear, owner_id, presenter}
   Participant  {user_id, username, color, role, online, hand}
+
+Multi-part messages (SNAPSHOT, HISTORY)
+  A payload larger than ``PART_BYTES`` (1 MiB) is sent as ``parts`` consecutive frames
+  of the same type, each with ``part`` (0-based index), ``parts`` (count) and ``xid``
+  (transfer id, unique per server process). Every part carries all the payload's scalar
+  fields (seq, hash, base_seq) and a slice of its big lists: SNAPSHOT board.objects;
+  HISTORY base.objects, then ops. The receiver concatenates the slices in ``part`` order
+  and processes the merged payload only once every part of that ``xid`` has arrived, so
+  a board is never applied half-loaded (see ``protocol.PartAssembler``). Parts must be
+  tolerated in any order and twice. Small payloads are a single frame without these
+  fields, exactly as before. The server queues all parts of a SNAPSHOT in one go, so no
+  OP of the room is interleaved between them.
 """
 
 from __future__ import annotations

@@ -359,3 +359,180 @@ def test_storage_lists_rooms(tmp_path):
     rs.ensure()
     rs.save_meta({"code": "X 1"})
     assert [r.dir for r in st.iter_room_stores()] == [rs.dir]
+
+
+# ---------------------------------------------------------------------------
+# durable history, multi-part transfers, oversized ops
+# ---------------------------------------------------------------------------
+
+def _replay(base_seq: int, base_objects: list, ops: list) -> Board:
+    b = Board.from_snapshot({"seq": base_seq, "objects": base_objects})
+    for m in ops:
+        b.apply(m["op"], m["seq"])
+    return b
+
+
+@pytest.mark.parametrize("final_flush", [True, False], ids=["clean-stop", "crash"])
+async def test_history_survives_restart(tmp_path, final_flush):
+    store = RoomStore(tmp_path / "r")
+    store.ensure()
+    room = Room("R", "Room", store)
+    a, _ = join(room, "alice", "owner")
+    for i in range(30):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    await room.write_snapshot()                  # compaction 1: ops 1..30 leave ops.jsonl
+    for i in range(30, 45):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    await room.write_snapshot()                  # compaction 2: ops 31..45 appended to the archive
+    for i in range(45, 52):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    assert len(store.load_ops()) == 7            # only the tail is in the write-ahead log
+    store.save_meta(room.to_meta())
+    if final_flush:
+        await room.close()
+    else:
+        store.close()                            # killed: ops 46..52 only in ops.jsonl
+    again = Room.load(RoomStore(tmp_path / "r"))
+    assert again.seq == 52 and again.board.hash() == room.board.hash()
+    h = again.history_payload()
+    assert h["base_seq"] == 0 and [m["seq"] for m in h["ops"]] == list(range(1, 53))
+    assert _replay(0, h["base"]["objects"], h["ops"]).hash() == room.board.hash()
+    # and the restarted room keeps archiving where it left off
+    b = again.sessions[a.user_id]
+    again.submit(b, "a:99", stroke("x99"))
+    await again.close()
+    third = Room.load(RoomStore(tmp_path / "r"))
+    assert [m["seq"] for m in third.history] == list(range(1, 54))
+    third.store.close()
+
+
+async def test_history_cap_trims_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(C, "HISTORY_MAX_OPS", 20)
+    store = RoomStore(tmp_path / "r")
+    store.ensure()
+    room = Room("R", "Room", store)
+    a, _ = join(room, "alice", "owner")
+    for i in range(55):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+        if i % 10 == 9:
+            await room.write_snapshot()
+    store.save_meta(room.to_meta())
+    await room.close()
+    assert len(store.load_ops()) == 0 and len(RoomStore(tmp_path / "r").load_history()[1]) <= 20
+    again = Room.load(RoomStore(tmp_path / "r"))
+    assert again.base_seq > 0 and len(again.history) <= 20       # "history starts at base_seq"
+    assert again.history[0]["seq"] == again.base_seq + 1
+    assert again.board.hash() == room.board.hash()
+    h = again.history_payload()
+    assert _replay(h["base_seq"], h["base"]["objects"], h["ops"]).hash() == room.board.hash()
+    again.store.close()
+
+
+def test_history_byte_cap(room, monkeypatch):
+    monkeypatch.setattr(C, "HISTORY_MAX_BYTES", 2000)
+    a, _ = join(room, "alice", "owner")
+    for i in range(40):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    assert room.history_bytes <= 2000 and room.history_bytes == sum(room.history_sizes)
+    assert room.base_seq > 0 and room.history[0]["seq"] == room.base_seq + 1
+    h = room.history_payload()
+    assert _replay(h["base_seq"], h["base"]["objects"], h["ops"]).hash() == room.board.hash()
+
+
+def test_old_data_dir_without_history_files_still_loads(tmp_path):
+    """A room written before history.jsonl existed: snapshot + ops.jsonl only."""
+    store = RoomStore(tmp_path / "r")
+    store.ensure()
+    board = Board()
+    for i in range(1, 6):
+        board.apply(stroke(f"x{i}"), i)
+    store.write_snapshot(board.snapshot())
+    for i in range(6, 9):
+        op = stroke(f"x{i}")
+        board.apply(op, i)
+        store.append_op({"seq": i, "user_id": "u1", "op_id": f"a:{i}", "ts": 0, "op": op})
+    store.save_meta({"code": "R", "name": "Room"})
+    store.close()
+    room = Room.load(RoomStore(tmp_path / "r"))
+    assert room.seq == 8 and room.board.hash() == board.hash()
+    assert room.base_seq == 5 and [m["seq"] for m in room.history] == [6, 7, 8]
+    room.store.close()
+
+
+def test_append_after_torn_line_does_not_glue_records(tmp_path):
+    store = RoomStore(tmp_path / "r")
+    store.ensure()
+    room = Room("R", "Room", store)
+    a, _ = join(room, "alice", "owner")
+    for i in range(3):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    store.save_meta(room.to_meta())
+    store.close()
+    with open(store.ops_path, "a") as fh:
+        fh.write('{"seq": 4, "user_id": "u1", "op_id"')     # torn write from a crash
+    again = Room.load(RoomStore(tmp_path / "r"))
+    s = again.sessions[a.user_id]
+    again.submit(s, "a:7", stroke("y"))                      # appended after the torn line
+    again.store.close()
+    third = Room.load(RoomStore(tmp_path / "r"))
+    assert third.seq == 4 and third.board.is_live("y")
+    third.store.close()
+
+
+def test_snapshot_split_into_parts(room, monkeypatch):
+    monkeypatch.setattr(C, "PART_BYTES", 1500)
+    a, _ = join(room, "alice", "owner")
+    for i in range(60):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    _, c = join(room, "late")
+    snaps = c.of(MsgType.SNAPSHOT)
+    assert len(snaps) > 3
+    assert [p["part"] for p in snaps] == list(range(len(snaps)))
+    assert {p["parts"] for p in snaps} == {len(snaps)} and len({p["xid"] for p in snaps}) == 1
+    assert all(p["seq"] == 60 and p["hash"] == room.board.hash() for p in snaps)
+    merged = Board.from_snapshot({"seq": 60, "objects": [o for p in snaps for o in p["board"]["objects"]]})
+    assert merged.hash() == room.board.hash()
+
+
+def test_catch_up_split_by_bytes(room, monkeypatch):
+    monkeypatch.setattr(C, "PART_BYTES", 1000)
+    a, _ = join(room, "alice", "owner")
+    for i in range(30):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    c = FakeConn()
+    a.conn = c
+    room.send_catch_up(a, 0)
+    batches = c.of(MsgType.OP_BATCH)
+    assert len(batches) > 2
+    assert [m["seq"] for b in batches for m in b["ops"]] == list(range(1, 31))
+
+
+async def test_history_request_split_into_parts(room, monkeypatch):
+    monkeypatch.setattr(C, "PART_BYTES", 1000)
+    monkeypatch.setattr(C, "HISTORY_MAX_OPS", 30)
+    a, ca = join(room, "alice", "owner")
+    for i in range(40):
+        room.submit(a, f"a:{i}", stroke(f"x{i}"))
+    await room.handle(a, MsgType.HISTORY_REQ, {})
+    parts = ca.of(MsgType.HISTORY)
+    assert len(parts) > 2 and {p["parts"] for p in parts} == {len(parts)}
+    from lanboard.common.protocol import PartAssembler
+    asm = PartAssembler()
+    done = [m for m in (asm.add(MsgType.HISTORY, p) for p in parts) if m is not None]
+    assert len(done) == 1 and done[0]["base_seq"] == room.base_seq > 0
+    h = done[0]
+    assert _replay(h["base_seq"], h["base"]["objects"], h["ops"]).hash() == room.board.hash()
+
+
+def test_oversized_op_rejected_without_side_effects(room, monkeypatch):
+    monkeypatch.setattr(C, "MAX_OP_BYTES", 5000)
+    a, ca = join(room, "alice", "owner")
+    b, cb = join(room, "bob")
+    big = {"k": "add", "obj": {"id": "big", "type": "stroke", "geom": {"pts": list(range(4000))}}}
+    assert room.submit(a, "a:1", big) is None
+    rej = ca.of(MsgType.OP_REJECT)
+    assert rej[-1]["op_id"] == "a:1" and rej[-1]["code"] == Err.TOO_LARGE
+    assert "too large" in rej[-1]["msg"]
+    assert room.seq == 0 and not room.history and not cb.of(MsgType.OP)
+    assert room.store.ops_path.exists() is False or room.store.ops_path.read_text() == ""
+    assert room.submit(a, "a:2", stroke("ok")) is not None and room.seq == 1   # still usable
