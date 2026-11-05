@@ -20,6 +20,7 @@ Computer Networks Lab Project 2026.
 - [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md): code layout, modules, testing, build
 - [`docs/TODO.md`](docs/TODO.md): owners, day-by-day plan, mandatory checklist
 - [`docs/RESEARCH.md`](docs/RESEARCH.md): prior-art study and design rationale
+- [`docs/REFERENCES.md`](docs/REFERENCES.md): open-source repos to study, by owner
 
 ## Quick start (once the code lands)
 ```bash
