@@ -1,0 +1,23 @@
+[project]
+name = "lanboard"
+version = "0.1.0"
+description = "LAN-only real-time collaborative whiteboard (CN Lab Project 2026)"
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.8,<7"]
+
+[project.scripts]
+lanboard-server = "lanboard.server.__main__:main"
+lanboard-client = "lanboard.client.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
