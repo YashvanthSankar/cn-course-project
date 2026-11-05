@@ -3,7 +3,7 @@ name = "lanboard"
 version = "0.1.0"
 description = "LAN-only real-time collaborative whiteboard (CN Lab Project 2026)"
 requires-python = ">=3.11"
-dependencies = ["PySide6-Essentials>=6.8,<7", "PySide6-Addons>=6.8,<7"]
+dependencies = ["PySide6-Essentials>=6.8,<7", "PySide6-Addons>=6.8,<7", "pypdfium2>=4.30"]
 
 [project.scripts]
 lanboard-server = "lanboard.server.__main__:main"

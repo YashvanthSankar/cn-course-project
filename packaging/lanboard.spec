@@ -25,7 +25,7 @@ QT_EXCLUDES = [
 server_a = Analysis([os.path.join(SPECPATH, "server_entry.py")], pathex=[SRC],
                     excludes=["PySide6", "shiboken6", "tkinter"], noarchive=False)
 client_a = Analysis([os.path.join(SPECPATH, "client_entry.py")], pathex=[SRC],
-                    hiddenimports=["PySide6.QtPdf", "PySide6.QtSvg"],
+                    hiddenimports=["PySide6.QtSvg", "pypdfium2"],
                     excludes=QT_EXCLUDES, noarchive=False)
 
 server_pyz = PYZ(server_a.pure)
