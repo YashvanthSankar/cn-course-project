@@ -4,6 +4,7 @@ The server runs on its own asyncio loop in a background thread (exactly like a
 separate machine on the LAN). The clients run on the Qt event loop.
 """
 import asyncio
+import gc
 import threading
 import time
 
@@ -55,16 +56,29 @@ def wait_until(cond, timeout=5.0):
     return cond()
 
 
+_LIVE: list = []      # clients created by the current test
+
+
 @pytest.fixture
 def srv(tmp_path):
     s = ServerThread(tmp_path / "data")
     yield s
+    # Tear Qt objects down deterministically. Leaving them to Python's cyclic GC
+    # lets it destroy a QObject in the middle of a later test's Qt callback (segfault).
+    for net, ctl in _LIVE:
+        net.close()
+        ctl.deleteLater()
+        net.deleteLater()
+    _LIVE.clear()
+    QTest.qWait(50)
+    gc.collect()
     s.stop()
 
 
 def client(srv, name, room="E2E", create=False, password=None):
     net = NetClient()
     ctl = SessionController(net)
+    _LIVE.append((net, ctl))
     net.connect_to("127.0.0.1", srv.port, name, room, create=create, password=password, room_name="Demo")
     assert wait_until(net.is_joined), f"{name} failed to join"
     return net, ctl

@@ -370,7 +370,10 @@ class NetClient(QObject):
         sock.connected.connect(lambda: self._on_connected(sock))
         sock.readyRead.connect(lambda: self._on_ready_read(sock))
         sock.disconnected.connect(lambda: self._on_link_lost(sock, "connection closed by server"))
-        sock.errorOccurred.connect(lambda _err: self._on_link_lost(sock, sock.errorString()))
+        # errorString() is read only if this socket is still current: calling it on a
+        # socket that is being destroyed (Qt emits signals from the destructor) crashes.
+        sock.errorOccurred.connect(
+            lambda _err: self._on_link_lost(sock, sock.errorString()) if sock is self._sock else None)
         self._sock = sock
         self._decoder = FrameDecoder()
         self._sizer = _FrameSizer()
@@ -391,7 +394,11 @@ class NetClient(QObject):
         self._ping_timer.stop()
         self._watchdog.stop()
         if sock is not None:
-            sock.abort()             # signals fired here are ignored (sock is no longer current)
+            # Silence the old socket first: abort() and the later C++ destructor both emit
+            # disconnected/errorOccurred, and Python slots touching a half-destroyed
+            # QTcpSocket can segfault.
+            sock.blockSignals(True)
+            sock.abort()
             sock.deleteLater()
 
     def _on_connected(self, sock: QTcpSocket) -> None:
