@@ -4,14 +4,13 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QObject, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtTest import QTest
 
 from lanboard.client.controller import GAP_TIMEOUT_MS, SessionController
 from lanboard.common.messages import MsgType
 from lanboard.common.model import Board
 
-app = QCoreApplication.instance() or QCoreApplication([])
 
 
 class FakeNet(QObject):
