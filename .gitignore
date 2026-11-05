@@ -12,6 +12,7 @@ dist/
 
 # Runtime data
 data/
+lanboard-data/
 *.log
 
 # OS / editors
