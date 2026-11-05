@@ -471,3 +471,170 @@ def test_import_pdf(view, ctrl, tmp_path):
     assert any("page 2/2" in t for _, t in notices)
     assert not view.import_pdf(str(tmp_path / "missing.pdf"))
     assert notices[-1][0] == "error"
+
+
+# ---------------------------------------------------------------------------
+# dark board (display-only remap), follow mode, 8-handle resize, minimap
+# ---------------------------------------------------------------------------
+
+def _pixel_near(img: QImage, x: int, y: int, r: int = 2):
+    """Mean lightness of a small patch (robust against antialiasing)."""
+    vals = [img.pixelColor(x + dx, y + dy).lightnessF() for dx in range(-r, r + 1) for dy in range(-r, r + 1)]
+    return sum(vals) / len(vals)
+
+
+def test_display_color_remap_rules(app):
+    from PySide6.QtGui import QColor
+    from lanboard.client.canvas.items import display_color
+    assert display_color(QColor("#000000")).lightnessF() > 0.85          # black -> near-white
+    assert display_color(QColor("#1b2130")).lightnessF() > 0.8
+    assert display_color(QColor("#ffffff")).lightnessF() < 0.15          # white -> near-black
+    for mid in ("#e5484d", "#0090ff", "#f5b400", "#30a46c"):            # colours stay as they are
+        assert display_color(QColor(mid)).name() == mid
+
+
+def test_dark_board_is_display_only(view, ctrl, tmp_path):
+    ink = stroke("ink", [-200, 0, 200, 0])
+    ink["style"]["width"] = 12
+    load(ctrl, [ink, {"id": "t", "type": "text", "z": 2, "geom": {"x": -100, "y": 60, "text": "hello"},
+                      "style": {"color": "#1b2130", "font_size": 30}, "off": [0, 0]}])
+    before = copy.deepcopy(ctrl.view.snapshot())
+    seen = []
+    view.board_theme_changed.connect(seen.append)
+    view.set_board_theme(True)
+    assert seen == [True] and view.board_dark and view.canvas.ink_dark
+    QTest.qWait(20)
+    shot = view.grab().toImage()
+    p = view.mapFromScene(QPointF(0, 0))
+    assert _pixel_near(shot, p.x(), p.y()) > 0.8                       # black ink painted light
+    assert shot.pixelColor(5, 5).lightnessF() < 0.15                   # dark paper
+    # ...but the object data, the ops and the export are untouched
+    assert ctrl.view.snapshot() == before
+    assert not ctrl.called("update_many") and not ctrl.called("update_object")
+    assert view.canvas.items_by_id["ink"].obj["style"]["color"] == "#000000"
+    path = str(tmp_path / "dark.png")
+    assert view.export(path)
+    img = QImage(path)
+    assert img.pixelColor(2, 2).name() == "#ffffff"                     # light export
+    assert _pixel_near(img, img.width() // 2, int((40 + 6) * 2)) < 0.3  # ink still black in the file
+    assert view.canvas.ink_dark                                         # restored after export
+    view.set_grid("lines")
+    assert view.grid_style == "lines"
+    view.set_grid("bogus")
+    assert view.grid_style == "dots"
+    view.set_board_theme(False)
+    assert seen == [True, False]
+
+
+def test_follow_stops_on_user_pan_not_on_follow_animation(view, ctrl):
+    changes, notices = [], []
+    view.follow_changed.connect(changes.append)
+    ctrl.notice.connect(lambda lvl, txt: notices.append(txt))
+    view.set_follow("u2")
+    assert changes == ["u2"] and "Following bob" in view._badge.text()
+    # the presenter moves: programmatic follow animation must keep following
+    ctrl.viewport.emit("u2", {"x": 500, "y": 400, "w": 800, "h": 600})
+    QTest.qWait(400)
+    assert view.following == "u2"
+    assert view.visible_rect().center().x() == pytest.approx(900, abs=30)
+    # hand-tool drag = user pan -> follow ends
+    view.set_tool("pan")
+    drag(view, [(900, 700), (850, 650), (800, 600)])
+    assert view.following is None and changes == ["u2", None]
+    assert any("Stopped following bob" in t for t in notices)
+    assert not view._badge.isVisible()
+    # wheel zoom, keyboard zoom, zoom_fit and the minimap all count as user moves too
+    for act in (lambda: view.zoom_at(1.2, QPointF(400, 300)), view.zoom_in, view.zoom_fit, view.zoom_reset,
+                lambda: view.pan_to(QPointF(10, 10))):
+        view.set_follow("u2")
+        act()
+        assert view.following is None
+    # followed user leaves -> stop as well
+    view.set_follow("u2")
+    del ctrl.participants["u2"]
+    ctrl.participants_changed.emit()
+    assert view.following is None
+
+
+def test_edge_handle_resize_is_one_undoable_op(view, ctrl):
+    load(ctrl, [rect("r", 0, 0, 100, 50), stroke("s", [0, 100, 100, 150], z=2)])
+    view.set_tool("select")
+    view.canvas.set_selection(["r", "s"])
+    sel = view.canvas.selection
+    pts = sel.handle_points()
+    assert set(pts) == {"nw", "n", "ne", "e", "se", "s", "sw", "w"}
+    # handles keep their screen size whatever the zoom
+    hs = sel.HANDLE_PX / view.scale_factor()
+    # drag the east edge handle 100 scene units to the right: the frame 0..100 becomes 0..200
+    e = pts["e"]
+    vp = view.viewport()
+    send_mouse(view, QEvent.Type.MouseMove, vp_point(view, e.x(), e.y()), button=Qt.MouseButton.NoButton,
+               buttons=Qt.MouseButton.NoButton)
+    assert vp.cursor().shape() == Qt.CursorShape.SizeHorCursor
+    drag(view, [(e.x(), e.y()), (e.x() + 50, e.y() + 30), (e.x() + 100, e.y() + 30)])
+    calls = ctrl.called("update_many")
+    assert len(calls) == 1                                             # ONE batch = one undo step
+    ch = calls[0][0]
+    assert ch["r"] == {"geom.x": 0, "geom.y": 0, "geom.w": 200, "geom.h": 50}   # height untouched
+    assert ch["s"] == {"geom.pts": [0, 100, 200, 150]}                 # points scaled along x only
+    assert ctrl.view.get("r")["geom"]["w"] == 200
+    assert view.canvas.items_by_id["r"].obj["geom"]["w"] == 200
+    # zoomed in, the handle squares shrink in scene units (constant on screen)
+    view.zoom_at(2.0, QPointF(400, 300))
+    assert sel.HANDLE_PX / view.scale_factor() == pytest.approx(hs / 2, rel=0.01)
+
+
+def test_resize_clamps_and_keeps_aspect(view, ctrl):
+    load(ctrl, [rect("r", 0, 0, 100, 50)])
+    view.set_tool("select")
+    view.canvas.set_selection(["r"])
+    # drag the west edge far past the east edge: clamps to a minimum width, never negative
+    w = view.canvas.selection.handle_points()["w"]
+    drag(view, [(w.x(), w.y()), (w.x() + 400, w.y())])
+    g = ctrl.view.get("r")["geom"]
+    assert 0 < g["w"] <= 10 and g["x"] + g["w"] == pytest.approx(100, abs=0.2)
+    # Shift + corner keeps the aspect ratio
+    load(ctrl, [rect("r", 0, 0, 100, 50)])
+    view.canvas.set_selection(["r"])
+    se = view.canvas.selection.handle_points()["se"]
+    drag(view, [(se.x(), se.y()), (se.x() + 100, se.y() + 10)], mods=Qt.KeyboardModifier.ShiftModifier)
+    g = ctrl.view.get("r")["geom"]
+    assert g["w"] == pytest.approx(200, abs=0.5) and g["h"] == pytest.approx(100, abs=0.5)
+
+
+def test_resize_text_scales_font(view, ctrl):
+    load(ctrl, [{"id": "t", "type": "text", "z": 1, "geom": {"x": 0, "y": 0, "text": "Hi there"},
+                 "style": {"color": "#000", "font_size": 20}, "off": [0, 0]}])
+    view.set_tool("select")
+    view.canvas.set_selection(["t"])
+    f = view.canvas.selection.frame_rect()
+    se = view.canvas.selection.handle_points()["se"]
+    drag(view, [(se.x(), se.y()), (se.x() + f.width(), se.y() + f.height())])
+    ch = ctrl.called("update_many")[-1][0]["t"]
+    assert ch["style.font_size"] == pytest.approx(40, abs=0.5)
+    assert ch["geom.x"] == 0 and ch["geom.y"] == 0
+
+
+def test_minimap_click_pans_view(view, ctrl):
+    from lanboard.client.canvas.minimap import Minimap, ZoomControls
+    load(ctrl, [rect("a", -1000, -600, 200, 100), rect("b", 1500, 900, 200, 100, z=2)])
+    mm = Minimap(view)
+    mm._refresh()                                                     # skip the 100 ms throttle
+    target = QPointF(1600, 950)
+    p = mm.scene_to_widget(target)
+    view.set_follow("u2")
+    QTest.mouseClick(mm, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, p.toPoint())
+    c = view.visible_rect().center()
+    tol = 2 / mm._k() + 2                                              # one widget pixel in scene units
+    assert c.x() == pytest.approx(1600, abs=tol) and c.y() == pytest.approx(950, abs=tol)
+    assert view.following is None                                      # minimap pan is a user pan
+    img = mm.grab().toImage()
+    assert img.width() == Minimap.W
+    zc = ZoomControls(view)
+    zc.in_btn.click()
+    assert zc.pct_btn.text() == f"{round(view.scale_factor() * 100)}%"
+    view.set_board_theme(True)                                         # theme switch must not crash
+    mm._refresh()
+    mm.grab()
+    mm.deleteLater()
+    zc.deleteLater()

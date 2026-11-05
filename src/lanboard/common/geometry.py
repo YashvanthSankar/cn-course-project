@@ -9,6 +9,7 @@ Contents
   * object bounds and hit testing: :func:`bbox`, :func:`hit_test`, :func:`objects_in_rect`
   * Smart Ink shape recognition: :func:`recognize_shape`
   * small helpers the tools use: :func:`constrain_angle`, :func:`constrain_square`
+  * resizing from the selection handles: :func:`resize_box`, :func:`scale_changes`
 """
 
 from __future__ import annotations
@@ -352,6 +353,94 @@ def constrain_square(x1: float, y1: float, x2: float, y2: float) -> tuple[float,
     dx, dy = x2 - x1, y2 - y1
     s = max(abs(dx), abs(dy))
     return x1 + math.copysign(s, dx or 1), y1 + math.copysign(s, dy or 1)
+
+
+# ---------------------------------------------------------------------------
+# resizing a selection from one of its 8 handles
+# ---------------------------------------------------------------------------
+
+#: Handle names, clockwise from the top-left corner (compass directions).
+HANDLES = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
+MIN_FONT, MAX_FONT = 4.0, 400.0
+_EPS = 1e-6
+
+
+def resize_box(box: Rect, handle: str, dx: float, dy: float, keep_aspect: bool = False,
+               min_size: float = 1.0) -> Rect:
+    """Move the edges of ``box`` that belong to ``handle`` by the drag delta (dx, dy).
+
+    * ``"e"`` moves the right edge, ``"nw"`` the top and left edges, and so on.
+    * An edge never crosses the opposite one: the box is clamped to ``min_size``
+      instead of turning inside out, so sizes can never become negative.
+    * An axis with zero extent (e.g. the height of a horizontal line) is left
+      alone, because there is nothing to scale along it.
+    * ``keep_aspect`` (Shift, or images) only applies to corner handles: the box
+      grows by the larger of the two scale factors and stays anchored at the
+      opposite corner.
+    """
+    x0, y0, x1, y1 = box
+    w0, h0 = x1 - x0, y1 - y0
+    if w0 > _EPS:
+        if "w" in handle:
+            x0 = min(x0 + dx, x1 - min_size)
+        elif "e" in handle:
+            x1 = max(x1 + dx, x0 + min_size)
+    if h0 > _EPS:
+        if "n" in handle:
+            y0 = min(y0 + dy, y1 - min_size)
+        elif "s" in handle:
+            y1 = max(y1 + dy, y0 + min_size)
+    if keep_aspect and len(handle) == 2 and w0 > _EPS and h0 > _EPS:
+        s = max((x1 - x0) / w0, (y1 - y0) / h0)
+        w, h = w0 * s, h0 * s
+        if "w" in handle:
+            x0 = x1 - w
+        else:
+            x1 = x0 + w
+        if "n" in handle:
+            y0 = y1 - h
+        else:
+            y1 = y0 + h
+    return (x0, y0, x1, y1)
+
+
+def scale_changes(obj: dict, src: Rect, dst: Rect, handle: str = "se") -> dict:
+    """Update keys (``"geom.x"`` …) that map ``obj`` from box ``src`` onto box ``dst``.
+
+    Both boxes are in scene coordinates. The object's ``off`` is left unchanged,
+    so only ``geom`` (and a text's font size) change. Every point is mapped with
+    ``x' = dst.x0 + (x - src.x0) * sx``:
+
+    * stroke: every point of ``pts`` (the ink width is not scaled)
+    * line / arrow: both end points
+    * rect / ellipse / sticky / image: x, y, w, h
+    * text: its origin moves, and ``font_size`` is scaled by ``sx`` for the
+      e/w handles, ``sy`` for n/s and ``sqrt(sx*sy)`` for corners
+    """
+    sw, sh = src[2] - src[0], src[3] - src[1]
+    sx = (dst[2] - dst[0]) / sw if sw > _EPS else 1.0
+    sy = (dst[3] - dst[1]) / sh if sh > _EPS else 1.0
+    ox, oy = _off(obj)
+
+    def mx(x: float) -> float:
+        return round(dst[0] + (float(x) + ox - src[0]) * sx - ox, 1)
+
+    def my(y: float) -> float:
+        return round(dst[1] + (float(y) + oy - src[1]) * sy - oy, 1)
+
+    g, t = obj.get("geom", {}), obj.get("type")
+    if t == "stroke":
+        pts = g.get("pts") or []
+        return {"geom.pts": [mx(v) if i % 2 == 0 else my(v) for i, v in enumerate(pts)]}
+    if t in ("line", "arrow"):
+        return {"geom.x1": mx(g["x1"]), "geom.y1": my(g["y1"]), "geom.x2": mx(g["x2"]), "geom.y2": my(g["y2"])}
+    if t == "text":
+        f = sx if handle in ("e", "w") else sy if handle in ("n", "s") else math.sqrt(sx * sy)
+        size = float((obj.get("style") or {}).get("font_size") or 20)
+        return {"geom.x": mx(g["x"]), "geom.y": my(g["y"]),
+                "style.font_size": round(max(MIN_FONT, min(MAX_FONT, size * f)), 1)}
+    return {"geom.x": mx(g["x"]), "geom.y": my(g["y"]),
+            "geom.w": round(float(g["w"]) * sx, 1), "geom.h": round(float(g["h"]) * sy, 1)}
 
 
 # ---------------------------------------------------------------------------

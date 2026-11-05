@@ -13,6 +13,7 @@ panning, zooming, permissions and the ``send_cursor`` presence updates.
 
 from __future__ import annotations
 
+import copy
 import math
 import time
 from typing import TYPE_CHECKING
@@ -23,9 +24,10 @@ from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem
 
 from lanboard.common import config as C
 from lanboard.common import geometry as G
+from lanboard.common.model import set_key
 
-from .items import (ACCENT, OVERLAY_Z, STICKY_FILL, STICKY_TEXT, LaserItem, LiveStrokeItem, PulseItem,
-                    ShapeItem, StickyItem, TextItem, cosmetic_pen, qcolor)
+from .items import (ACCENT, HANDLE_CURSORS, OVERLAY_Z, STICKY_FILL, STICKY_TEXT, LaserItem, LiveStrokeItem,
+                    PulseItem, ShapeItem, StickyItem, TextItem, cosmetic_pen, qcolor)
 from .scene import item_hit
 
 if TYPE_CHECKING:                                    # pragma: no cover
@@ -34,6 +36,7 @@ if TYPE_CHECKING:                                    # pragma: no cover
 HOLD_MS = 450                       # Smart Ink: hold the pen still this long before release
 HOLD_SLOP_PX = 4.0                  # "still" = moved less than this many screen pixels
 DRAG_SLOP_PX = 3.0                  # a click that moves less than this is not a drag
+MIN_RESIZE_PX = 8.0                 # a resized selection never gets smaller than this on screen
 HIGHLIGHTER_OPACITY = 0.35
 HIGHLIGHTER_MIN_WIDTH = 14
 
@@ -247,13 +250,21 @@ class EraserTool(Tool):
         super().__init__(view)
         self.ring = QGraphicsEllipseItem()
         self.ring.setZValue(OVERLAY_Z)
-        self.ring.setPen(cosmetic_pen(QColor(60, 64, 72, 200), 1.4))
-        self.ring.setBrush(QBrush(QColor(255, 255, 255, 90)))
+        self.apply_theme(False)
         self.ring.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         self.ring.is_overlay = True                  # type: ignore[attr-defined]
         self.hits: list[str] = []
         self.active = False
         self._last = QPointF()
+
+    def apply_theme(self, dark: bool) -> None:
+        """Dark ring on the light board, light ring on the dark board."""
+        if dark:
+            self.ring.setPen(cosmetic_pen(QColor(225, 229, 238, 210), 1.4))
+            self.ring.setBrush(QBrush(QColor(255, 255, 255, 28)))
+        else:
+            self.ring.setPen(cosmetic_pen(QColor(60, 64, 72, 200), 1.4))
+            self.ring.setBrush(QBrush(QColor(255, 255, 255, 90)))
 
     def cursor(self) -> QCursor:
         return QCursor(Qt.CursorShape.BlankCursor)
@@ -433,7 +444,16 @@ class StickyTool(Tool):
 # ===========================================================================
 
 class SelectTool(Tool):
-    """Click, shift-click and rubber-band selection, then drag to move or resize."""
+    """Click, shift-click and rubber-band selection, then drag to move or resize.
+
+    Resizing works from any of the 8 handles of the selection frame, for one
+    object or many. The frame's logical box ``F0`` is mapped onto the dragged
+    box ``F1`` (:func:`geometry.resize_box`) and every selected object is
+    scaled with the same mapping (:func:`geometry.scale_changes`): boxes change
+    x/y/w/h, strokes / lines / arrows scale their points, text scales its font.
+    During the drag only the local items are updated (a preview). On release
+    all changes go out as one ``update_many`` batch, so it is one undo step.
+    """
 
     name = "select"
     edits = False                                   # viewers may select (but not move)
@@ -452,8 +472,9 @@ class SelectTool(Tool):
         self.band.setBrush(QBrush(fill))
         self.band.is_overlay = True                 # type: ignore[attr-defined]
         self._base_sel: list[str] = []
-        self._resize_item = None
-        self._resize_geom: dict = {}
+        self._handle: str | None = None              # "nw" | "n" | … while resizing
+        self._resize_src: dict[str, dict] = {}        # oid -> object before the resize
+        self._box0: G.Rect = (0.0, 0.0, 0.0, 0.0)     # frame box before the resize
 
     def cursor(self) -> QCursor:
         return QCursor(Qt.CursorShape.ArrowCursor)
@@ -462,9 +483,9 @@ class SelectTool(Tool):
         return 4.0 / self.view.scale_factor()
 
     def hover(self, pos, ev) -> None:
-        h = self.scene.selection.resize_handle_rect()
-        if h is not None and h.contains(pos) and self.view.can_edit():
-            self.view.viewport().setCursor(Qt.CursorShape.SizeFDiagCursor)
+        h = self.scene.selection.handle_at(pos) if self.view.can_edit() else None
+        if h is not None:
+            self.view.viewport().setCursor(HANDLE_CURSORS[h])
             return
         it = self.scene.object_item_at(pos, self._r())
         if it is not None and it.oid in self.scene.selected_ids and self.view.can_edit():
@@ -476,12 +497,15 @@ class SelectTool(Tool):
         self.origin, self._screen_origin = pos, ev.position()
         can_edit = self.view.can_edit()
         shift = bool(ev.modifiers() & Qt.KeyboardModifier.ShiftModifier)
-        # 1) resize handle of a single selected box
-        h = self.scene.selection.resize_handle_rect()
-        if can_edit and h is not None and h.contains(pos):
+        # 1) one of the 8 resize handles of the selection frame
+        h = self.scene.selection.handle_at(pos) if can_edit else None
+        if h is not None:
             self.mode = "resize"
-            self._resize_item = self.scene.selected_items()[0]
-            self._resize_geom = dict(self._resize_item.geom)
+            self._handle = h
+            self._resize_src = {it.oid: copy.deepcopy(self.ctrl.view.get(it.oid) or it.obj)
+                                for it in self.scene.selected_items()}
+            f = self.scene.selection.frame_rect()
+            self._box0 = (f.left(), f.top(), f.right(), f.bottom())
             return
         it = self.scene.object_item_at(pos, self._r())
         # 2) vote badge on a sticky note (S12)
@@ -522,23 +546,32 @@ class SelectTool(Tool):
             self.scene.selection.refresh()
         elif self.mode == "band":
             self.band.setRect(QRectF(self.origin, pos).normalized())
-        elif self.mode == "resize" and self._resize_item is not None:
-            self._resize_item.set_object(self._resized_obj(pos, ev))
+        elif self.mode == "resize" and self._handle is not None:
+            # live preview: re-render the local items only, nothing is sent yet
+            for oid, ch in self._resize_changes(pos, ev).items():
+                it = self.scene.items_by_id.get(oid)
+                if it is not None:
+                    it.set_object(self._with_changes(self._resize_src[oid], ch))
             self.scene.selection.refresh()
 
-    def _resized_obj(self, pos: QPointF, ev) -> dict:
-        it = self._resize_item
-        g = self._resize_geom
-        off = it.obj.get("off") or [0, 0]
-        x, y = float(g["x"]) + off[0], float(g["y"]) + off[1]
-        w, h = max(12.0, pos.x() - x), max(12.0, pos.y() - y)
-        keep = it.obj.get("type") == "image" or bool(ev.modifiers() & Qt.KeyboardModifier.ShiftModifier)
-        if keep and g.get("w") and g.get("h"):
-            ratio = float(g["w"]) / float(g["h"])
-            w, h = (w, w / ratio) if w / ratio >= h else (h * ratio, h)
-        obj = dict(it.obj)
-        obj["geom"] = dict(g, w=round(w, 1), h=round(h, 1))
-        return obj
+    def _resize_changes(self, pos: QPointF, ev) -> dict[str, dict]:
+        """Update keys per object for the handle dragged to ``pos`` (see the class docstring)."""
+        d = pos - self.origin
+        shift = bool(ev.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        types = {o.get("type") for o in self._resize_src.values()}
+        # images and lone text keep their proportions on corners; Shift does it for anything
+        keep = shift or (len(self._resize_src) == 1 and bool(types & {"image", "text"}))
+        box1 = G.resize_box(self._box0, self._handle, d.x(), d.y(), keep_aspect=keep,
+                            min_size=MIN_RESIZE_PX / self.view.scale_factor())
+        return {oid: G.scale_changes(obj, self._box0, box1, self._handle)
+                for oid, obj in self._resize_src.items()}
+
+    @staticmethod
+    def _with_changes(obj: dict, changes: dict) -> dict:
+        out = copy.deepcopy(obj)
+        for key, value in changes.items():
+            set_key(out, key, value)
+        return out
 
     def release(self, pos, ev) -> None:
         mode, self.mode = self.mode, None
@@ -564,17 +597,23 @@ class SelectTool(Tool):
             if rect.width() > 0 or rect.height() > 0:
                 self.scene.set_selection(self._base_sel + [i for i in self.scene.ids_in_rect(rect)
                                                            if i not in self._base_sel])
-        elif mode == "resize" and self._resize_item is not None:
-            it = self._resize_item
-            new = self._resized_obj(pos, ev)["geom"]
-            src = self.ctrl.view.get(it.oid)
-            if moved and src is not None:
-                self.ctrl.update_object(it.oid, {"geom.w": new["w"], "geom.h": new["h"]})
-            src = self.ctrl.view.get(it.oid)
-            if src is not None and not src.get("deleted"):
-                it.set_object(src)                         # snap back to the board's truth
-            self._resize_item = None
+        elif mode == "resize" and self._handle is not None:
+            if moved:
+                changes = {oid: ch for oid, ch in self._resize_changes(pos, ev).items()
+                           if self.ctrl.view.is_live(oid)}
+                if changes:
+                    self.ctrl.update_many(changes)        # one batch op = one undo step
+            self._end_resize()
         self.scene.selection.refresh()
+
+    def _end_resize(self) -> None:
+        """Snap the previewed items back to the board's truth (after the update, if any)."""
+        for oid in self._resize_src:
+            it = self.scene.items_by_id.get(oid)
+            src = self.ctrl.view.get(oid)
+            if it is not None and src is not None and not src.get("deleted"):
+                it.set_object(src)
+        self._resize_src, self._handle = {}, None
 
     def _restore_positions(self) -> None:
         """Re-sync item positions to the board (the update above already moved them)."""
@@ -597,11 +636,9 @@ class SelectTool(Tool):
             self._restore_positions()
         if self.band.scene() is not None:
             self.scene.removeItem(self.band)
-        if self._resize_item is not None:
-            src = self.ctrl.view.get(self._resize_item.oid)
-            if src is not None:
-                self._resize_item.set_object(src)
-            self._resize_item = None
+        if self._handle is not None:
+            self._end_resize()
+            self.scene.selection.refresh()
         self.mode = None
 
 

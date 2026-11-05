@@ -194,3 +194,38 @@ def test_recognize_rejects_other_strokes(pts):
     assert r is None or r["type"] not in ("rect", "ellipse")
     if pts is not None and len(pts) < 10:
         assert r is None
+
+
+# ---------------------------------------------------------------------------
+# resizing from the selection handles
+# ---------------------------------------------------------------------------
+
+def test_resize_box_edges_and_clamp():
+    from lanboard.common.geometry import resize_box
+    box = (0.0, 0.0, 100.0, 50.0)
+    assert resize_box(box, "e", 20, 99) == (0, 0, 120, 50)               # only the right edge
+    assert resize_box(box, "n", 99, -10) == (0, -10, 100, 50)
+    assert resize_box(box, "nw", 10, 10) == (10, 10, 100, 50)
+    assert resize_box(box, "w", 500, 0, min_size=5) == (95, 0, 100, 50)  # clamps instead of flipping
+    assert resize_box((0, 5, 100, 5), "s", 0, 40) == (0, 5, 100, 5)      # zero-height axis left alone
+    x0, y0, x1, y1 = resize_box(box, "se", 100, 0, keep_aspect=True)
+    assert (x1 - x0, y1 - y0) == (200, 100) and (x0, y0) == (0, 0)
+    x0, y0, x1, y1 = resize_box(box, "nw", -100, 0, keep_aspect=True)    # anchored at the opposite corner
+    assert (x0, y0, x1, y1) == (-100, -50, 100, 50)
+
+
+def test_scale_changes_per_type():
+    from lanboard.common.geometry import scale_changes
+    src, dst = (0, 0, 100, 100), (0, 0, 200, 50)
+    r = {"type": "rect", "geom": {"x": 50, "y": 50, "w": 50, "h": 50}, "off": [0, 0]}
+    assert scale_changes(r, src, dst) == {"geom.x": 100, "geom.y": 25, "geom.w": 100, "geom.h": 25}
+    moved = {"type": "rect", "geom": {"x": 40, "y": 40, "w": 50, "h": 50}, "off": [10, 10]}
+    assert scale_changes(moved, src, dst) == {"geom.x": 90, "geom.y": 15, "geom.w": 100, "geom.h": 25}
+    s = {"type": "stroke", "geom": {"pts": [0, 0, 100, 100]}}
+    assert scale_changes(s, src, dst) == {"geom.pts": [0, 0, 200, 50]}
+    a = {"type": "arrow", "geom": {"x1": 0, "y1": 100, "x2": 100, "y2": 0}}
+    assert scale_changes(a, src, dst) == {"geom.x1": 0, "geom.y1": 50, "geom.x2": 200, "geom.y2": 0}
+    t = {"type": "text", "geom": {"x": 0, "y": 0, "text": "x"}, "style": {"font_size": 20}}
+    assert scale_changes(t, src, (0, 0, 200, 200), "se")["style.font_size"] == 40
+    assert scale_changes(t, src, (0, 0, 150, 100), "e")["style.font_size"] == 30
+    assert scale_changes(t, src, (0, 0, 9999, 9999))["style.font_size"] == 400        # clamped

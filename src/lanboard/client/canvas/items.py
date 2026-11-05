@@ -11,6 +11,11 @@ Every board item draws its ``geom`` in *local* coordinates that equal scene
 coordinates, and the object's ``off`` translation becomes ``setPos(off)``. A
 move is therefore just a position change, and no path has to be rebuilt.
 
+Dark board: when the scene's ``ink_dark`` flag is on, near-black ink is drawn
+near-white and near-white ink near-black (:func:`display_color`). This is a
+*display-only* remap done at paint time. The object dicts, the ops other users
+receive and every export keep the original colours.
+
 Overlay items (never saved, never exported, see :data:`OVERLAY_Z`):
     LiveStrokeItem   a stroke that is still being drawn (mine or a remote user's)
     CursorItem       a remote mouse cursor with a name pill
@@ -43,6 +48,7 @@ if TYPE_CHECKING:                                    # pragma: no cover
 # ---------------------------------------------------------------------------
 OVERLAY_Z = 1.0e9                 # overlays always paint above board objects
 ACCENT = "#4f7cff"                # selection / UI accent colour
+ACCENT_DARK = "#7b93ff"           # the same accent, lifted for a dark board
 STICKY_FILL = "#fff59d"           # default sticky note colour
 STICKY_TEXT = "#2b2b2b"
 STICKY_PAD = 14.0                 # inner padding of a sticky note
@@ -54,6 +60,57 @@ def qcolor(value: Any, fallback: str = "#1e1e1e") -> QColor:
     """Parse a colour string, falling back to a dark grey on bad input."""
     c = QColor(value) if isinstance(value, str) else QColor()
     return c if c.isValid() else QColor(fallback)
+
+
+# ---------------------------------------------------------------------------
+# dark board: display-only colour remap
+# ---------------------------------------------------------------------------
+_remap_cache: dict[int, QColor] = {}
+
+
+def luminance(c: QColor) -> float:
+    """WCAG relative luminance (0 = black, 1 = white) of an sRGB colour."""
+    def lin(v: float) -> float:
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    return 0.2126 * lin(c.redF()) + 0.7152 * lin(c.greenF()) + 0.0722 * lin(c.blueF())
+
+
+def display_color(c: QColor) -> QColor:
+    """Colour to *paint* ``c`` with on the dark board.
+
+    * very dark ink (luminance <= 0.05: black, "#1b2130", "#222", navy…) gets its
+      HSL lightness mirrored (L -> 1 - L), so it becomes a light tint of the same hue
+    * near-white ink (every channel >= 0.85) is mirrored the other way
+    * every other colour is returned unchanged (reds, blues, yellows… read fine
+      on both backgrounds)
+
+    The result is clamped to L in [0.07, 0.93] so nothing turns into a glaring
+    pure white. Results are cached per RGBA value because this runs inside paint().
+    """
+    key = c.rgba()
+    hit = _remap_cache.get(key)
+    if hit is not None:
+        return hit
+    out = QColor(c)
+    if luminance(c) <= 0.05 or min(c.redF(), c.greenF(), c.blueF()) >= 0.85:
+        h, sat, light, a = c.getHslF()
+        if h < 0:                                     # achromatic grey: hue undefined
+            h, sat = 0.0, 0.0
+        out = QColor.fromHslF(h, sat, max(0.07, min(0.93, 1.0 - light)), a)
+    if len(_remap_cache) < 4096:
+        _remap_cache[key] = out
+    return out
+
+
+def ink_dark(item: QGraphicsItem) -> bool:
+    """True when ``item`` should paint with the dark-board remap (never during export)."""
+    sc = item.scene()
+    return bool(sc is not None and getattr(sc, "ink_dark", False))
+
+
+def label_text_color(bg: QColor) -> QColor:
+    """White or dark text, whichever reads better on a pill filled with ``bg``."""
+    return QColor("#1b2130") if luminance(bg) > 0.45 else QColor("#ffffff")
 
 
 def ui_font(px: float, bold: bool = False) -> QFont:
@@ -131,7 +188,7 @@ class BoardItem(QGraphicsItem):
     """Base class: mirrors one board object dict (a private deep copy is kept)."""
 
     is_overlay = False
-    resizable = False
+    resizable = True                   # every type can be scaled from the selection handles
 
     def __init__(self, obj: dict, ctx: "CanvasScene") -> None:
         super().__init__()
@@ -177,6 +234,19 @@ class BoardItem(QGraphicsItem):
         return QRectF(float(g.get("x", 0)), float(g.get("y", 0)),
                       float(g.get("w", 0)), float(g.get("h", 0))).normalized()
 
+    def local_frame(self) -> QRectF:
+        """The *logical* extent in local coordinates: the box the resize handles
+        transform. Box types use x/y/w/h, subclasses override it."""
+        return self.geom_rect()
+
+    def frame_rect(self) -> QRectF:
+        """:meth:`local_frame` in scene coordinates (``off`` applied)."""
+        return self.local_frame().translated(self.pos())
+
+    def ink_pad(self) -> float:
+        """How far painted ink sticks out of :meth:`frame_rect` (half the line width)."""
+        return 0.0
+
     # -- QGraphicsItem ---------------------------------------------------------
     def boundingRect(self) -> QRectF:
         return self._bounds
@@ -193,11 +263,21 @@ class StrokeItem(BoardItem):
     def rebuild(self) -> None:
         pts = pairs(self.geom.get("pts") or [0, 0])
         self._width = float(self.style.get("width", 3) or 1)
-        self._pen = ink_pen(qcolor(self.style.get("color")), self._width)
+        color = qcolor(self.style.get("color"))
+        self._pen = ink_pen(color, self._width)
+        self._pen_dark = ink_pen(display_color(color), self._width)   # dark-board variant
         self._path = stroke_path(pts)
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        self._frame = QRectF(QPointF(min(xs), min(ys)), QPointF(max(xs), max(ys)))
         pad = self._width / 2 + 1
         self._bounds = self._path.boundingRect().adjusted(-pad, -pad, pad, pad)
         self._shape: QPainterPath | None = None          # built lazily, then cached
+
+    def local_frame(self) -> QRectF:
+        return self._frame
+
+    def ink_pad(self) -> float:
+        return self._width / 2
 
     def shape(self) -> QPainterPath:
         if self._shape is None:
@@ -209,7 +289,7 @@ class StrokeItem(BoardItem):
         return self._shape
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
-        painter.setPen(self._pen)
+        painter.setPen(self._pen_dark if ink_dark(self) else self._pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(self._path)
 
@@ -229,31 +309,34 @@ def arrow_head(x1: float, y1: float, x2: float, y2: float, width: float) -> tupl
 class ShapeItem(BoardItem):
     """line, arrow, rect and ellipse."""
 
-    @property
-    def resizable(self) -> bool:                          # type: ignore[override]
-        return self.obj.get("type") in ("rect", "ellipse")
-
     def rebuild(self) -> None:
         t, g, s = self.obj.get("type"), self.geom, self.style
         self._width = float(s.get("width", 3) if s.get("width") is not None else 3)
         color = qcolor(s.get("color"))
-        self._pen = ink_pen(color, self._width) if self._width > 0 else QPen(Qt.PenStyle.NoPen)
         fill = s.get("fill")
-        self._brush = QBrush(qcolor(fill)) if fill and t in ("rect", "ellipse") else QBrush(Qt.BrushStyle.NoBrush)
+        has_fill = bool(fill) and t in ("rect", "ellipse")
+        # (light, dark) variants of pen and brushes: paint() picks one per frame
+        self._pens = tuple(ink_pen(c, self._width) if self._width > 0 else QPen(Qt.PenStyle.NoPen)
+                           for c in (color, display_color(color)))
+        self._brushes = tuple(QBrush(c) if has_fill else QBrush(Qt.BrushStyle.NoBrush)
+                              for c in ((qcolor(fill), display_color(qcolor(fill))) if has_fill else (None, None)))
+        self._head_brushes = (QBrush(color), QBrush(display_color(color)))
         self._head: QPolygonF | None = None
         path = QPainterPath()
         if t in ("line", "arrow"):
             x1, y1, x2, y2 = (float(g.get(k, 0)) for k in ("x1", "y1", "x2", "y2"))
+            self._frame = QRectF(QPointF(x1, y1), QPointF(x2, y2)).normalized()
             end = QPointF(x2, y2)
             if t == "arrow":
                 self._head, end = arrow_head(x1, y1, x2, y2, self._width)
-                self._head_brush = QBrush(color)
             path.moveTo(x1, y1)
             path.lineTo(end)
         elif t == "rect":
-            path.addRect(self.geom_rect())
+            self._frame = self.geom_rect()
+            path.addRect(self._frame)
         else:
-            path.addEllipse(self.geom_rect())
+            self._frame = self.geom_rect()
+            path.addEllipse(self._frame)
         self._path = path
         br = path.boundingRect()
         if self._head is not None:
@@ -263,25 +346,36 @@ class ShapeItem(BoardItem):
         st = QPainterPathStroker()
         st.setWidth(max(self._width, 8.0))
         self._shape = st.createStroke(path)
-        if self._brush.style() != Qt.BrushStyle.NoBrush:
+        if has_fill:
             self._shape = self._shape.united(path)
         if self._head is not None:
             hp = QPainterPath()
             hp.addPolygon(self._head)
             self._shape = self._shape.united(hp)
 
+    @property
+    def _pen(self) -> QPen:
+        return self._pens[0]
+
+    def local_frame(self) -> QRectF:
+        return self._frame
+
+    def ink_pad(self) -> float:
+        return self._width / 2
+
     def shape(self) -> QPainterPath:
         return self._shape
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
-        painter.setPen(self._pen)
-        painter.setBrush(self._brush)
+        k = 1 if ink_dark(self) else 0
+        painter.setPen(self._pens[k])
+        painter.setBrush(self._brushes[k])
         painter.drawPath(self._path)
         if self._head is not None:
-            pen = QPen(self._pen)
+            pen = QPen(self._pens[k])
             pen.setWidthF(max(1.0, self._width * 0.6))
             painter.setPen(pen)
-            painter.setBrush(self._head_brush)
+            painter.setBrush(self._head_brushes[k])
             painter.drawPolygon(self._head)
 
 
@@ -295,23 +389,37 @@ class TextItem(BoardItem):
     def rebuild(self) -> None:
         s, g = self.style, self.geom
         self._doc = text_document(g.get("text", ""), float(s.get("font_size", 20) or 20), qcolor(s.get("color")))
+        self._doc_dark: QTextDocument | None = None       # dark-board variant, built on first use
         size = self._doc.size()
         self._origin = QPointF(float(g.get("x", 0)), float(g.get("y", 0)))
-        self._bounds = QRectF(self._origin, size).adjusted(-2, -2, 2, 2)
+        self._frame = QRectF(self._origin, size)
+        self._bounds = self._frame.adjusted(-2, -2, 2, 2)
+
+    def local_frame(self) -> QRectF:
+        return self._frame
+
+    def _dark_doc(self) -> QTextDocument:
+        if self._doc_dark is None:
+            s, g = self.style, self.geom
+            color = display_color(qcolor(s.get("color")))
+            self._doc_dark = text_document(g.get("text", ""), float(s.get("font_size", 20) or 20), color)
+        return self._doc_dark
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
         if self.editing:
             return                                        # the inline editor draws it
         painter.save()
         painter.translate(self._origin)
-        self._doc.drawContents(painter)
+        (self._dark_doc() if ink_dark(self) else self._doc).drawContents(painter)
         painter.restore()
 
 
 class StickyItem(BoardItem):
-    """Sticky note with a soft shadow, wrapped text and a dot-voting badge (S12)."""
+    """Sticky note with a soft shadow, wrapped text and a dot-voting badge (S12).
 
-    resizable = True
+    On the dark board a sticky keeps its own fill and dark text (paper stays paper),
+    so it is deliberately *not* colour-remapped.
+    """
 
     def __init__(self, obj: dict, ctx: "CanvasScene") -> None:
         self.editing = False
@@ -398,9 +506,8 @@ class StickyItem(BoardItem):
 
 
 class ImageItem(BoardItem):
-    """Image blob. Shows a placeholder until the bytes arrive (``blob_ready``)."""
-
-    resizable = True
+    """Image blob (also used for PDF pages). Shows a placeholder until the bytes
+    arrive (``blob_ready``). Images are never colour-remapped."""
 
     def rebuild(self) -> None:
         self._rect = self.geom_rect()
@@ -421,11 +528,12 @@ class ImageItem(BoardItem):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(r)
             return
-        # placeholder card with a "loading…" label
-        painter.setBrush(QColor("#eef0f4"))
-        painter.setPen(cosmetic_pen("#b9bfcb", 1.2, Qt.PenStyle.DashLine))
+        # placeholder card with a "loading…" label (themed for the dark board)
+        dark = ink_dark(self)
+        painter.setBrush(QColor("#23262e" if dark else "#eef0f4"))
+        painter.setPen(cosmetic_pen("#4a505e" if dark else "#b9bfcb", 1.2, Qt.PenStyle.DashLine))
         painter.drawRoundedRect(r, 6, 6)
-        painter.setPen(QColor("#7a8191"))
+        painter.setPen(QColor("#9aa1b0" if dark else "#7a8191"))
         painter.setFont(ui_font(max(10.0, min(28.0, min(r.width(), r.height()) / 9))))
         painter.drawText(r, Qt.AlignmentFlag.AlignCenter, "🖼  loading…")
 
@@ -466,6 +574,7 @@ class LiveStrokeItem(OverlayItem):
         super().__init__()
         self.setZValue(OVERLAY_Z - 10)                   # below cursors and pings
         self._pen = ink_pen(qcolor(color), float(width))
+        self._pen_dark = ink_pen(display_color(qcolor(color)), float(width))
         self._width = float(width)
         self.setOpacity(max(0.02, min(1.0, opacity)))
         self._pts: list[tuple[float, float]] = []
@@ -504,7 +613,7 @@ class LiveStrokeItem(OverlayItem):
     def paint(self, painter: QPainter, option, widget=None) -> None:
         if not self._pts:
             return
-        painter.setPen(self._pen)
+        painter.setPen(self._pen_dark if ink_dark(self) else self._pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         if len(self._pts) == 1:
             x, y = self._pts[0]
@@ -580,10 +689,13 @@ class CursorItem(OverlayItem):
                             Qt.PenJoinStyle.RoundJoin))
         painter.setBrush(self.color)
         painter.drawPolygon(arrow)
-        painter.setPen(Qt.PenStyle.NoPen)
+        # name pill: a hairline ring keeps it visible on either board colour, and
+        # the label is dark on light user colours (yellow, lime) and white otherwise
+        ring = QColor(255, 255, 255, 150) if ink_dark(self) else QColor(0, 0, 0, 40)
+        painter.setPen(QPen(ring, 1))
         painter.setBrush(self.color)
         painter.drawRoundedRect(self._pill, 10, 10)
-        painter.setPen(QColor("#ffffff"))
+        painter.setPen(label_text_color(self.color))
         painter.setFont(self._font)
         painter.drawText(self._pill, Qt.AlignmentFlag.AlignCenter, self.name)
 
@@ -646,10 +758,15 @@ class LaserItem(OverlayItem):
             c.setAlphaF(a)
             painter.setPen(cosmetic_pen(c, 4.5 * (0.4 + 0.6 * a)))
             painter.drawLine(QPointF(x0, y0), QPointF(x1, y1))
-        # bright head dot at the newest point
+        # head dot at the newest point: a coloured ring around a white core, so it
+        # is visible on the white board as well as on the dark one
         x, y, t = self._pts[-1]
         a = max(0.0, 1.0 - (now - t) / self.LIFE)
         if a > 0:
+            c = QColor(self.color)
+            c.setAlphaF(a)
+            painter.setPen(cosmetic_pen(c, 7))
+            painter.drawPoint(QPointF(x, y))
             core.setAlphaF(a)
             painter.setPen(cosmetic_pen(core, 3))
             painter.drawPoint(QPointF(x, y))
@@ -702,7 +819,9 @@ class PingItem(OverlayItem):
         pill = QRectF(-w / 2, -92, w, 22)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(pill, 11, 11)
-        painter.setPen(QColor(255, 255, 255, int(255 * fade)))
+        txt = label_text_color(self.color)
+        txt.setAlpha(int(255 * fade))
+        painter.setPen(txt)
         painter.setFont(self._font)
         painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, label)
 
@@ -737,10 +856,32 @@ class PulseItem(OverlayItem):
         painter.drawEllipse(QPointF(0, 0), 7, 7)
 
 
-class SelectionOverlay(OverlayItem):
-    """Dashed outlines around selected items, plus a group box with corner handles."""
+#: resize cursor for every handle (compass names, see geometry.HANDLES)
+HANDLE_CURSORS = {
+    "nw": Qt.CursorShape.SizeFDiagCursor, "se": Qt.CursorShape.SizeFDiagCursor,
+    "ne": Qt.CursorShape.SizeBDiagCursor, "sw": Qt.CursorShape.SizeBDiagCursor,
+    "n": Qt.CursorShape.SizeVerCursor, "s": Qt.CursorShape.SizeVerCursor,
+    "e": Qt.CursorShape.SizeHorCursor, "w": Qt.CursorShape.SizeHorCursor,
+}
 
-    HANDLE_PX = 8.0
+
+class SelectionOverlay(OverlayItem):
+    """Selection frame with 8 resize handles (4 corners + 4 edges).
+
+    * one object: a solid frame around its logical extent (``frame_rect``)
+    * several: a light dashed outline per object plus one solid group frame
+    * handles are only drawn when the user may edit. They keep a constant
+      *screen* size whatever the zoom (sizes are divided by the view scale).
+    * an edge handle is hidden when the frame is too small on screen for it
+      to be grabbed separately from the corners, or when the frame has no
+      extent along that axis (e.g. the height of a horizontal line)
+    """
+
+    HANDLE_PX = 9.0                   # corner square, screen px
+    EDGE_PX = (14.0, 6.0)             # edge bar (long, short), screen px
+    HIT_PX = 7.0                      # grab radius around a handle centre, screen px
+    MARGIN_PX = 6.0                   # gap between the ink and the frame, screen px
+    ITEM_MARGIN_PX = 2.0              # gap for the per-object dashed outlines (multi-select)
 
     def __init__(self, ctx: "CanvasScene") -> None:
         super().__init__()
@@ -752,25 +893,69 @@ class SelectionOverlay(OverlayItem):
         self.targets = items
         self.refresh()
 
+    def _scale(self) -> float:
+        return max(self.ctx.view_scale, 1e-3)
+
     def group_rect(self) -> QRectF:
         r = QRectF()
         for it in self.targets:
             r = r.united(it.sceneBoundingRect())
         return r
 
-    def resize_handle_rect(self) -> QRectF | None:
-        """Scene rect of the bottom-right resize handle (single resizable selection)."""
-        if len(self.targets) != 1 or not self.targets[0].resizable:
-            return None
-        it = self.targets[0]
-        corner = it.mapToScene(it.geom_rect().bottomRight())
-        s = (self.HANDLE_PX + 4) / max(self.ctx.view_scale, 1e-3)
-        return QRectF(corner.x() - s / 2, corner.y() - s / 2, s, s)
+    def frame_rect(self) -> QRectF:
+        """Union of the targets' logical extents: the box that resizing maps."""
+        # (min/max by hand: QRectF.united() ignores zero-size rects such as a dot)
+        rects = [it.frame_rect() for it in self.targets]
+        if not rects:
+            return QRectF()
+        return QRectF(QPointF(min(r.left() for r in rects), min(r.top() for r in rects)),
+                      QPointF(max(r.right() for r in rects), max(r.bottom() for r in rects)))
+
+    def _outline(self) -> QRectF:
+        """The drawn frame: logical extent + ink thickness + a small screen margin."""
+        pad = max((it.ink_pad() for it in self.targets), default=0.0) + self.MARGIN_PX / self._scale()
+        return self.frame_rect().adjusted(-pad, -pad, pad, pad)
+
+    def can_resize(self) -> bool:
+        if not self.targets or not all(it.resizable for it in self.targets):
+            return False
+        ctx = self.ctx
+        if getattr(ctx, "is_preview", False):
+            return False
+        try:
+            return bool(ctx.ctrl.can_edit())
+        except Exception:                                # pragma: no cover - minimal controllers
+            return True
+
+    def handle_points(self) -> dict[str, QPointF]:
+        """Scene position of every visible handle (empty when resizing is not allowed)."""
+        if not self.can_resize():
+            return {}
+        f, g, s = self.frame_rect(), self._outline(), self._scale()
+        pts = {"nw": g.topLeft(), "ne": g.topRight(), "se": g.bottomRight(), "sw": g.bottomLeft()}
+        room = 3.2 * self.HANDLE_PX                      # screen px needed between two corners
+        if f.width() > 1e-6 and g.height() * s >= room:
+            pts["e"] = QPointF(g.right(), g.center().y())
+            pts["w"] = QPointF(g.left(), g.center().y())
+        if f.height() > 1e-6 and g.width() * s >= room:
+            pts["n"] = QPointF(g.center().x(), g.top())
+            pts["s"] = QPointF(g.center().x(), g.bottom())
+        return pts
+
+    def handle_at(self, pos: QPointF) -> str | None:
+        """The handle under scene point ``pos`` (corners win over edges), or None."""
+        pts = self.handle_points()
+        r = self.HIT_PX / self._scale()
+        for name in ("nw", "ne", "se", "sw", "n", "e", "s", "w"):
+            p = pts.get(name)
+            if p is not None and abs(pos.x() - p.x()) <= r and abs(pos.y() - p.y()) <= r:
+                return name
+        return None
 
     def refresh(self) -> None:
         self.prepareGeometryChange()
-        pad = 16.0 / max(self.ctx.view_scale, 1e-3)
-        g = self.group_rect()
+        pad = 16.0 / self._scale()
+        g = self.group_rect().united(self._outline()) if self.targets else QRectF()
         self._bounds = g.adjusted(-pad, -pad, pad, pad) if not g.isNull() else QRectF()
         self.setVisible(bool(self.targets))
         self.update()
@@ -781,26 +966,31 @@ class SelectionOverlay(OverlayItem):
     def paint(self, painter: QPainter, option, widget=None) -> None:
         if not self.targets:
             return
-        s = max(self.ctx.view_scale, 1e-3)
-        m = 4.0 / s                                       # 4 screen px margin
-        accent = qcolor(ACCENT)
+        s = self._scale()
+        dark = ink_dark(self)
+        accent = qcolor(ACCENT_DARK if dark else ACCENT)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        dash = cosmetic_pen(accent, 1.2, Qt.PenStyle.DashLine)
-        for it in self.targets:
-            painter.setPen(dash)
-            painter.drawRect(it.sceneBoundingRect().adjusted(-m, -m, m, m))
-        g = self.group_rect().adjusted(-m, -m, m, m)
         if len(self.targets) > 1:
-            painter.setPen(cosmetic_pen(accent, 1.0))
-            painter.drawRect(g)
-        hs = self.HANDLE_PX / s
-        painter.setPen(cosmetic_pen(accent, 1.5))
+            soft = QColor(accent)
+            soft.setAlpha(150)
+            dash = cosmetic_pen(soft, 1.0, Qt.PenStyle.DashLine)
+            m = self.ITEM_MARGIN_PX / s                   # well inside the group frame: no double lines
+            painter.setPen(dash)
+            for it in self.targets:
+                pad = it.ink_pad() + m
+                painter.drawRect(it.frame_rect().adjusted(-pad, -pad, pad, pad))
+        painter.setPen(cosmetic_pen(accent, 1.3))
+        painter.drawRect(self._outline())
+        # handles: white fill + accent border, constant size on screen
+        painter.setPen(cosmetic_pen(accent, 1.4))
         painter.setBrush(QColor("#ffffff"))
-        for c in (g.topLeft(), g.topRight(), g.bottomLeft(), g.bottomRight()):
-            painter.drawRoundedRect(QRectF(c.x() - hs / 2, c.y() - hs / 2, hs, hs), 1.5 / s, 1.5 / s)
-        h = self.resize_handle_rect()
-        if h is not None:
-            painter.setBrush(accent)
-            painter.setPen(cosmetic_pen("#ffffff", 1.5))
-            c = h.center()
-            painter.drawEllipse(c, hs * 0.7, hs * 0.7)
+        hs = self.HANDLE_PX / s
+        lng, sht = self.EDGE_PX[0] / s, self.EDGE_PX[1] / s
+        for name, c in self.handle_points().items():
+            if len(name) == 2:
+                r = QRectF(c.x() - hs / 2, c.y() - hs / 2, hs, hs)
+                painter.drawRoundedRect(r, 2.0 / s, 2.0 / s)
+            else:
+                w, h = (lng, sht) if name in ("n", "s") else (sht, lng)
+                r = QRectF(c.x() - w / 2, c.y() - h / 2, w, h)
+                painter.drawRoundedRect(r, sht / 2, sht / 2)

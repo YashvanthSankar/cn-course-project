@@ -10,6 +10,11 @@ looking identical.
 The scene also owns the transient presence layer: remote cursors, remote live
 strokes, laser trails and "look here" pings. One shared 60 Hz animation timer
 drives them. It runs only while something is actually animating.
+
+Board look: a light or dark "paper" (:meth:`CanvasScene.set_board_theme`) with
+a dot grid, a line grid or no grid (:meth:`CanvasScene.set_grid`). On the dark
+board, items remap near-black/near-white ink while painting (see
+``items.display_color``). Exports always use the light look.
 """
 
 from __future__ import annotations
@@ -31,8 +36,12 @@ from .items import (BoardItem, CursorItem, LaserItem, LiveStrokeItem, PingItem, 
 
 SCENE_EXTENT = 50_000.0            # scene rect is +-50000 in both axes
 GRID_STEP = 24.0                   # dot grid spacing in scene units at 100 %
-BG_COLOR = QColor("#f9f9f7")       # warm paper white
-DOT_COLOR = QColor("#cfd3db")
+GRID_STYLES = ("dots", "lines", "none")
+# board paper and grid colours: (light, dark)
+BG_COLORS = (QColor("#fbfbfd"), QColor("#15171d"))
+DOT_COLORS = (QColor("#d3d7df"), QColor("#2f343f"))
+LINE_COLORS = (QColor(27, 33, 48, 20), QColor(255, 255, 255, 14))
+BG_COLOR, DOT_COLOR = BG_COLORS[0], DOT_COLORS[0]     # (kept for older imports)
 LIVE_END_GRACE_S = 0.8             # keep an ended remote live stroke until its commit arrives
 LIVE_FADE_S = 0.3
 
@@ -48,6 +57,7 @@ class CanvasScene(QGraphicsScene):
     """Board renderer + presence overlays. See the module docstring."""
 
     selection_changed = Signal()
+    content_changed = Signal()          # board items were created / updated / removed
 
     def __init__(self, controller, parent=None) -> None:
         super().__init__(parent)
@@ -59,6 +69,8 @@ class CanvasScene(QGraphicsScene):
         self.view_scale = 1.0                       # kept up to date by CanvasView
         self.spotlight: str | None = None           # authorship lens (S11)
         self.exporting = False
+        self.board_dark = False                     # dark paper + display-only ink remap
+        self.grid_style = "dots"
         self._preview: Board | None = None          # time-lapse board (read only)
         self._live_dirty = False                    # live view changed while previewing
 
@@ -115,6 +127,31 @@ class CanvasScene(QGraphicsScene):
     def is_preview(self) -> bool:
         return self._preview is not None
 
+    @property
+    def ink_dark(self) -> bool:
+        """Items paint with the dark-board colour remap (never while exporting)."""
+        return self.board_dark and not self.exporting
+
+    # =========================================================================
+    # board look: paper colour and grid
+    # =========================================================================
+    def set_board_theme(self, dark: bool) -> None:
+        dark = bool(dark)
+        if dark == self.board_dark:
+            return
+        self.board_dark = dark
+        for it in self.items_by_id.values():
+            if it.cacheMode() != QGraphicsItem.CacheMode.NoCache:
+                it.update()                          # drop cached pixmaps (sticky notes)
+        self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.AllLayers)
+        self.update()
+
+    def set_grid(self, style: str) -> None:
+        style = style if style in GRID_STYLES else "dots"
+        if style != self.grid_style:
+            self.grid_style = style
+            self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.BackgroundLayer)
+
     # =========================================================================
     # board -> items
     # =========================================================================
@@ -127,6 +164,7 @@ class CanvasScene(QGraphicsScene):
             self._create(obj)
         self._restack()
         self._prune_selection()
+        self.content_changed.emit()
 
     def sync(self, ids: Iterable[str]) -> None:
         """Create / update / remove the items for ``ids`` only."""
@@ -154,6 +192,7 @@ class CanvasScene(QGraphicsScene):
         if restack:
             self._restack()
         self._prune_selection()
+        self.content_changed.emit()
 
     def sync_all(self) -> None:
         """Diff the whole source board against the items (used for preview scrubbing)."""
@@ -476,14 +515,17 @@ class CanvasScene(QGraphicsScene):
     # painting
     # =========================================================================
     def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
-        """Paper colour plus a subtle dot grid that thins out when zoomed out."""
+        """Paper colour plus a subtle grid (dots or lines) that thins out when zoomed out."""
         if self.exporting:
-            painter.fillRect(rect, QColor("#ffffff"))
+            painter.fillRect(rect, QColor("#ffffff"))   # exports are always light
             return
-        painter.fillRect(rect, BG_COLOR)
+        k = 1 if self.board_dark else 0
+        painter.fillRect(rect, BG_COLORS[k])
+        if self.grid_style == "none":
+            return
         scale = abs(painter.worldTransform().m11()) or 1.0
         step = GRID_STEP
-        while step * scale < 16:                       # keep dots >= 16 px apart on screen
+        while step * scale < 16:                       # keep grid >= 16 px apart on screen
             step *= 2
         x0 = math.floor(rect.left() / step) * step
         y0 = math.floor(rect.top() / step) * step
@@ -491,7 +533,18 @@ class CanvasScene(QGraphicsScene):
         ny = int((rect.bottom() - y0) / step) + 1
         if nx <= 0 or ny <= 0 or nx * ny > 40_000:
             return
-        pen = QPen(DOT_COLOR, 1.8 if scale >= 0.6 else 1.4)
+        if self.grid_style == "lines":
+            pen = QPen(LINE_COLORS[k], 1.0)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            for i in range(nx):
+                x = x0 + i * step
+                painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
+            for j in range(ny):
+                y = y0 + j * step
+                painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y))
+            return
+        pen = QPen(DOT_COLORS[k], 1.8 if scale >= 0.6 else 1.4)
         pen.setCosmetic(True)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)

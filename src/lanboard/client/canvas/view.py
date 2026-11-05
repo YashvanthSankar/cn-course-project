@@ -5,7 +5,12 @@ Responsibilities
   * pan (pan tool, middle mouse, space+drag, trackpad scroll) and zoom
     (wheel around the cursor, pinch, ``zoom_fit``/``zoom_reset``), clamped 0.1x-8x
   * presence: ``send_cursor`` on every move, Alt+click "look here" ping
-  * presentation mode (S10): broadcast my viewport / smoothly follow someone's
+  * presentation mode (S10): broadcast my viewport / smoothly follow someone's.
+    Any pan or zoom the *user* makes (hand tool, space/middle drag, wheel,
+    pinch, keyboard, scrollbars, minimap, zoom buttons) ends follow mode; the
+    follow animation itself does not. ``follow_changed`` reports both.
+  * board look: light/dark paper and dot/line/no grid (``set_board_theme``,
+    ``set_grid``). The dark remap is display-only, exports stay light.
   * authorship lens (S11): hover text + spotlight dimming
   * inline text / sticky editors
   * image insert, PDF import (S9), export PNG/SVG/PDF, time-lapse preview (S6)
@@ -28,11 +33,13 @@ from PySide6.QtWidgets import QGraphicsTextItem, QGraphicsView, QLabel, QStyle
 
 from lanboard.common import config as C
 
-from .items import ACCENT, OVERLAY_Z, STICKY_PAD, STICKY_TEXT, StickyItem, TextItem, qcolor, ui_font
+from .items import (ACCENT, OVERLAY_Z, STICKY_PAD, STICKY_TEXT, StickyItem, TextItem, display_color, qcolor,
+                    ui_font)
 from .scene import CanvasScene
 from .tools import Tool, build_tools
 
 MIN_ZOOM, MAX_ZOOM = 0.1, 8.0
+ZOOM_STEP = 1.25                   # zoom_in / zoom_out factor (buttons, Ctrl +/-)
 MAX_IMAGE_SIDE = 2048
 EXPORT_MARGIN = 40.0
 PDF_RENDER_SCALE = 1.5             # PDF pages are rasterised at 1.5x (108 dpi) for sharpness
@@ -133,7 +140,7 @@ class InlineEditor(QGraphicsTextItem):
         self.setZValue(OVERLAY_Z - 1)
         self.document().setDocumentMargin(0)
         self.setFont(ui_font(font_px))
-        self.setDefaultTextColor(qcolor(color))
+        self.set_ink(color)
         if width is not None:
             self.setTextWidth(max(10.0, width))
         self.setPlainText(text)
@@ -142,6 +149,13 @@ class InlineEditor(QGraphicsTextItem):
         cur = self.textCursor()
         cur.movePosition(QTextCursor.MoveOperation.End)
         self.setTextCursor(cur)
+
+    def set_ink(self, color: str) -> None:
+        """Text colour, remapped on the dark board like committed text (sticky text stays dark)."""
+        c = qcolor(color)
+        if self.kind == "text" and self.view.board_dark:
+            c = display_color(c)
+        self.setDefaultTextColor(c)
 
     def focusOutEvent(self, ev) -> None:
         super().focusOutEvent(ev)
@@ -168,8 +182,8 @@ class InlineEditor(QGraphicsTextItem):
             pen.setCosmetic(True)
             pen.setWidthF(1.2)
             painter.setPen(pen)
-            c = QColor("#ffffff")
-            c.setAlpha(200)
+            c = QColor("#1d2027" if self.view.board_dark else "#ffffff")
+            c.setAlpha(210 if self.view.board_dark else 200)
             painter.setBrush(c)
             painter.drawRoundedRect(r, 4 / s, 4 / s)
         try:
@@ -190,6 +204,9 @@ class CanvasView(QGraphicsView):
     tool_changed = Signal(str)
     zoom_changed = Signal(float)
     hover_info = Signal(str)
+    follow_changed = Signal(object)          # user_id being followed, or None when follow stops
+    board_theme_changed = Signal(bool)       # True = dark board
+    view_rect_changed = Signal()             # the visible scene rect moved or zoomed (minimap)
 
     def __init__(self, controller, parent=None) -> None:
         super().__init__(parent)
@@ -243,17 +260,21 @@ class CanvasView(QGraphicsView):
 
         # floating status badge ("Preview — seq N", "Following Alice")
         self._badge = QLabel(self)
-        self._badge.setStyleSheet(
-            "QLabel { background: rgba(24,26,32,205); color: white; border-radius: 13px;"
-            " padding: 5px 14px; font-size: 12px; font-weight: 600; }")
         self._badge.hide()
         self._preview_seq: int | None = None
 
         controller.viewport.connect(self._on_viewport)
         controller.me_changed.connect(lambda *_: self._permissions_changed())
         controller.room_changed.connect(lambda *_: self._permissions_changed())
+        controller.participants_changed.connect(self._on_participants)
         self.canvas.selection_changed.connect(self.viewport().update)
+        # the scrollbars are hidden, but arrow / Page keys still drive them; actionTriggered
+        # fires only for such user actions (never for setValue), so it marks a user pan
+        self.horizontalScrollBar().actionTriggered.connect(lambda *_: self._user_navigated())
+        self.verticalScrollBar().actionTriggered.connect(lambda *_: self._user_navigated())
 
+        self._style_badge()
+        self.set_board_theme(self._initial_dark())
         self.centerOn(0, 0)
         self._refresh_cursor()
 
@@ -299,7 +320,7 @@ class CanvasView(QGraphicsView):
     def set_color(self, hex_color: str) -> None:
         self.color = hex_color
         if self._editor is not None:
-            self._editor.setDefaultTextColor(qcolor(hex_color))
+            self._editor.set_ink(hex_color)
         self._restyle({"stroke", "line", "arrow", "rect", "ellipse", "text", "sticky"}, "style.color", hex_color)
         if self.tool.name == "laser":
             self._refresh_cursor()
@@ -334,6 +355,52 @@ class CanvasView(QGraphicsView):
 
     def set_spotlight(self, user_id: str | None) -> None:
         self.canvas.set_spotlight(user_id)
+
+    # -- board look ----------------------------------------------------------
+    @staticmethod
+    def _initial_dark() -> bool:
+        """Start in the app's current theme (imported lazily: ui depends on canvas)."""
+        try:
+            from lanboard.client.ui import theme
+            return bool(theme.manager().dark)
+        except Exception:                            # pragma: no cover - ui package unavailable
+            return False
+
+    @property
+    def board_dark(self) -> bool:
+        return self.canvas.board_dark
+
+    def set_board_theme(self, dark: bool) -> None:
+        """Light (#fbfbfd) or dark (#15171d) board. Display only: object colours,
+        ops and exports are unchanged; near-black/near-white ink swaps when painted."""
+        dark = bool(dark)
+        changed = dark != self.canvas.board_dark
+        self.canvas.set_board_theme(dark)
+        eraser = self.tools.get("eraser")
+        if eraser is not None and hasattr(eraser, "apply_theme"):
+            eraser.apply_theme(dark)
+        if self._editor is not None:
+            self._editor.set_ink(self._editor_color())
+        self._style_badge()
+        self.viewport().update()
+        if changed:
+            self.board_theme_changed.emit(dark)
+
+    def set_grid(self, style: str) -> None:
+        """Background grid: ``"dots"`` (default), ``"lines"`` or ``"none"``."""
+        self.canvas.set_grid(style)
+        self.viewport().update()
+
+    @property
+    def grid_style(self) -> str:
+        return self.canvas.grid_style
+
+    def _editor_color(self) -> str:
+        ed = self._editor
+        if ed is not None and ed.oid:
+            obj = self.ctrl.view.get(ed.oid) or {}
+            return (obj.get("style") or {}).get("color") or (STICKY_TEXT if ed.kind == "sticky" else DEFAULT_COLOR)
+        return self.color
 
     def _restyle(self, types: set[str], key: str, value) -> None:
         """Apply a style change to the current selection as one batch (one undo step)."""
@@ -537,6 +604,8 @@ class CanvasView(QGraphicsView):
         if self._panning:
             d = vpos - self._pan_last
             self._pan_last = vpos
+            if d.x() or d.y():
+                self._user_navigated()
             self._pan_pixels(-d.x(), -d.y())
             return
         if self._editor_press:
@@ -628,6 +697,10 @@ class CanvasView(QGraphicsView):
             self.zoom_reset()
         elif ctrl and key in (Qt.Key.Key_1,):
             self.zoom_fit()
+        elif ctrl and key in (Qt.Key.Key_Equal, Qt.Key.Key_Plus):
+            self.zoom_in()
+        elif ctrl and key == Qt.Key.Key_Minus:
+            self.zoom_out()
         else:
             super().keyPressEvent(ev)
 
@@ -648,6 +721,7 @@ class CanvasView(QGraphicsView):
             if dy:
                 self.zoom_at(1.0015 ** dy, ev.position())
         else:
+            self._user_navigated()
             self._pan_pixels(-pd.x(), -pd.y())          # trackpad two-finger scroll pans
         ev.accept()
 
@@ -662,7 +736,8 @@ class CanvasView(QGraphicsView):
         return super().viewportEvent(ev)
 
     def zoom_at(self, factor: float, view_pos: QPointF) -> None:
-        """Zoom keeping the scene point under ``view_pos`` fixed."""
+        """Zoom keeping the scene point under ``view_pos`` fixed (a user zoom: ends follow)."""
+        self._user_navigated()
         self._stop_animation()
         s = self.scale_factor()
         ns = max(MIN_ZOOM, min(MAX_ZOOM, s * factor))
@@ -721,7 +796,21 @@ class CanvasView(QGraphicsView):
         anim.start()
         self._anim = anim
 
+    def zoom_in(self) -> None:
+        self.zoom_at(ZOOM_STEP, QPointF(self.viewport().rect().center()))
+
+    def zoom_out(self) -> None:
+        self.zoom_at(1 / ZOOM_STEP, QPointF(self.viewport().rect().center()))
+
+    def pan_to(self, center: QPointF) -> None:
+        """Centre the view on scene point ``center`` (used by the minimap; a user pan)."""
+        self._user_navigated()
+        self._stop_animation()
+        self.centerOn(center)
+        self._view_changed()
+
     def zoom_fit(self) -> None:
+        self._user_navigated()
         r = self.canvas.content_rect()
         if r.isNull() or r.isEmpty():
             self.zoom_reset()
@@ -729,6 +818,7 @@ class CanvasView(QGraphicsView):
         self.animate_to(r.adjusted(-60, -60, 60, 60))
 
     def zoom_reset(self) -> None:
+        self._user_navigated()
         c = self.visible_rect().center()
         vp = self.viewport().rect()
         self.animate_to(QRectF(c.x() - vp.width() / 2, c.y() - vp.height() / 2, vp.width(), vp.height()))
@@ -741,15 +831,18 @@ class CanvasView(QGraphicsView):
             self.canvas.selection.refresh()
             self.zoom_changed.emit(s)
         self._schedule_viewport()
+        self.view_rect_changed.emit()
 
     def scrollContentsBy(self, dx: int, dy: int) -> None:
         super().scrollContentsBy(dx, dy)
         self._schedule_viewport()
+        self.view_rect_changed.emit()
 
     def resizeEvent(self, ev) -> None:
         super().resizeEvent(ev)
         self._place_badge()
         self._schedule_viewport()
+        self.view_rect_changed.emit()
 
     # =========================================================================
     # presentation mode (S10)
@@ -770,10 +863,46 @@ class CanvasView(QGraphicsView):
         self.ctrl.send_viewport({"x": r.x(), "y": r.y(), "w": r.width(), "h": r.height()})
 
     def set_follow(self, user_id: str | None) -> None:
-        self._follow = user_id or None
+        """Follow ``user_id``'s viewport (presentation mode), or stop with ``None``."""
+        uid = user_id or None
+        if uid is not None and uid == self.canvas.my_id():
+            uid = None                                   # following myself makes no sense
+        changed = uid != self._follow
+        self._follow = uid
+        if uid is None:
+            self._stop_animation()
         self._update_badge()
+        if changed:
+            self.follow_changed.emit(uid)
         if self._follow and self._follow in self._viewports:
             self._follow_to(self._viewports[self._follow], 450)
+
+    @property
+    def following(self) -> str | None:
+        return self._follow
+
+    def _user_navigated(self) -> None:
+        """The user panned or zoomed by themselves: that ends follow mode.
+
+        Only input handlers and the public zoom/pan methods call this. The follow
+        animation moves the camera through ``animate_to`` / ``_set_view_rect``,
+        which never do, so following keeps going while the presenter moves.
+        """
+        if self._follow is None:
+            return
+        name = self.ctrl.name_of(self._follow)
+        self.set_follow(None)
+        self._notice("info", f"Stopped following {name}")
+
+    def _on_participants(self) -> None:
+        """Stop following someone who has left the room."""
+        if self._follow is None:
+            return
+        p = (getattr(self.ctrl, "participants", {}) or {}).get(self._follow)
+        if p is None or p.get("online") is False:
+            name = self.ctrl.name_of(self._follow)
+            self.set_follow(None)
+            self._notice("info", f"Stopped following {name} (left the room)")
 
     def _on_viewport(self, uid: str, rect: dict) -> None:
         self._viewports[uid] = rect
@@ -814,6 +943,16 @@ class CanvasView(QGraphicsView):
         self._place_badge()
         self._badge.show()
         self._badge.raise_()
+
+    def _style_badge(self) -> None:
+        """Dark pill on the light board, light pill on the dark board."""
+        if self.board_dark:
+            css = ("QLabel { background: rgba(236,238,244,235); color: #1b2130; border-radius: 13px;"
+                   " padding: 5px 14px; font-size: 12px; font-weight: 600; }")
+        else:
+            css = ("QLabel { background: rgba(24,26,32,205); color: white; border-radius: 13px;"
+                   " padding: 5px 14px; font-size: 12px; font-weight: 600; }")
+        self._badge.setStyleSheet(css)
 
     def _place_badge(self) -> None:
         self._badge.move(max(8, (self.width() - self._badge.width()) // 2), 12)
