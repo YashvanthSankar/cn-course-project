@@ -9,6 +9,8 @@ venv/
 # Build
 build/
 dist/
+# submission zip assembled by packaging/make_release.py (+ release/extra/<platform> inputs)
+release/
 
 # Runtime data
 data/

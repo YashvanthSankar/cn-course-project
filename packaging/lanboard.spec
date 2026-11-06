@@ -2,9 +2,24 @@
 #   dist/LANBoard/lanboard-server[.exe]   (console app, no Qt)
 #   dist/LANBoard/lanboard-client[.exe]   (GUI app)
 # They share one _internal/ runtime. The client's "start a server on this
-# computer" option finds lanboard-server next to itself.
+# computer" option finds lanboard-server next to itself
+# (client/ui/server_launcher.py: Path(sys.executable).with_name("lanboard-server[.exe]")),
+# so the two executables must stay in the same folder. Do not wrap the client
+# in a macOS .app BUNDLE: sys.executable would then point inside
+# LANBoard.app/Contents/MacOS and the sibling server would not be found.
 #
-# Build:  .venv/bin/pyinstaller --noconfirm packaging/lanboard.spec
+# Build (same command on Windows, macOS and Linux; PyInstaller cannot
+# cross-compile, so each OS builds its own bundle, see .github/workflows/build.yml):
+#     .venv/bin/pyinstaller --noconfirm packaging/lanboard.spec        (macOS / Linux)
+#     .venv\Scripts\pyinstaller --noconfirm packaging\lanboard.spec    (Windows)
+#
+# Cross-platform notes:
+#   * EXE names have no extension: PyInstaller adds ".exe" on Windows by itself.
+#   * Only os.path.join is used for paths, never "/" or "\\".
+#   * No icon file is referenced (the window icon is drawn at run time by
+#     ui/theme.app_icon()), so there is no .ico / .icns that could be missing.
+#   * upx is off: UPX-packed Qt DLLs are a classic cause of antivirus false
+#     positives on Windows lab PCs, and UPX breaks code signing on macOS.
 import os
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
@@ -22,6 +37,13 @@ QT_EXCLUDES = [
     "PySide6.QtTextToSpeech", "PySide6.QtDesigner", "PySide6.QtHelp", "tkinter",
 ]
 
+# Run both executables in Python's UTF-8 mode (PEP 540). On Windows the
+# default text encoding is the ANSI code page (cp1252 etc.); the embedded
+# server's stdout/stderr is redirected to a log file by the client, and a
+# non-ASCII user or room name in a log line would otherwise raise
+# UnicodeEncodeError inside logging. No effect on macOS/Linux (already UTF-8).
+PY_OPTIONS = [("X utf8=1", None, "OPTION")]
+
 server_a = Analysis([os.path.join(SPECPATH, "server_entry.py")], pathex=[SRC],
                     excludes=["PySide6", "shiboken6", "tkinter"], noarchive=False)
 # UI fonts (Inter + JetBrains Mono, SIL OFL 1.1): theme.load_fonts() finds them under
@@ -30,17 +52,24 @@ CLIENT_DATAS = [(os.path.join(SRC, "lanboard", "client", "assets"), os.path.join
 
 client_a = Analysis([os.path.join(SPECPATH, "client_entry.py")], pathex=[SRC],
                     datas=CLIENT_DATAS,
+                    # pypdfium2 is imported lazily inside CanvasView.import_pdf(), so
+                    # name it here; its hook bundles libpdfium + version.json files
                     hiddenimports=["PySide6.QtSvg", "pypdfium2"],
                     excludes=QT_EXCLUDES, noarchive=False)
 
 server_pyz = PYZ(server_a.pure)
 client_pyz = PYZ(client_a.pure)
 
-server_exe = EXE(server_pyz, server_a.scripts, [], exclude_binaries=True,
-                 name="lanboard-server", console=True)
-client_exe = EXE(client_pyz, client_a.scripts, [], exclude_binaries=True,
-                 name="lanboard-client", console=False)
+# console=True: the server is a terminal program (prints its LAN address, Ctrl+C stops it).
+server_exe = EXE(server_pyz, server_a.scripts, PY_OPTIONS, exclude_binaries=True,
+                 name="lanboard-server", console=True, upx=False)
+# console=False: no extra terminal window for the GUI on Windows. sys.stdout/stderr
+# are None then; the client never writes to them directly (print() is a no-op).
+client_exe = EXE(client_pyz, client_a.scripts, PY_OPTIONS, exclude_binaries=True,
+                 name="lanboard-client", console=False, upx=False,
+                 # macOS: no argv emulation (it would swallow our --room/--user flags)
+                 argv_emulation=False)
 
 coll = COLLECT(server_exe, server_a.binaries, server_a.datas,
                client_exe, client_a.binaries, client_a.datas,
-               name="LANBoard")
+               upx=False, name="LANBoard")
