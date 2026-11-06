@@ -3,6 +3,29 @@
 **Deadline:** 15 Nov 2026, 23:55 IST (no extensions). **Internal target:** submit 15 Nov by 18:00.
 **Core freeze:** 10 Nov. Everything after that is extras + deliverables.
 
+## Status (6 Nov)
+
+The application code is complete and pushed. It was written by Yashvanth with AI assistance (Claude); those
+commits carry a `Co-Authored-By` trailer. The per-day plan further down is kept as the map of **who owns which
+area**: each owner must study that code until they can explain and modify it, and present it in the video and
+the viva (see `docs/PRESENTER_GUIDE.md`). Its boxes are left unticked on purpose. Ticking them would claim that
+the listed member wrote that code.
+
+Done and verified on one machine (276 automated tests, including end-to-end, chaos and convergence tests, plus
+the bot stress tool):
+- [x] Server, protocol, sync controller, canvas, UI redesign, persistence with full history, multi-part snapshots
+- [x] Standalone server and client executables (PyInstaller, macOS)
+- [x] Technical Documentation PDF (`docs/LANBoard_Technical_Documentation.pdf`, 42 pages, with requirements traceability)
+- [x] PPT (`docs/LANBoard_Presentation.pptx`, 30 slides) and `docs/PRESENTER_GUIDE.md`
+- [x] Windows / Linux / macOS builds (GitHub Actions, tests + smoke test green on all three)
+
+Still needs the team:
+- [ ] **Each member**: read your area's code and `docs/PRESENTER_GUIDE.md`, then make at least one real improvement or test yourself and commit it from your own account
+- [ ] **All**: test on 3+ real machines over a hotspot or switch with the internet **off** (discovery, firewall prompts, cut cable)
+- [ ] **All**: run the Windows build on a lab PC
+- [ ] **All**: record the explanation video (each member explains their own area, face and name visible)
+- [ ] Build the submission zip with `packaging/make_release.py`, test it on a fresh machine, then one member submits
+
 ## Team & ownership
 
 Each member owns a vertical slice end-to-end (code + tests + their section of the docs, PPT and video).
@@ -79,21 +102,21 @@ spec in `docs/TECH.md` is co-owned by Jeevanandham & Yashvanth.
 - [ ] Fresh-machine test: download zip → run with internet OFF
 - [ ] Zip: executables + source + PDF + PPT + video → one member submits by 18:00
 
-## Mandatory checklist (must all pass before 10 Nov)
-- [ ] Freehand draw, erase, colour select
-- [ ] Real-time sync to all clients, low delay
-- [ ] Server validates & distributes ops; concurrent ops don't corrupt state
-- [ ] Consistent canvas for everyone
-- [ ] Clear (permissioned); save & restore
-- [ ] Host session; join via LAN IP + room code
-- [ ] Participant list; join/leave notifications
-- [ ] Usernames; per-user colours / cursors
-- [ ] Join/leave without disrupting others; late joiner gets current state
-- [ ] Defined ordering; delayed/duplicate/missing updates handled
-- [ ] Disconnect detection, timeouts, reconnection
-- [ ] Group chat, broadcast, chronological history with username + timestamp
-- [ ] Reconnecting client recovers latest state
-- [ ] Undo/redo with defined multi-user behaviour
+## Mandatory checklist (✓ = verified by automated tests on one machine; still re-check on real LAN)
+- [x] Freehand draw, erase, colour select
+- [x] Real-time sync to all clients, low delay
+- [x] Server validates & distributes ops; concurrent ops don't corrupt state
+- [x] Consistent canvas for everyone
+- [x] Clear (permissioned); save & restore
+- [x] Host session; join via LAN IP + room code
+- [x] Participant list; join/leave notifications
+- [x] Usernames; per-user colours / cursors
+- [x] Join/leave without disrupting others; late joiner gets current state
+- [x] Defined ordering; delayed/duplicate/missing updates handled
+- [x] Disconnect detection, timeouts, reconnection
+- [x] Group chat, broadcast, chronological history with username + timestamp
+- [x] Reconnecting client recovers latest state
+- [x] Undo/redo with defined multi-user behaviour
 - [ ] Works with internet disabled
 
 ## Git workflow

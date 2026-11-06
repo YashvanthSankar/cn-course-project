@@ -9,6 +9,11 @@ their name and face visible. The talking points below are a checklist of what to
 not a script, so do not read them out. Open the files listed for you and walk through the code
 yourself.
 
+**Be accurate about authorship.** The git history shows who committed each change, and AI-assisted
+commits carry a `Co-Authored-By: Claude` trailer. Present your slides as **your area**, and describe
+what you personally built, tested or changed. Do not claim code you did not write. Before the videos,
+every member should make and commit real work in their own area from their own account.
+
 | Slides | Presenter | Topic |
 |---|---|---|
 | 1 | anyone (all on camera, or each video opens with it) | title and team |
@@ -22,7 +27,7 @@ yourself.
 Jeevanandham (resync, resume and multi-part handling). Each of you explains your own half.
 
 Numbers you can quote (all checked against the code on 2026-11-06):
-- 269 tests, all passing in about 40 s (`.venv/bin/python -m pytest -q`).
+- 276 tests, all passing in about 40 s (`.venv/bin/python -m pytest -q`).
 - `config.py`: PING every 3 s and a 12 s idle timeout, HASH every 25 ops, live strokes flushed every 33 ms, cursors at most every 50 ms, 120 ops/s per client, a send queue of 4000 frames, MAX_FRAME 8 MiB, PART_BYTES 1 MiB, autosave every 50 ops or 10 s.
 - Measured traffic: a 1-second stroke costs 121 frames and 10,497 B unbatched, or 31 frames and 3,927 B batched. The committed stroke goes from 121 points (1,851 B) to 26 points (499 B) after RDP. A cursor frame is 26 B, so 3,120 B/s at 120 Hz and 520 B/s at 20 Hz.
 - Stress test (`python -m lanboard.tools.bot --bots 8 --rate 20 --seconds 12`, on loopback): 1,771 ops in 12.1 s, RTT about 0.2 ms, 0 resyncs, 0 rejects, 70 hash checks per bot, ALL REPLICAS CONVERGED.

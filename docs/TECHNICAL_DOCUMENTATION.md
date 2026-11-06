@@ -50,7 +50,7 @@ A shared whiteboard is a *replicated state* problem. Every participant holds a c
 
 ### 1.5 Use of AI assistance
 
-As stated in the project README, AI assistance (Anthropic's Claude) was used during development, including for parts of the code, the tests and this document. Commits made with it carry a `Co-Authored-By` trailer. All design decisions, the code and this text were reviewed by the team, and every number in this document is checked against the code by the build script.
+As stated in the project README, AI assistance (Anthropic's Claude) was used during development, including for parts of the code, the tests and this document. Commits made with it carry a `Co-Authored-By` trailer. The git history records who committed each change. Every number in this document is checked against the code by the build script.
 
 ## 2. System architecture
 
@@ -547,7 +547,7 @@ The room creator is the owner; later joiners are editors.
 
 ### 10.4 Lock, kick and other owner controls
 
-*Lock* makes the board read-only for everyone but the owner (ops get `LOCKED`, live previews are not relayed). *Kick* sends `ERROR KICKED`, closes the connection and deletes the session, which also invalidates its resume token. The owner can change the room password at any time (`ROOM_SETTINGS`), make someone a viewer or editor, transfer ownership and pick a presenter.
+*Lock* makes the board read-only for everyone but the owner (ops get `LOCKED`, live previews are not relayed). *Kick* sends `ERROR KICKED`, closes the connection and deletes the session, which also invalidates its resume token. The kicked client id is banned from the room for as long as the server runs, so the same app cannot simply rejoin (`room.banned`, checked in `on_join`). The owner can change the room password at any time (`ROOM_SETTINGS`), make someone a viewer or editor, transfer ownership and pick a presenter.
 
 ### 10.5 Input validation and limits
 
@@ -555,7 +555,7 @@ Every payload is validated before use: types, string lengths, finite numbers wit
 
 ### 10.6 TLS and known limitations
 
-The server can serve TLS 1.2+ (`--tls-cert`, `--tls-key`), and the headless bot can connect with an `SSLContext`. However the desktop client currently uses a plain `QTcpSocket`, so **TLS mode cannot be used with the GUI client** and the room verifier is sent in clear once, when a protected room is created or its password is changed. Because the verifier is the HMAC key, someone who captures it (or reads `room.json`) could join without knowing the password. Other limitations: a kicked user is not banned and may rejoin with a new identity unless the owner locks the room or changes the password; there is no per-address connection throttling. These are listed in §14.
+The server can serve TLS 1.2+ (`--tls-cert`, `--tls-key`), and the headless bot can connect with an `SSLContext`. However the desktop client currently uses a plain `QTcpSocket`, so **TLS mode cannot be used with the GUI client** and the room verifier is sent in clear once, when a protected room is created or its password is changed. Because the verifier is the HMAC key, someone who captures it (or reads `room.json`) could join without knowing the password. Other limitations: the kick ban is per client id and in memory only, so a user who reinstalls or edits their client id can rejoin unless the owner locks the room or changes the password; there is no per-address connection throttling. These are listed in §14.
 
 ## 11. Persistence, saves, history and export
 
@@ -722,21 +722,22 @@ Press <kbd>?</kbd> or <kbd>F1</kbd> for the cheat sheet. Besides the tool keys: 
 
 ### 13.1 Test suite overview
 
-`.venv/bin/python -m pytest -q` runs **266 tests** in about 40 s (all passed on 6 November 2026), headless (`QT_QPA_PLATFORM=offscreen`).
+`.venv/bin/python -m pytest -q` runs **276 tests** in about 40 s (all passed on 6 November 2026), headless (`QT_QPA_PLATFORM=offscreen`).
 
 | File | Tests | What it covers |
 |---|---|---|
 | `test_protocol.py` | 13 | framing: byte-by-byte, many frames per read, split frames, oversize, zero length, bad JSON, multi-part split and assembly |
 | `test_model.py` | 40 | apply/no-ops, clear normalisation, replace, paint order, snapshot and hash, determinism under random op sequences, validation |
 | `test_undo.py` | 8 | own-work-only undo, redo, skip erased objects, keep others' newer changes, batch = one step |
-| `test_server.py` | 43 | room pipeline, permission matrix, rate limit, HASH cadence, dedupe, catch-up vs snapshot, sessions, roles, kick, history caps, persistence and torn lines |
+| `test_server.py` | 44 | room pipeline, permission matrix, rate limit, HASH cadence, dedupe, catch-up vs snapshot, sessions, roles, kick, history caps, persistence and torn lines |
 | `test_integration.py` | 30 | real server + bot clients over TCP: join/errors, passwords, roles, lock, kick, timeouts, lagging, resume, RESYNC, saves, chat, blobs, restart and crash recovery, UDP discovery |
 | `test_convergence.py` | 2 | random concurrent edits with connection drops (§13.2) |
 | `test_net_client.py` | 27 | Qt client: handshake, password retry, fatal errors, reconnect/backoff, PING/RTT, dead link, frame log, Chaos Lab, metrics, discovery |
-| `test_controller.py` | 16 | optimistic apply and ack, duplicates and reorder, gap → RESYNC, rejects, offline replay, hash heal, undo, throttling, multi-part |
+| `test_controller.py` | 17 | optimistic apply and ack, duplicates and reorder, gap → RESYNC, rejects, offline replay, hash heal, undo, throttling, multi-part |
 | `test_e2e_client.py` | 5 | real server thread + real NetClient/SessionController (§13.3) |
-| `test_canvas.py`, `test_geometry.py` | 31 + 28 | tools, rendering, export, images/PDF, RDP, hit tests, Smart Ink |
-| `test_ui_smoke.py`, `test_auth.py` | 22 + 1 | main window, panels, connect dialog, toasts, themes; challenge–response |
+| `test_canvas.py`, `test_geometry.py` | 32 + 28 | tools, rendering, export, images/PDF, RDP, hit tests, Smart Ink |
+| `test_ui_smoke.py`, `test_auth.py` | 26 + 1 | main window, panels, connect dialog, toasts, themes; challenge–response |
+| `test_demo_robustness.py` | 3 | busy port gives a clear error, LAN address listing, reusing only a real LANBoard server |
 
 ### 13.2 Convergence and chaos tests
 
@@ -762,7 +763,7 @@ With three or four laptops on a hotspot and mobile data off: discovery lists the
 
 * **TLS for the desktop client.** The server supports TLS but the GUI client does not (§10.6); a `QSslSocket` with certificate fingerprint pinning would close this, and would also protect the room verifier.
 * **Verifier is password-equivalent.** A SRP/OPAQUE-style protocol would avoid storing and sending an HMAC key.
-* **No ban list.** A kicked user can rejoin under a new identity; a per-room ban by client id/name, or a "new joiners are viewers" option, would help.
+* **Ban list is in memory only.** Kicked client ids are banned until the server restarts; a persistent ban list, or a "new joiners are viewers" option, would be stronger.
 * **Owner offline.** While the owner is disconnected (up to 600 s) nobody can use owner controls.
 * **Host-launched server.** A server started from the client's Host screen ends when that client quits; for long sessions run `lanboard-server` separately.
 * **Single server.** No replication of the server itself; it is a single point of failure (mitigated by the durable log and client reconnects).
@@ -843,7 +844,7 @@ All tunables live in `common/config.py` unless another file is named. The build 
 
 ## Appendix B. Requirements traceability
 
-Every requirement and rubric item of the brief (docs/SPEC.md), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed in §14.
+Every requirement and rubric item of the brief (docs/SPEC.md), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed below the table (B.1–B.5) and in §14.
 
 | Requirement | How we meet it | Code | Tests |
 |---|---|---|---|
@@ -866,28 +867,30 @@ Every requirement and rubric item of the brief (docs/SPEC.md), how LANBoard meet
 | **4.3** Chronological history, username, timestamp | server id + timestamp; 1000 kept, last 200 in JOINED; HH:MM display | `room.on_chat_send`; `ui/chat.format_time` | `test_ui_smoke::test_chat_message_appears`, `test_server::test_chat_is_capped_and_stamped` |
 | **5.1** State representation | objects + ops model with tombstones and rev | `common/model.py` | `test_model` (40) |
 | **5.2** State sync for new clients | JOINED + SNAPSHOT, atomic multi-part | `room.send_snapshot`; `controller._on_snapshot`; `protocol.PartAssembler` | `test_server::test_admit_sends_joined_then_snapshot`, `test_snapshot_split_into_parts`, `test_controller::test_multipart_snapshot_applied_atomically` |
-| **5.3** Recovery after disconnection | resume token + last_seq → OP_BATCH or SNAPSHOT; offline queue **⚠** (see B.1) | `server.on_join` (resume); `room.send_catch_up`; `controller._on_joined`, `_pump_resend` | `test_integration::test_resume_gets_op_batch_and_same_identity`, `test_resume_too_old_gets_snapshot`, `test_e2e_client::test_offline_edits_survive_cut_cable`, `test_controller::test_offline_edits_replayed_on_rejoin` |
+| **5.3** Recovery after disconnection | resume token + last_seq → OP_BATCH or SNAPSHOT; offline queue (B.1, fixed) | `server.on_join` (resume); `room.send_catch_up`; `controller._on_joined`, `_pump_resend` | `test_integration::test_resume_gets_op_batch_and_same_identity`, `test_resume_too_old_gets_snapshot`, `test_e2e_client::test_offline_edits_survive_cut_cable`, `test_controller::test_offline_edits_replayed_on_rejoin` |
 | **5.4** Undo/redo with defined multi-user behaviour | per-user stacks, filtered inverse ops (§6.8) | `common/undo.py`; `controller.undo`, `redo` | `test_undo` (8), `test_controller::test_undo_redo_roundtrip`, `test_clear_sent_as_clear_but_undoable`, `test_e2e_client::test_late_joiner_and_undo_isolation` |
 | **R1** Client–server over TCP/IP, LAN only | central server; no Internet use | `server/server.py`; `client/net.py` | `test_integration`, `test_e2e_client` (no automated "Internet off" test: manual checklist §13.6) |
 | **R2** Message format; transport justified; framing and delivery | §3, §4 | `common/messages.py`, `common/protocol.py` | `test_protocol` (13) |
 | **R3** GUI: canvas, toolbar, participants, chat, session controls | main window and panels | `ui/main_window.py` and `ui/*` | `test_ui_smoke::test_main_window_builds`, `test_tool_buttons_call_canvas` |
 | **R4** Low delay, little traffic | batching, throttling, RDP, NODELAY, deltas, encode once | `controller.send_live`, `send_cursor`; `canvas/tools.PenTool._simplified` | `test_controller::test_live_strokes_batched`, `test_cursor_throttled`, `test_geometry::test_rdp_*`, `test_ui_smoke::test_hud_and_batching_toggle` (no automated latency benchmark) |
 | **R5** Many clients, concurrent ops, no corruption | one event loop, bounded queues, rate limits | `server/server.py`, `server/room.py` | `test_convergence`, `test_integration::test_slow_reader_is_dropped_as_lagging`, stress tool §7.7 |
-| **R6** Access control, protected workspace | password rooms, roles, lock, kick, server-side checks **⚠** (B.2–B.4) | `common/auth.py`; `room.check_permission`, `on_kick`, `on_room_settings` | `test_auth`, `test_integration::test_password_room`, `test_viewer_cannot_edit`, `test_lock_room`, `test_kick`, `test_server::test_admin_requires_owner`, `test_e2e_client::test_password_and_viewer_permissions` |
+| **R6** Access control, protected workspace | password rooms, roles, lock, kick, server-side checks **⚠** (B.2 open; B.3, B.4 fixed) | `common/auth.py`; `room.check_permission`, `on_kick`, `on_room_settings` | `test_auth`, `test_integration::test_password_room`, `test_viewer_cannot_edit`, `test_lock_room`, `test_kick`, `test_server::test_admin_requires_owner`, `test_e2e_client::test_password_and_viewer_permissions` |
 | **R7** Platform | cross-platform; bundles for Windows, Linux, macOS | `packaging/lanboard.spec` | `packaging/smoke_test.py` in CI |
 | Deliverables: server and client executables | PyInstaller one-folder bundle | `packaging/` | smoke test |
 
-**Weaknesses found by this audit** (not fixed here; see the final report):
+**Weaknesses found by this audit, and their status:**
 
-* **B.1** After a resume that is healed with a SNAPSHOT (log tail gone), an op that the server had accepted before the link died stays in the GUI client's `pending` forever: the server's dedupe re-echo has `seq ≤ board.seq` and `controller._on_op` drops it before checking `pending`. The headless bot handles this correctly; the convergence tests use the bot, so the GUI path is untested.
-* **B.2** The desktop client has no TLS; the verifier (an HMAC key) is sent in clear at room creation and password change.
-* **B.3** A kicked user can rejoin immediately with a new identity.
-* **B.4** `ROOM_SETTINGS` applies `locked`/`name`/`password` and then returns early on an invalid `presenter` without broadcasting `ROOM_UPDATE`.
-* **B.5** The server dashboard has no tests.
+* **B.1** *(fixed)* After a resume healed with a SNAPSHOT, an op accepted just before the link died stayed in the GUI client's `pending` list forever. `controller._on_op` now settles the server's de-duplicated re-echo (`test_controller::test_ack_after_snapshot_healed_resume_settles_pending`).
+* **B.2** *(open, documented)* The desktop client has no TLS; the verifier (an HMAC key) is sent in clear at room creation and password change (§10.6, §14).
+* **B.3** *(fixed)* A kicked user could rejoin immediately; kicked client ids are now banned for the server's lifetime (`test_integration::test_kick`).
+* **B.4** *(fixed)* `ROOM_SETTINGS` now validates every field before applying any (`test_server::test_room_settings_validated_before_applying`).
+* **B.5** *(open)* The server dashboard has no automated tests.
 
-## Appendix C. Team contributions and third-party software
+## Appendix C. Areas of responsibility and third-party software
 
-| Member | Main contributions |
+Each member is responsible for understanding, explaining and maintaining one area. Authorship of individual changes is recorded in the git history (see §1.5).
+
+| Member | Area of responsibility |
 |---|---|
 | Yashvanth S (CS24I1029) | server core: listener, connections, rooms, op pipeline, sessions, persistence, history, dashboard |
 | Jeevanandham T (CS24I1035) | protocol and networking: framing, message catalogue, client transport, reconnect, discovery, Chaos Lab, metrics, bot |

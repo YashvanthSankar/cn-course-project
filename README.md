@@ -45,7 +45,7 @@ At startup it prints the LAN address that clients should use. It also answers LA
 
 **Stress test**: `python -m lanboard.tools.bot --port 5050 --room DEMO --bots 8 --seconds 30`
 
-**Tests**: `.venv/bin/python -m pytest -q` (269 tests, including end-to-end runs of the real server and client).
+**Tests**: `.venv/bin/python -m pytest -q` (276 tests, including end-to-end runs of the real server and client).
 
 ## Standalone executables
 ```bash

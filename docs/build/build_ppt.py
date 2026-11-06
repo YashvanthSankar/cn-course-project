@@ -413,7 +413,7 @@ That means no locks: all room state is mutated on one thread, so there are no da
 # 6. Yashvanth contribution ----------------------------------------------------
 def contribution(who, files, decisions, shot=None, crop=None, shot_caption=None, note=""):
     name, roll, area, col = TEAM[who]
-    s = content_slide(f"My contribution: {area}", who, f"{name} · {roll}")
+    s = content_slide(f"My area: {area}", who, f"{name} · {roll}")
     text(s, 0.6, 1.65, 5.6, 0.35, "Key files", size=15, bold=True, color=col)
     mono_box(s, 0.6, 2.05, 5.6, 0.27 * len(files) + 0.35, files, size=11)
     y = 2.05 + 0.27 * len(files) + 0.55
@@ -959,7 +959,7 @@ so they never block drawing. Dark mode is a full theme: Qt stylesheet, painted i
 
 # 27. testing -----------------------------------------------------------------------------------
 s = content_slide("Testing", None, "pytest + pytest-asyncio, real server and real client in the loop")
-stat(s, 0.6, 1.6, 2.9, "269", "tests, all passing (≈40 s)", big_size=40)
+stat(s, 0.6, 1.6, 2.9, "276", "tests, all passing (≈40 s)", big_size=40)
 stat(s, 3.7, 1.6, 2.9, "14", "test modules: protocol → UI", big_size=40, color=VIOLET)
 stat(s, 6.8, 1.6, 2.9, "6 bots", "random concurrent edits + random disconnects converge", big_size=32, color=GREEN)
 stat(s, 9.9, 1.6, 2.83, "8 bots", "stress run: 1,771 ops, ALL REPLICAS CONVERGED", big_size=32, color=CYAN)
@@ -973,7 +973,7 @@ for i, (h, d) in enumerate(layers):
     text(s, 3.0, y + 0.17, 9.7, 0.4, d, size=13, color=TEXT2)
 mono_box(s, 0.6, 6.35, 12.13, 0.5, ["$ python -m lanboard.tools.bot --port 47811 --room PERF8 --bots 8 --rate 20 --seconds 12   →   ALL REPLICAS CONVERGED"], size=11)
 notes(s, """
-Any member (suggest Yashvanth). 269 tests pass in about 40 seconds. They cover each layer: the codec including split
+Any member (suggest Yashvanth). 276 tests pass in about 40 seconds. They cover each layer: the codec including split
 and merged reads, the model and undo rules, the server room pipeline and persistence crash cases, integration tests
 with headless bots over real TCP, and client tests that drive the real NetClient, controller and widgets offscreen.
 The convergence test runs six bots editing at random while randomly disconnecting and resuming, and asserts every
