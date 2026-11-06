@@ -403,7 +403,7 @@ class ConnectDialog(QDialog):
         self.discovery = None
         self.server_process: ServerProcess | None = None
         self._result: ConnectParams | None = None
-        self.lan_addresses = lan_ipv4_addresses()
+        self.lan_addresses = lan_ipv4_addresses(lan_only=True)   # VPN/CGNAT only if nothing better
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -543,6 +543,7 @@ class ConnectDialog(QDialog):
         self.port = PortEdit(C.TCP_PORT)
         self.port.setFixedWidth(100)
         self.port.valueChanged.connect(lambda *_: self._update_share())
+        self.port.textEdited.connect(lambda *_: self._host_typed_now("port", self.port.value()))
         hp.addWidget(self.port, 1, 1)
         hp.setColumnStretch(0, 1)
         lay.addLayout(hp)
@@ -562,6 +563,7 @@ class ConnectDialog(QDialog):
         self.room.setPlaceholderText("e.g. K7Q-2MX")
         self.room.setMaxLength(C.MAX_ROOM_CODE)
         self.room.textChanged.connect(lambda *_: self._update_share())
+        self.room.textEdited.connect(lambda t: self._host_typed_now("code", t.strip()))
         code_row.addWidget(self.room, 1)
         self.gen_btn = QToolButton()
         self.gen_btn.setToolTip("Generate a fresh room code")
@@ -612,9 +614,16 @@ class ConnectDialog(QDialog):
         if self.lan_addresses:
             self.lan_hint.setText(f"This computer: {self.lan_addresses[0]}")
 
+        # port / room code the user typed by hand while in host mode; switching to
+        # Host restores these (or the defaults), never a discovered server's values
+        self._host_typed: dict = {"port": None, "code": None}
+        self._mode_ready = False
         self._load_settings(prefill)
         self._build_recents()
         self._on_mode(self.mode.index())
+        if self.is_host_mode():                     # values saved from a previous host session
+            self._host_typed = {"port": self.port.value() or None, "code": self.room.text().strip() or None}
+        self._mode_ready = True
         self.error.setText(error_text)
         self._retheme_icons()
         theme.manager().changed.connect(self._retheme_icons)
@@ -777,9 +786,17 @@ class ConnectDialog(QDialog):
         self.host_wrap.setVisible(host)
         self.host_spacer.setVisible(host)
         self.password.setPlaceholderText("Optional" if host else "Only if protected")
-        if host and not self.room.text().strip():
+        if host and self._mode_ready:
+            # a discovered server's port and room code belong to that server: host fresh
+            self.port.setValue(self._host_typed["port"] or C.TCP_PORT)
+            self.room.setText(self._host_typed["code"] or generate_room_code())
+        elif host and not self.room.text().strip():
             self.room.setText(generate_room_code())
         self._on_start_server(self.start_server.isChecked())
+
+    def _host_typed_now(self, key: str, value) -> None:
+        if self.is_host_mode():
+            self._host_typed[key] = value or None
 
     def _on_start_server(self, on: bool) -> None:
         local = on and self.is_host_mode()

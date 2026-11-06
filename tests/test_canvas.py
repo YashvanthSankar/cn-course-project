@@ -386,6 +386,22 @@ def test_zoom_clamped(view, ctrl):
     assert view.scale_factor() == pytest.approx(0.1)
 
 
+def test_zoom_fit_respects_safe_margins(view, ctrl):
+    """Fit keeps the content clear of the floating palette (left) and style bar (bottom)."""
+    load(ctrl, [rect("a", 0, 0, 1000, 500), rect("b", 1500, 900, 200, 200, z=2)])
+    assert view.safe_margins() == (0, 0, 0, 0)                     # default: whole viewport
+    left, bottom = 90, 120
+    view.set_safe_margins(left, 0, 0, bottom)
+    view.zoom_fit()
+    QTest.qWait(650)                                               # let the camera animation finish
+    r = view.canvas.content_rect()
+    tl, br = view.mapFromScene(r.topLeft()), view.mapFromScene(r.bottomRight())
+    vp = view.viewport().rect()
+    assert tl.x() >= left and tl.y() >= 0
+    assert br.x() <= vp.width() + 1 and br.y() <= vp.height() - bottom + 1
+    view.set_safe_margins(0, 0, 0, 0)
+
+
 # ---------------------------------------------------------------------------
 # preview (time-lapse) and export
 # ---------------------------------------------------------------------------

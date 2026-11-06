@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QFrame, QScrollArea, QVBoxLayout, QWidget
 
 from . import theme
 from .chaos_panel import ChaosPanel
-from .hud import HudPanel, human_bytes
+from .hud import HudPanel, compact_bytes
 from .inspector import InspectorPanel
 from .widgets import Section
 
@@ -35,7 +35,7 @@ class LiveHeader(QWidget):
     def _on_stats(self, s: dict) -> None:
         msgs = (s.get("msgs_in", 0) or 0) + (s.get("msgs_out", 0) or 0)
         byts = (s.get("bytes_in", 0) or 0) + (s.get("bytes_out", 0) or 0)
-        self.rate = f"{msgs:.0f} msg/s · {human_bytes(byts)}/s"
+        self.rate = f"{msgs:.0f} msg/s · {compact_bytes(byts)}/s"
         self._blink = True
         self.update()
         QTimer.singleShot(350, self._unblink)
@@ -67,8 +67,13 @@ class LiveHeader(QWidget):
         p.setFont(theme.mono_font(11))
         p.setPen(QColor(255, 255, 255, 215))
         line = QRectF(r.left() + 14, r.top() + 29, r.width() - 28, 18)
-        p.drawText(line, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, f"TCP {host}:{port}")
-        p.drawText(line, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, self.rate)
+        # rate on the right wins; the endpoint elides into what is left (narrow side panel)
+        fm = p.fontMetrics()
+        rate = fm.elidedText(self.rate, Qt.TextElideMode.ElideRight, int(line.width() * 0.6))
+        rate_w = fm.horizontalAdvance(rate)
+        ep = fm.elidedText(f"TCP {host}:{port}", Qt.TextElideMode.ElideMiddle, int(line.width() - rate_w - 10))
+        p.drawText(line, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, ep)
+        p.drawText(line, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, rate)
         # LIVE chip
         chip = QRectF(r.right() - 70, r.top() + 7, 58, 20)
         p.setPen(Qt.PenStyle.NoPen)

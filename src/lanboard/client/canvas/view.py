@@ -257,6 +257,9 @@ class CanvasView(QGraphicsView):
         self._vp_timer.timeout.connect(self._send_viewport)
         self._anim: QVariantAnimation | None = None
         self._last_zoom = 1.0
+        # viewport pixels hidden by floating overlays (tool palette, style bar,
+        # zoom/minimap); set by the main window, used when framing content
+        self._safe = (0, 0, 0, 0)                  # left, top, right, bottom
 
         # floating status badge ("Preview — seq N", "Following Alice")
         self._badge = QLabel(self)
@@ -809,13 +812,37 @@ class CanvasView(QGraphicsView):
         self.centerOn(center)
         self._view_changed()
 
+    def set_safe_margins(self, left: int, top: int, right: int, bottom: int) -> None:
+        """Viewport pixels covered by floating overlays on each side.
+
+        ``zoom_fit`` (and other content framing) fits the target into the rest,
+        so nothing lands under the tool palette or the style bar. Defaults to 0.
+        """
+        self._safe = tuple(max(0, int(v)) for v in (left, top, right, bottom))
+
+    def safe_margins(self) -> tuple[int, int, int, int]:
+        return self._safe
+
+    def _safe_frame(self, r: QRectF) -> QRectF:
+        """The full view rect that shows scene rect ``r`` fitted and centred inside the safe area."""
+        vp = self.viewport().rect()
+        left, top, right, bottom = self._safe
+        sw, sh = vp.width() - left - right, vp.height() - top - bottom
+        if sw < 80 or sh < 80 or r.width() <= 0 or r.height() <= 0:
+            return r                                     # overlays cover (nearly) everything: plain fit
+        s = max(MIN_ZOOM, min(MAX_ZOOM, min(sw / r.width(), sh / r.height())))
+        # shift the centre so r's centre lands on the safe area's centre, not the viewport's
+        c = r.center() - QPointF((left - right) / 2 / s, (top - bottom) / 2 / s)
+        w, h = vp.width() / s, vp.height() / s
+        return QRectF(c.x() - w / 2, c.y() - h / 2, w, h)
+
     def zoom_fit(self) -> None:
         self._user_navigated()
         r = self.canvas.content_rect()
         if r.isNull() or r.isEmpty():
             self.zoom_reset()
             return
-        self.animate_to(r.adjusted(-60, -60, 60, 60))
+        self.animate_to(self._safe_frame(r.adjusted(-60, -60, 60, 60)))
 
     def zoom_reset(self) -> None:
         self._user_navigated()
@@ -1053,7 +1080,7 @@ class CanvasView(QGraphicsView):
             self.ctrl.submit(chunk[0] if len(chunk) == 1 else {"k": "batch", "ops": chunk})
         self._notice("info", f"Imported {len(ops)} page(s) from {os.path.basename(path)}")
         if first is not None:
-            self.animate_to(first.adjusted(-40, -40, 40, 40))
+            self.animate_to(self._safe_frame(first.adjusted(-40, -40, 40, 40)))
         return True
 
     # =========================================================================

@@ -22,8 +22,13 @@ synced     In sync · seq N                      green
 pending    Syncing · k pending                  amber
 healing    Healing · resyncing                  blue
 mismatch   Mismatch · healing                   blue
-offline    Offline · edits queued               red
+offline    Offline · N edits queued             red   (pending edits, after a join)
+offline    Offline                              red   (nothing queued / never joined)
+connecting Connecting… / Signing in…            blue  (before the first join or retrying)
 =========  ===================================  =====
+
+The main window adds ``conn`` (the connection state) and ``joined_once`` to
+the dict so the offline case can tell "still connecting" from "dropped".
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ from . import theme
 from .widgets import vsep
 
 STATE_TOKEN = {"synced": "success", "pending": "warn", "healing": "info", "mismatch": "info",
-               "offline": "danger"}
+               "offline": "danger", "connecting": "info"}
 
 
 def sync_text(status: dict) -> tuple[str, str]:
@@ -53,10 +58,17 @@ def sync_text(status: dict) -> tuple[str, str]:
         return "healing", "Healing · resyncing"
     if state == "mismatch":
         return "mismatch", "Mismatch · healing"
-    text = "Offline · edits queued"
-    if pending:
-        text += f" ({pending})"
-    return "offline", text
+    conn = str(status.get("conn", "") or "")
+    if pending and status.get("joined_once"):
+        # only edits made while joined can be queued for replay
+        return "offline", f"Offline · {pending} edit{'s' if pending != 1 else ''} queued"
+    if conn == "connecting":
+        return "connecting", "Connecting…"
+    if conn == "authenticating":
+        return "connecting", "Signing in…"
+    if conn == "reconnecting":
+        return "connecting", "Reconnecting…"
+    return "offline", "Offline"
 
 
 def readable_on(bg: QColor) -> QColor:

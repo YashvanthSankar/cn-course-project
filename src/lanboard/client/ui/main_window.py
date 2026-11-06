@@ -83,6 +83,8 @@ class MainWindow(QMainWindow):
         self.settings = settings or QSettings()
         self.lan_addresses = list(lan_addresses or [])
         self._conn_state = "idle"
+        self._joined_once = False                  # sync badge: "edits queued" only after a join
+        self._last_sync: dict | None = None
         self._was_reconnecting = False
         self._ending = False
         self._hosting_announced = False
@@ -438,7 +440,34 @@ class MainWindow(QMainWindow):
             if not collide and bar_visible and x + bw + 8 > w - EDGE - mm.width():
                 my = min(my, bar_top - 10 - mm.height())                 # lift it above the style bar
             mm.move(w - EDGE - mm.width(), my)
+        self._update_safe_margins(bar_visible, bar_top)
         self.toasts.relayout()
+
+    def _update_safe_margins(self, bar_visible: bool, bar_top: int) -> None:
+        """Tell the canvas which edges the overlays cover, so Fit frames content clear of them.
+
+        The palette insets the left edge and the style bar the bottom. The zoom
+        controls + minimap sit in the bottom-right corner: that block insets
+        whichever edge (right or bottom) costs the smaller share of the view.
+        """
+        fn = getattr(self.canvas, "set_safe_margins", None)
+        if fn is None:
+            return
+        w, h = self.stage.width(), self.stage.height()
+        s, gap = FloatingCard.SHADOW, 8
+        left = self.rail.x() + self.rail.width() - s + gap if self.rail.isVisible() else 0
+        bottom = h - bar_top + gap if bar_visible else 0
+        right = 0
+        corner = [c for c in (self.zoom_controls, self.minimap) if c is not None and c.isVisible()]
+        if corner and w > 0 and h > 0:
+            cx = min(c.x() for c in corner)
+            cy = min(c.y() for c in corner)
+            cw, ch = w - cx + gap, h - cy + gap
+            if cw / w < max(0, ch - bottom) / h:
+                right = cw
+            else:
+                bottom = max(bottom, ch)
+        fn(left, 0, right, bottom)
 
     def _update_style_context(self, *_args) -> None:
         tool = self.rail.current_tool()
@@ -588,11 +617,19 @@ class MainWindow(QMainWindow):
             self._known_people = now
 
     def on_sync_status(self, st: dict) -> None:
-        self.topbar.set_sync(st)
+        self._last_sync = dict(st)
+        self._render_sync()
         self.status_labels["seq"].setText(f"seq {st.get('seq', 0)}")
         h = st.get("hash")
         self.status_labels["hash"].setText(f"#{str(h)[:8]}" if h else "")
         self.status_labels["pending"].setText(f"{st.get('pending', 0)} pending")
+
+    def _render_sync(self) -> None:
+        """The badge text depends on the connection state too (connecting vs offline)."""
+        st = dict(getattr(self, "_last_sync", None) or {"state": "offline", "seq": 0, "pending": 0})
+        st["conn"] = self._conn_state
+        st["joined_once"] = self._joined_once
+        self.topbar.set_sync(st)
 
     def on_undo_state(self, can_undo: bool, can_redo: bool) -> None:
         self._can_undo, self._can_redo = bool(can_undo), bool(can_redo)
@@ -619,7 +656,9 @@ class MainWindow(QMainWindow):
 
     def on_connection_state(self, state: str) -> None:
         prev, self._conn_state = self._conn_state, state
+        self._joined_once = self._joined_once or state == "joined"
         self._set_status_state(state)
+        self._render_sync()
         host = f"{getattr(self.net, 'host', '')}:{getattr(self.net, 'port', '')}"
         if state in ("connecting", "authenticating"):
             if prev == "reconnecting":

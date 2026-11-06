@@ -297,9 +297,42 @@ def test_sync_badge_changes(env):
     assert badge._pulse.state() == badge._pulse.State.Running          # pulses while not in sync
     env.ctl.sync_status.emit({"state": "mismatch", "seq": 43, "pending": 0})
     assert badge.text() == "Mismatch · healing" and badge.property("state") == "mismatch"
+    env.ctl.connection_state.emit("joined")
+    env.ctl.connection_state.emit("closed")
     env.ctl.sync_status.emit({"state": "offline", "seq": 43, "pending": 2})
-    assert badge.text().startswith("Offline · edits queued")
+    assert badge.text() == "Offline · 2 edits queued"
     assert env.win.status_labels["pending"].text() == "2 pending"
+
+
+def test_overlays_report_safe_margins_to_canvas(env):
+    """Fit must not land content under the tool palette or the style bar."""
+    env.win.resize(1440, 900)
+    env.win.show()
+    env.app.processEvents()
+    env.win._place_overlays()
+    left, top, right, bottom = env.canvas.last("set_safe_margins")
+    rail = env.win.rail
+    assert left >= rail.x() + rail.width() - 20 and top == 0
+    bar = env.win.style_bar
+    if bar.isVisible():
+        assert bottom >= env.win.stage.height() - bar.y() - 20
+    assert right >= 0 and bottom >= 0
+
+
+def test_sync_badge_before_first_join(env):
+    """Connecting / at the password prompt nothing is queued: no "edits queued" text."""
+    from lanboard.client.ui.topbar import sync_text
+    badge = env.win.topbar.badge
+    env.ctl.sync_status.emit({"state": "offline", "seq": 0, "pending": 0})
+    env.ctl.connection_state.emit("connecting")
+    assert badge.text() == "Connecting…"
+    env.ctl.connection_state.emit("authenticating")
+    assert badge.text() == "Signing in…" and "queued" not in badge.text()
+    env.ctl.connection_state.emit("closed")
+    assert badge.text() == "Offline"
+    # pending edits only count as queued once the client has been joined
+    assert sync_text({"state": "offline", "pending": 3, "conn": "connecting"})[1] == "Connecting…"
+    assert sync_text({"state": "offline", "pending": 1, "joined_once": True})[1] == "Offline · 1 edit queued"
 
 
 def test_inspector_ring_buffer_is_fast(qapp):
@@ -452,6 +485,9 @@ def test_connect_dialog_builds_and_validates(qapp, settings):
 
     dlg.mode.set_index(1)                                # host mode
     assert dlg.ok_btn.text() == "Create room" and not dlg.gen_btn.isHidden()
+    # hosting never inherits the discovered server's port / room code
+    from lanboard.common import config as C
+    assert dlg.port.value() == C.TCP_PORT and dlg.room.text() != "ABC-123"
     dlg.room.clear()
     dlg.gen_btn.click()
     assert ROOM_CODE_RE.match(dlg.room.text()) and len(dlg.room.text()) == 7
@@ -478,6 +514,32 @@ def test_connect_dialog_builds_and_validates(qapp, settings):
     dlg2.close()
     assert not dlg2.hero._timer.isActive()                # animation stops when hidden
     dlg2.deleteLater()
+
+
+def test_connect_dialog_host_mode_resets_unless_typed(qapp, settings):
+    from PySide6.QtTest import QTest
+
+    from lanboard.client.ui.connect_dialog import ConnectDialog
+    from lanboard.common import config as C
+    disc = FakeDiscovery()
+    dlg = ConnectDialog(discovery=disc, settings=settings)
+    server = {"server_id": "s9", "name": "Other", "host": "10.0.0.9", "port": 62197, "proto": 1,
+              "last_seen": 0, "rooms": [{"code": "CN-2026", "name": "Other room", "users": 1}]}
+    disc.servers_changed.emit([server])
+    dlg._on_tree_click(dlg.tree.topLevelItem(0).child(0))
+    assert (dlg.port.value(), dlg.room.text()) == (62197, "CN-2026")
+    dlg.mode.set_index(1)
+    assert dlg.port.value() == C.TCP_PORT and dlg.room.text() not in ("", "CN-2026")
+    # values typed by hand in host mode survive a round trip through join mode
+    dlg.port.clear()
+    QTest.keyClicks(dlg.port, "6001")
+    dlg.room.clear()
+    QTest.keyClicks(dlg.room, "MY-ROOM")
+    dlg._on_tree_click(dlg.tree.topLevelItem(0).child(0))   # back to join with the other server
+    assert dlg.mode.index() == 0 and dlg.port.value() == 62197
+    dlg.mode.set_index(1)
+    assert (dlg.port.value(), dlg.room.text()) == (6001, "MY-ROOM")
+    dlg.deleteLater()
 
 
 def test_theme_icons_and_dark_mode(qapp):
@@ -617,3 +679,13 @@ def test_deleted_window_ignores_theme_switch(qapp, settings, monkeypatch):
     theme.apply_theme(qapp, "dark")
     theme.apply_theme(qapp, "light")
     assert not errors
+
+
+def test_lan_addresses_prefer_private_ranges():
+    from lanboard.client.ui.server_launcher import address_rank, prefer_lan
+    assert address_rank("100.102.57.102") == 4                     # CGNAT / Tailscale: kept, ranked last
+    assert address_rank("172.40.0.1") == 4                         # outside 172.16/12: not private
+    assert address_rank("192.168.1.9", virtual=True) == 5
+    addrs = ["100.102.57.102", "10.1.2.3", "192.168.1.9", "192.168.56.1"]
+    assert prefer_lan(addrs, virtual={"10.1.2.3"}) == ["192.168.1.9"]
+    assert prefer_lan(["100.102.57.102", "192.168.56.1"]) == ["100.102.57.102", "192.168.56.1"]   # fallback

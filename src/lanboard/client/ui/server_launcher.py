@@ -18,6 +18,7 @@ Every started process is registered and terminated when the app quits.
 from __future__ import annotations
 
 import atexit
+import ipaddress
 import os
 import socket
 import subprocess
@@ -43,10 +44,50 @@ def _is_virtual(iface: QNetworkInterface) -> bool:
     return any(h in names for h in _VIRTUAL_HINTS)
 
 
-def lan_ipv4_addresses() -> list[str]:
+def address_rank(addr: str, virtual: bool = False) -> int:
+    """Sort key for an IPv4 address: 0-3 are private LAN ranges, 4-5 are not.
+
+    0 = 192.168/16, 1 = 10/8, 2 = 172.16/12, 3 = 172.17-18 (often Docker bridges),
+    4 = CGNAT 100.64/10 (Tailscale & co.), public and anything else,
+    5 = virtual adapters (VM / container / VPN) and VirtualBox host-only 192.168.56/24.
+    """
+    try:
+        ip = ipaddress.IPv4Address(addr)
+    except ValueError:
+        return 5
+    if virtual or ip in ipaddress.IPv4Network("192.168.56.0/24"):
+        return 5
+    if ip in ipaddress.IPv4Network("192.168.0.0/16"):
+        return 0
+    if ip in ipaddress.IPv4Network("10.0.0.0/8"):
+        return 1
+    if ip in ipaddress.IPv4Network("172.17.0.0/16") or ip in ipaddress.IPv4Network("172.18.0.0/16"):
+        return 3                                      # usually Docker bridges
+    if ip in ipaddress.IPv4Network("172.16.0.0/12"):
+        return 2
+    return 4                                          # CGNAT/VPN/public last
+
+
+LAN_RANK_MAX = 3                                      # address_rank <= this: a private LAN address
+
+
+def prefer_lan(addrs: list[str], virtual=frozenset()) -> list[str]:
+    """``addrs`` ranked; only the private-LAN ones if there is at least one, else all of them.
+
+    What the Host card and the Invite popover show: a VPN / CGNAT address such as
+    100.102.57.102 is useless to a classmate on the same Wi-Fi when a 192.168.x
+    address exists, but it is still better than nothing.
+    """
+    ranked = sorted(dict.fromkeys(addrs), key=lambda a: (address_rank(a, a in virtual), a))
+    lan = [a for a in ranked if address_rank(a, a in virtual) <= LAN_RANK_MAX]
+    return lan or ranked
+
+
+def lan_ipv4_addresses(lan_only: bool = False) -> list[str]:
     """Non-loopback, non-link-local IPv4 addresses of interfaces that are up.
 
     Physical adapters come first, so ``[0]`` is what the Invite popover shows.
+    With ``lan_only`` the list is filtered by :func:`prefer_lan`.
     """
     out: list[str] = []
     virtual: set[str] = set()
@@ -66,20 +107,10 @@ def lan_ipv4_addresses() -> list[str]:
             out.append(text)
             if _is_virtual(iface):
                 virtual.add(text)
+    if lan_only:
+        return prefer_lan(out, virtual)
     # physical before virtual, then private ranges (typical LANs) first
-    def rank(a: str) -> int:
-        if a in virtual or a.startswith("192.168.56."):    # .56 = VirtualBox host-only
-            return 5
-        if a.startswith("192.168."):
-            return 0
-        if a.startswith("10."):
-            return 1
-        if a.startswith("172.17.") or a.startswith("172.18."):
-            return 3                                  # usually Docker bridges
-        if a.startswith("172."):
-            return 2
-        return 4                                      # CGNAT/VPN/public last
-    out.sort(key=lambda a: (rank(a), a))
+    out.sort(key=lambda a: (address_rank(a, a in virtual), a))
     return out
 
 

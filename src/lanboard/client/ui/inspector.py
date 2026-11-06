@@ -27,7 +27,7 @@ import time
 from collections import deque
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QSyntaxHighlighter, QTextCharFormat
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QSyntaxHighlighter, QTextCharFormat
 from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel, QPlainTextEdit,
                                QSplitter, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QTableView,
                                QToolButton, QVBoxLayout, QWidget)
@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QHBoxLayout, QHeade
 from lanboard.common.messages import EPHEMERAL, MsgType, type_name
 
 from . import theme
-from .widgets import ToggleSwitch
+from .widgets import ElidedLabel, ToggleSwitch
 
 RING_SIZE = 2000
 FLUSH_MS = 100
@@ -62,6 +62,18 @@ def frame_seq(payload) -> str:
     if "last_seq" in payload:
         return f"≥{payload['last_seq']}"
     return ""
+
+
+def chaos_short(tag) -> str:
+    """The Chaos column text: "duplicated, delayed 250 ms" -> "dup +250 ms" (full tag in the tooltip)."""
+    if not tag:
+        return ""
+    return str(tag).replace("duplicated", "dup").replace("delayed ", "+").replace(", ", " ")
+
+
+def frames_text(captured: int, shown: int) -> str:
+    """Short frame counter for the filter row: "115 frames" or "40 of 115"."""
+    return f"{captured:,} frames" if shown == captured else f"{shown:,} of {captured:,}"
 
 
 def _shorten(value, limit: int = 160):
@@ -189,7 +201,12 @@ class FrameModel(QAbstractTableModel):
             if col == 4:
                 return frame_seq(f.get("payload"))
             if col == 5:
-                return f.get("chaos") or ""
+                return chaos_short(f.get("chaos"))
+        elif role == Qt.ItemDataRole.ToolTipRole:
+            if col == 2:
+                return f.get("name") or type_name(f.get("type", 0))
+            if col == 5 and f.get("chaos"):
+                return str(f.get("chaos"))
         elif role == Qt.ItemDataRole.ForegroundRole:
             t = theme.tokens()
             if col == 1:
@@ -323,11 +340,11 @@ class InspectorPanel(QWidget):
         self.hide_switch.setChecked(True)
         self.hide_switch.toggled.connect(self._apply_filter)
         srow.addWidget(self.hide_switch)
-        srow.addStretch(1)
-        self.count_label = QLabel("0 frames")
+        self.count_label = ElidedLabel("0 frames")      # elides instead of clipping at 360-400 px
+        self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.count_label.setProperty("role", "mono")
         self.count_label.setStyleSheet("font-size: 11px;")
-        srow.addWidget(self.count_label)
+        srow.addWidget(self.count_label, 1)
         lay.addLayout(srow)
 
         self.model = FrameModel(RING_SIZE, self)
@@ -347,9 +364,21 @@ class InspectorPanel(QWidget):
         self.table.setAlternatingRowColors(True)
         hh = self.table.horizontalHeader()
         hh.setHighlightSections(False)
-        for col, width in enumerate((90, 18, 80, 40, 40)):
-            hh.resizeSection(col, width)
-        hh.setStretchLastSection(True)
+        # Time / direction / Size / Seq are fixed (mono, sized for typical values);
+        # Type and Chaos share the rest, so nothing runs past the right edge at
+        # 360-400 px. Long cells elide; the full text is in the tooltip.
+        mono = QFontMetrics(theme.mono_font(11))
+        fixed = {0: mono.horizontalAdvance("00:00:00.000") + 12, 1: 18,
+                 3: mono.horizontalAdvance("00,000") + 12, 4: mono.horizontalAdvance("0000") + 12}
+        hh.setMinimumSectionSize(18)
+        hh.setStretchLastSection(False)
+        for col in range(len(COLUMNS)):
+            if col in fixed:
+                hh.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+                hh.resizeSection(col, fixed[col])
+            else:
+                hh.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+        self.table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.table.selectionModel().currentRowChanged.connect(self._show_detail)
 
         self.detail = QPlainTextEdit()
@@ -402,7 +431,7 @@ class InspectorPanel(QWidget):
         sb = self.table.verticalScrollBar()
         follow = sb.value() >= sb.maximum() - 2
         self.model.add_frames(batch)
-        self.count_label.setText(f"{self.total_seen:,} captured · {self.model.rowCount():,} shown")
+        self.count_label.setText(frames_text(self.total_seen, self.model.rowCount()))
         if follow and not self.table.selectionModel().hasSelection():
             self.table.scrollToBottom()
 

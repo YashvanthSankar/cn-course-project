@@ -9,6 +9,7 @@
 * :class:`Banner`: a persistent pill across the top of a widget (e.g. "reconnecting").
 * :class:`Popover`: a card that opens under a button and closes on outside click / Esc.
 * :class:`Section`: a titled block whose body can be collapsed.
+* :class:`ElidedLabel`: a one-line QLabel that elides instead of widening its parent.
 * :func:`hline`, :func:`label`: tiny helpers for building layouts.
 
 All animations are ``QPropertyAnimation`` / ``QVariantAnimation`` of a few
@@ -20,9 +21,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import (QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QRectF, QSize, Qt,
                             QTimer, QVariantAnimation, Signal)
-from PySide6.QtGui import QColor, QIntValidator, QPainter, QPen
+from PySide6.QtGui import QColor, QFontMetrics, QIntValidator, QPainter, QPen
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QGraphicsOpacityEffect,
-                               QHBoxLayout, QLabel, QLineEdit, QPushButton, QToolButton, QVBoxLayout, QWidget)
+                               QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QToolButton, QVBoxLayout,
+                               QWidget)
 
 from . import theme
 
@@ -35,6 +37,53 @@ def label(text: str = "", role: str | None = None, parent: QWidget | None = None
         lab.setProperty("role", role)
     lab.setWordWrap(word_wrap)
     return lab
+
+
+class ElidedLabel(QLabel):
+    """One line of text that shrinks with ``…`` instead of clipping or widening the panel.
+
+    ``text()`` is the full text; when it is elided the tooltip shows all of it.
+    With ``min_px`` the font first shrinks (down to that pixel size) before eliding.
+    """
+
+    def __init__(self, text: str = "", parent: QWidget | None = None,
+                 mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight, min_px: int = 0) -> None:
+        super().__init__(text, parent)
+        self._mode = mode
+        self._min_px = min_px
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(24)
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        super().setText(text)
+        self._sync_tip()
+
+    def resizeEvent(self, ev) -> None:  # noqa: N802
+        super().resizeEvent(ev)
+        self._sync_tip()
+
+    def _sync_tip(self) -> None:
+        cr = self.contentsRect()
+        full = self.text()
+        self.setToolTip(full if self.fontMetrics().horizontalAdvance(full) > cr.width() else "")
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(self.minimumWidth(), super().minimumSizeHint().height())
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        p = QPainter(self)
+        cr = self.contentsRect()
+        font = self.font()
+        if self._min_px and font.pixelSize() > 0:
+            while font.pixelSize() > self._min_px and \
+                    QFontMetrics(font).horizontalAdvance(self.text()) > cr.width():
+                font.setPixelSize(font.pixelSize() - 1)
+        p.setFont(font)
+        fm = QFontMetrics(font)
+        p.setPen(self.palette().color(self.foregroundRole()))
+        p.drawText(cr, int(self.alignment()) | int(Qt.AlignmentFlag.AlignVCenter),
+                   fm.elidedText(self.text(), self._mode, cr.width()))
+        p.end()
 
 
 def hline() -> QFrame:

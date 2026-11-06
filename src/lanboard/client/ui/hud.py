@@ -19,12 +19,12 @@ from collections import deque
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from lanboard.common import config as C
 
 from . import theme
-from .widgets import ToggleSwitch
+from .widgets import ElidedLabel, ToggleSwitch
 
 HISTORY = 60
 
@@ -36,6 +36,21 @@ def human_bytes(n: float) -> str:
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1024
     return f"{n:.1f} GB"
+
+
+def compact_bytes(n: float) -> str:
+    """Like :func:`human_bytes` but at most 3 significant digits ("31 KB", "9.8 MB", "812 B").
+
+    Used where a narrow side panel has to fit two values in one tile.
+    """
+    n = float(n or 0)
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(n) < 1000 or unit == "GB":
+            if unit == "B" or abs(n) >= 10:
+                return f"{n:.0f} {unit}"
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.0f} GB"
 
 
 class Chart(QWidget):
@@ -137,22 +152,20 @@ class Chart(QWidget):
 class MetricTile(QWidget):
     """A headline number on a console card with a coloured accent bar."""
 
-    def __init__(self, caption: str, token: str, parent: QWidget | None = None) -> None:
+    def __init__(self, caption: str, token: str, parent: QWidget | None = None, min_px: int = 0) -> None:
         super().__init__(parent)
         self.token = token
         lay = QVBoxLayout(self)
         lay.setContentsMargins(14, 8, 10, 8)
         lay.setSpacing(1)
-        self.caption = QLabel(caption)
+        self.caption = ElidedLabel(caption)
         self.caption.setProperty("role", "section")
         self.caption.setStyleSheet("font-size: 10px;")
         lay.addWidget(self.caption)
-        self.value = QLabel("–")
+        self.value = ElidedLabel("–", min_px=min_px)    # min_px: shrink this far before eliding
         self.value.setProperty("role", "metric")
         self.value.setStyleSheet("font-size: 16px;")
-        # never let a long value widen the panel: the tile clips instead
-        self.value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        self.caption.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        # never let a long value widen the panel: the tile elides (full text in the tooltip)
         lay.addWidget(self.value)
         self.setMinimumHeight(56)
 
@@ -190,9 +203,9 @@ class HudPanel(QWidget):
         row.setSpacing(8)
         self.metric_labels: dict[str, QLabel] = {}
         self.tiles: dict[str, MetricTile] = {}
-        for key, caption, tok, stretch in (("rtt", "RTT", "chart_rtt", 3), ("pending", "PENDING", "warn", 2),
+        for key, caption, tok, stretch in (("rtt", "RTT", "chart_rtt", 3), ("pending", "PENDING", "warn", 3),
                                            ("total", "TOTAL ↓ / ↑", "chart_in", 4)):
-            tile = MetricTile(caption, tok)
+            tile = MetricTile(caption, tok, min_px=10 if key == "total" else 0)
             tile.setToolTip({"rtt": "Round-trip time of the last PING/PONG",
                              "pending": "Your ops sent but not yet confirmed by the server",
                              "total": "Bytes received / sent on this connection"}[key])
@@ -216,11 +229,11 @@ class HudPanel(QWidget):
                                      "Off: one STROKE_LIVE frame per mouse move. Compare msgs/s!")
         self.batch_switch.toggled.connect(self._set_batching)
         brow.addWidget(self.batch_switch)
-        brow.addStretch(1)
-        self.batch_hint = QLabel(f"flush every {C.LIVE_FLUSH_MS} ms")
+        self.batch_hint = ElidedLabel(f"every {C.LIVE_FLUSH_MS} ms")
+        self.batch_hint.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.batch_hint.setProperty("role", "mono")
         self.batch_hint.setStyleSheet("font-size: 11px;")
-        brow.addWidget(self.batch_hint)
+        brow.addWidget(self.batch_hint, 1)
         lay.addLayout(brow)
 
         net.stats.connect(self.on_stats)
@@ -231,7 +244,7 @@ class HudPanel(QWidget):
 
     def _set_batching(self, on: bool) -> None:
         self.net.batching_enabled = bool(on)
-        self.batch_hint.setText(f"flush every {C.LIVE_FLUSH_MS} ms" if on else "every sample sent")
+        self.batch_hint.setText(f"every {C.LIVE_FLUSH_MS} ms" if on else "every sample")
 
     def on_stats(self, s: dict) -> None:
         self.last_stats = s
@@ -246,7 +259,10 @@ class HudPanel(QWidget):
         if rtt is not None:
             self.metric_labels["rtt"].setText(self._ms(rtt))
         tin, tout = s.get("total_bytes_in", 0), s.get("total_bytes_out", 0)
-        self.metric_labels["total"].setText(f"{human_bytes(tin)} / {human_bytes(tout)}")
+        # compact units so both totals fit the tile at the default 400 px side panel
+        self.metric_labels["total"].setText(f"{compact_bytes(tin)} / {compact_bytes(tout)}")
+        self.tiles["total"].setToolTip(f"Bytes received / sent on this connection\n"
+                                       f"{human_bytes(tin)} / {human_bytes(tout)}")
 
     @staticmethod
     def _ms(ms: float) -> str:
