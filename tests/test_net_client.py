@@ -365,7 +365,7 @@ def test_reconnect_backoff_keeps_retrying_while_server_down(net, server):
     assert wait_until(net.is_joined)
     port = server.port
     server.close()                                # listener gone: connects are refused
-    assert wait_until(lambda: net._attempt >= 4)
+    assert wait_until(lambda: net._attempt >= 4, timeout=30)   # Windows: each refused connect takes ~2 s
     assert net.state == "reconnecting" and not net.errors
     revived = FakeServer(port=port)                    # server comes back on the same port
     try:
