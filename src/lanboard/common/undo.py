@@ -15,6 +15,8 @@ Semantics (documented in docs/TECH.md section 5):
   An entry whose filtered inverse is empty is skipped and the next one is tried,
   so pressing undo always does something visible if anything is undoable.
 * A new user action clears the redo stack (standard branching).
+* ``clear`` is undoable: it is recorded in its normalised form
+  ``delete{ids, clear:true}``, so its inverse restores exactly those ids.
 * A ``replace`` (load/restore version) is not undoable; entries referencing
   objects that no longer exist simply filter out to nothing.
 """
@@ -46,7 +48,7 @@ def inverse(op: dict) -> dict | None:
         if any(p is None for p in parts):
             return None
         return {"k": "batch", "ops": parts}
-    return None                                     # replace / clear(normalised) not undoable
+    return None                                     # replace (and a raw, un-normalised clear)
 
 
 def _same(a: Any, b: Any) -> bool:

@@ -188,8 +188,10 @@ class SessionController(QObject):
     def new_id(self) -> str:
         """Globally unique object id without a round trip.
 
-        ``user_id`` alone is not enough because ids are reused after a server
-        restart, so we add a short per-process random tag.
+        The server never reuses a user id (it persists its user-id counter), so
+        ``user_id`` + counter is already unique. The short per-process tag (first
+        4 chars of ``client_id``) is extra insurance, e.g. against a server whose
+        data directory was wiped.
         """
         self._id_n += 1
         tag = (getattr(self.net, "client_id", "") or "x")[:4]

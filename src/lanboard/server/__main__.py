@@ -57,7 +57,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def make_ssl_context(cert: str, key: str) -> ssl.SSLContext:
-    """Server-side TLS context. Clients pin the certificate fingerprint (self-signed is fine)."""
+    """Server-side TLS context (TLS >= 1.2; a self-signed certificate is fine).
+
+    Only ``tools/bot.py`` can connect over TLS (it takes an ``ssl.SSLContext``,
+    so the caller chooses how to verify the certificate). The desktop client
+    uses plain TCP and cannot join a TLS-enabled server.
+    """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(cert, key)

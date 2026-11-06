@@ -28,10 +28,14 @@ Control
   OP_BATCH     S->C {ops:[OpMsg]}                 catch-up after resume / RESYNC; a long
                catch-up is several OP_BATCH frames (<= 500 ops and ~PART_BYTES each),
                each applied as it arrives (no reassembly needed: ops carry their seq)
-  ERROR        S->C {code, msg, salt?, nonce?}    see ``Err``
-  PING         C->S {t}   PONG S->C {t, server_time}
+  ERROR        S->C {code, msg, salt?, nonce?, hash?}    see ``Err``; salt + nonce come with
+               AUTH_REQUIRED / BAD_PASSWORD, hash (sha256 hex) with image (BLOB_*) errors
+  PING         C->S {t, rtt?}   PONG S->C {t, server_time}
+               rtt = the client's last measured RTT in ms (or null), shown on the dashboard
   LEAVE        C->S {}
-  RESYNC       C->S {last_seq}                    client detected a gap
+  RESYNC       C->S {last_seq}                    client detected a gap; the server answers
+               with OP_BATCH (ops after last_seq) or SNAPSHOT. last_seq -1 = full SNAPSHOT
+               (used to heal a HASH mismatch)
   HASH         S->* {seq, hash}                   consistency checkpoint
 
 Presence / ephemeral (never logged, no seq)

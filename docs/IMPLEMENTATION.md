@@ -7,53 +7,57 @@ piece is built and tested*. Owners are listed in `docs/TODO.md`.
 ```
 cn-course-project/
 ├── README.md
-├── requirements.txt          # runtime deps
+├── pyproject.toml            # package metadata, entry points lanboard-server / lanboard-client
+├── requirements.txt          # runtime deps (PySide6-Essentials/Addons, pypdfium2)
 ├── requirements-dev.txt      # pytest, pytest-asyncio, pyinstaller
 ├── src/lanboard/
 │   ├── common/
-│   │   ├── protocol.py       # frame encode / incremental FrameDecoder, PROTO_VERSION, MAX_FRAME
-│   │   ├── messages.py       # MsgType enum (u8), payload builders + validators
-│   │   ├── model.py          # BoardObject, Board.apply(op) -> Change, tombstones, snapshot()/load()
-│   │   ├── geometry.py       # RDP simplification, hit-testing helpers, bounds
+│   │   ├── protocol.py       # encode(), incremental FrameDecoder, multi-part encode_parts / PartAssembler
+│   │   ├── messages.py       # MsgType enum (u8), Err / Reason codes; docstring = message catalogue
+│   │   ├── model.py          # Board (objects as dicts): normalise / apply(op) / snapshot / hash, validate_op
+│   │   ├── undo.py           # per-user UndoManager, inverse() + applicable() filtering
+│   │   ├── auth.py           # scrypt verifiers, salts, nonces, HMAC proofs, resume tokens
+│   │   ├── geometry.py       # RDP simplification, point rounding, hit-testing helpers, bounds
 │   │   └── config.py         # ports, timeouts, limits (single source of truth)
 │   ├── server/
-│   │   ├── __main__.py       # `python -m lanboard.server --port 5050 [--data DIR] [--dashboard]` (default data dir: per-user app data)
-│   │   ├── server.py         # asyncio.start_server, ClientConnection (reader/writer tasks)
-│   │   ├── room.py           # Room: members, roles, Board, op log, seq, chat, broadcast
-│   │   ├── auth.py           # scrypt hashing, challenge nonces, HMAC verify, resume tokens
-│   │   ├── persistence.py    # snapshot.json + ops.jsonl per room, compaction, named saves
-│   │   ├── discovery.py      # UDP responder for LAN discovery
-│   │   └── metrics.py        # counters (msgs/bytes per client/room)
-│   └── client/
-│       ├── __main__.py       # `python -m lanboard.client`
-│       ├── net.py            # NetClient(QObject): QTcpSocket, FrameDecoder, signals, reconnect, ping
-│       ├── discovery.py      # UDP broadcast probe -> list of servers
-│       ├── controller.py     # BoardController: pending/confirmed model, undo/redo, op submit
-│       ├── canvas/
-│       │   ├── scene.py      # CanvasScene: object id -> QGraphicsItem, incremental updates
-│       │   ├── view.py       # CanvasView: pan/zoom, cursor overlays, follow mode
-│       │   ├── items.py      # StrokeItem, ShapeItem, TextItem, StickyItem, ImageItem
-│       │   └── tools.py      # Pen, Eraser, Line, Arrow, Rect, Ellipse, Text, Sticky, Select
-│       └── ui/
-│           ├── main_window.py
-│           ├── connect_dialog.py   # Nearby servers + manual IP, username, room, password, host/join
-│           ├── toolbar.py          # tools, colour, width, undo/redo, clear
-│           ├── participants.py     # list with colour, role, owner actions
-│           ├── chat.py             # history + input
-│           ├── history.py          # version timeline slider
-│           └── hud.py              # traffic / RTT overlay
-├── tests/
-│   ├── test_protocol.py      # framing edge cases
-│   ├── test_model.py         # apply/undo determinism, conflict rules
-│   ├── test_room.py          # seq, dedupe, roles, reject
-│   └── test_integration.py   # spins up server + N headless asyncio clients
-├── tools/
-│   ├── fake_clients.py       # load generator: N bots scribbling (stress & benchmark)
-│   └── bench_traffic.py      # batching on/off comparison -> CSV for report
+│   │   ├── __main__.py       # `python -m lanboard.server [--host] [--port 5050] [--data DIR] [--name]
+│   │   │                     #   [--no-discovery] [--dashboard] [--tls-cert F --tls-key F] [-v]`
+│   │   ├── server.py         # Server (listener, user-id allocation, housekeeping/watchdog),
+│   │   │                     #   ClientConnection (reader/writer tasks, handshake)
+│   │   ├── room.py           # Room (sequencer: op pipeline, roles, chat, blobs, saves, history), Session
+│   │   ├── persistence.py    # Storage / RoomStore: snapshot.json + ops.jsonl + history archive, saves, blobs
+│   │   ├── discovery.py      # UDP responder for LAN discovery, local address helpers
+│   │   └── dashboard.py      # live terminal dashboard (--dashboard)
+│   ├── client/
+│   │   ├── __main__.py       # `python -m lanboard.client`
+│   │   ├── net.py            # NetClient(QObject): QTcpSocket, FrameDecoder, handshake, reconnect, ping
+│   │   ├── discovery.py      # DiscoveryBrowser: UDP broadcast probe -> list of servers
+│   │   ├── controller.py     # SessionController: confirmed board + pending view, undo/redo, op submit
+│   │   ├── chaos.py          # FaultInjector (Chaos Lab): delay/jitter/duplicate/drop inbound frames
+│   │   ├── metrics.py        # traffic counters + RTT for the Network HUD
+│   │   ├── canvas/
+│   │   │   ├── scene.py      # CanvasScene: object id -> QGraphicsItem, incremental updates
+│   │   │   ├── view.py       # CanvasView: pan/zoom, cursor overlays, follow mode, board theme, grid
+│   │   │   ├── items.py      # StrokeItem, ShapeItem, TextItem, StickyItem, ImageItem + overlay items
+│   │   │   ├── tools.py      # Pen, Highlighter, Eraser, Shape (line/arrow/rect/ellipse), Text, Sticky,
+│   │   │   │                 #   Select, Laser, Pan
+│   │   │   └── minimap.py    # Minimap and ZoomControls overlays
+│   │   └── ui/               # main_window, connect_dialog, server_launcher, topbar, toolbar, side_panel,
+│   │                         #   participants, chat, history, network_panel, hud, inspector, chaos_panel,
+│   │                         #   dialogs, overlays, widgets, theme
+│   └── tools/
+│       └── bot.py            # headless bot client + stress test (`python -m lanboard.tools.bot`)
+├── tests/                    # conftest.py + test_auth, test_canvas, test_controller, test_convergence,
+│                             #   test_demo_robustness, test_e2e_client, test_geometry, test_integration,
+│                             #   test_model, test_net_client, test_protocol, test_server, test_ui_smoke,
+│                             #   test_undo
 ├── packaging/
-│   ├── server.spec
-│   └── client.spec
-└── docs/                     # SPEC, IDEA, TECH, IMPLEMENTATION, TODO, RESEARCH, spec PDF
+│   ├── lanboard.spec         # PyInstaller: both executables into dist/LANBoard/
+│   ├── server_entry.py, client_entry.py
+│   ├── smoke_test.py         # runs the frozen bundle (server + headless client + bots)
+│   └── make_release.py       # assembles the submission zip
+├── .github/workflows/build.yml   # Windows/Linux/macOS: tests -> build -> smoke test -> artifact
+└── docs/                     # SPEC, IDEA, TECH, IMPLEMENTATION, CLIENT_API, TODO, RESEARCH, spec PDF
 ```
 
 ## 2. Module details
@@ -63,76 +67,90 @@ cn-course-project/
   where `body = json.dumps(payload, separators=(",", ":")).encode()`.
 - `class FrameDecoder`: `feed(data: bytes) -> list[tuple[int, dict]]`. Internal `bytearray` buffer;
   loops while ≥ 4 bytes and full frame available; raises `ProtocolError` on oversize/invalid JSON.
-- Server side can use the same decoder (`await reader.read(65536)` → `feed`) so both ends share one
+- The server uses the same decoder (`await reader.read(READ_CHUNK)` → `feed`) so both ends share one
   tested implementation.
 - Tests: byte-by-byte feeding, 3 frames in one chunk, a frame split across 3 chunks, oversize,
   bad UTF-8.
 
-### 2.2 `common/model.py` (Yashvanth + Akula)
+### 2.2 `common/model.py` + `common/undo.py` (Yashvanth + Akula)
 ```python
-@dataclass
-class BoardObject:
-    id: str; type: str; owner: str; z: int
-    style: dict          # color, width, fill, font…
-    geom: dict           # pts / x,y,w,h / x1,y1,x2,y2 / text / image_ref
-    deleted: bool = False
-    rev: int = 0         # seq of last change (for stale-update detection)
-
+# an object is a plain dict:
+#   {id, type, owner, z, style:{…}, geom:{pts | x,y,w,h | x1,y1,x2,y2 | text | blob},
+#    off:[dx,dy], deleted:bool, rev:int (seq of its last change)}
 class Board:
-    objects: dict[str, BoardObject]
-    def apply(self, op: dict, seq: int) -> Change | None   # None = no-op (e.g. delete of tombstone)
-    def inverse(self, op: dict) -> dict                    # for undo
-    def snapshot(self) -> dict; @classmethod load(d) -> Board
+    objects: dict[str, dict]; seq: int
+    def normalise(self, op: dict, user_id: str) -> dict    # e.g. clear -> delete{ids, clear:true}
+    def apply(self, op: dict, seq: int | None = None) -> set[str]   # ids changed (empty = no-op)
+    def snapshot(self) -> dict; @classmethod from_snapshot(snap) -> Board
+    def copy(self) -> Board; def hash(self) -> str
+def validate_op(op) -> None                                # raises InvalidOp
+
+# common/undo.py
+def inverse(op) -> dict | None                             # None = not undoable (replace)
+def applicable(op, board) -> dict | None                   # filter an inverse against the board
+class UndoManager: record(op); undo(board); redo(board)
 ```
 - Pure Python, no Qt → used by server, client and tests.
 - Property-based test: random op sequences applied on two Boards in the same order → equal snapshots.
 
 ### 2.3 Server (Yashvanth)
-- `ClientConnection`: `reader_loop` (decode → dispatch), `writer_loop` (drain bounded `asyncio.Queue`),
-  `last_seen` updated on any frame; a room-level `watchdog` task drops connections silent > 15 s.
-- `Room.submit(conn, op_id, op)`:
-  1. permission check (role, lock) → `OP_REJECT`
-  2. dedupe: `op_id in conn.session.accepted_ids` → re-send the original `OP` (idempotent ack)
-  3. validate shape/bounds → `seq += 1` → `board.apply` → append to log → broadcast `OP`
-  4. every 200 ops: `persistence.append`; every 2 000 ops: snapshot + truncate log
-- Sessions outlive connections: `Session(user_id, username, color, role, resume_token, accepted_ids)`
-  is kept for 10 min after disconnect so a reconnect resumes as the same user.
+- `ClientConnection`: `run` (read `READ_CHUNK` → decode → `dispatch`), `_writer_loop` (drain bounded `asyncio.Queue`),
+  `last_seen` updated on any frame; the server's housekeeping task (several times per
+  `CLIENT_TIMEOUT`) drops connections silent > 12 s (`CLIENT_TIMEOUT`).
+- `Room.submit(session, op_id, op)`: joined → permission (role, lock, clear/replace rights) →
+  rate limit → validate → dedupe (`op_id in session.accepted` → re-send the original `OP`,
+  idempotent ack) → normalise → size check (`MAX_OP_BYTES`) → `seq += 1`, `board.apply` →
+  log → broadcast `OP` (+ `HASH` every 25 ops).
+- Persistence: **every** accepted op is appended to `ops.jsonl` before it is broadcast; the board
+  is snapshotted (and `ops.jsonl` compacted into `history.jsonl`) every `AUTOSAVE_EVERY_OPS` (50)
+  ops, or by the housekeeping task once `AUTOSAVE_INTERVAL` (10 s) has passed since the last
+  snapshot and at least one op is unsaved.
+- Sessions outlive connections: `Session(user_id, username, color, role, resume_token, accepted, …)`
+  is kept for `SESSION_TTL` (10 min) after disconnect so a reconnect resumes as the same user.
 - Broadcast never awaits a slow client: `queue.put_nowait`; `QueueFull` → drop that client.
 
 ### 2.4 Client networking (Jeevanandham)
-- `NetClient(QObject)` signals: `connected`, `disconnected`, `message(int, dict)`, `rtt(float)`, `state(str)`.
+- `NetClient(QObject)` signals: `state_changed(str)`, `joined`, `message(int, dict)`, `error(str, str)`,
+  `password_required(str, bool)`, `rtt_changed(float)`, `frame_logged`, `stats` (see CLIENT_API.md).
 - `QTcpSocket.setSocketOption(LowDelayOption, 1)`; `readyRead` → `FrameDecoder.feed`.
-- Reconnect: `QTimer` backoff 0.5 s → 1 → 2 → 4 → max 5 s; on connect send HELLO + JOIN_ROOM with
-  `resume_token` and `last_seq`; then resend all unacked pending ops (server dedupes).
-- Discovery: `QUdpSocket` broadcast `{"t":"DISCOVER"}` to port 5051, collect replies for 1 s.
+- Reconnect: `QTimer` backoff 0.5 s → 1 → 2 → 4 → max 5 s (+ jitter); on connect send HELLO, then
+  JOIN with `resume_token` and `last_seq`; the controller then resends all unacked pending ops
+  (server dedupes).
+- Heartbeat: `PING {t, rtt}` every `PING_INTERVAL` (3 s); RTT from the echoed `t` in `PONG`.
+- Discovery (`DiscoveryBrowser`): `QUdpSocket` sends `{"magic":"LANBOARD_DISCOVER_V1"}` to UDP 5051
+  (limited + directed broadcast + 127.0.0.1) every 2 s; a server not heard from for 6 s is dropped.
 
 ### 2.5 Controller & canvas (Akula)
 - Two layers: **confirmed** `Board` (only server-ordered ops) and **pending** ops (local, unacked).
   Render = confirmed + pending overlay. On echo → pop from pending. On reject → drop + re-render.
-- Undo stack holds `(op, inverse)` for *my confirmed* ops. `undo()` walks back skipping entries whose
-  inverse is a no-op under current state (rules in TECH §5).
+- `UndoManager` records *my* ops when they are submitted (the normalised op). `undo()` walks back,
+  skipping entries whose filtered inverse is empty under the current view (rules in TECH §5).
 - Tools emit ops; never mutate the scene directly → one code path for local and remote changes.
 - Live preview: pen collects points, a 33 ms `QTimer` flushes `STROKE_LIVE`; on release → RDP →
   `OP_SUBMIT add stroke`.
 - Export: `QGraphicsScene.render` onto `QImage` (PNG), `QSvgGenerator` (SVG), `QPdfWriter` (PDF).
 
 ### 2.6 UI (Nithillakrishi)
-- Main window: left toolbar, centre `CanvasView`, right dock tabs (Participants | Chat | History),
-  status bar (connection state, room, role, RTT).
-- Owner context menu on participant: make editor/viewer, kick. Toolbar lock toggle.
-- Chat: `QListView` + model; each row `[HH:MM] username: text`, system messages in grey.
+- Main window: top bar (room, consistency badge, people, session actions), floating tool palette
+  and style bar over the centre `CanvasView` (+ minimap and zoom controls), collapsible right side
+  panel with tabs People | Chat | History | Network.
+- Owner context menu on participant: make editor/viewer, kick. Lock/unlock via the "Lock board"
+  action or the room settings dialog.
+- Chat: `QListView` + `ChatModel` with a bubble delegate; system messages styled separately.
 - History: slider over `seq`; preview builds a temp `Board` from snapshot + ops ≤ N (read-only);
-  "Restore to here" (owner) → server op.
+  "Restore to here" (owner) → `replace` op.
 
 ## 3. Testing strategy
 | Level | What | How |
 |---|---|---|
 | Unit | framing, model apply/inverse, auth | `pytest` |
-| Room logic | seq, dedupe, roles, compaction | `pytest-asyncio`, in-memory fake connections |
-| Integration | 5 headless clients draw concurrently → identical snapshots; kill & resume a client mid-stream | `tests/test_integration.py` |
-| Fault injection | delay/duplicate/drop frames (test-only proxy) → still converges | `tools/flaky_proxy.py` |
+| Unit (client) | controller sync rules, NetClient/chaos/metrics/discovery, canvas, UI smoke | `tests/test_controller.py`, `test_net_client.py`, `test_canvas.py`, `test_ui_smoke.py` (offscreen Qt) |
+| Room logic | seq, dedupe, roles, compaction | `tests/test_server.py` (fake connections, no sockets) |
+| Integration | real TCP server + headless clients; real NetClient + SessionController | `tests/test_integration.py`, `test_e2e_client.py` |
+| Convergence / faults | 6 bots with random concurrent ops, link loss, offline edits, resume → identical board hashes | `tests/test_convergence.py`; manual: Chaos Lab (`client/chaos.py`) |
 | LAN manual | 3–4 laptops, internet off, Wi-Fi pull test | checklist in TODO.md |
-| Performance | msgs/s & bytes/s with batching on/off; RTT p50/p95 with 8 bots | `tools/bench_traffic.py` → charts for PPT |
+| Load | N bots drawing; reports convergence | `python -m lanboard.tools.bot --bots 8 --rate 20 --seconds 30` |
+| Frozen bundle | server + headless client + bots against `dist/LANBoard` | `packaging/smoke_test.py` (also in CI) |
 
 ## 4. Build & run
 ```bash
@@ -141,7 +159,9 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m lanboard.server --port 5050          # host
 python -m lanboard.client                      # each participant
 pytest -q
-pyinstaller packaging/server.spec && pyinstaller packaging/client.spec   # → dist/
+pyinstaller --noconfirm packaging/lanboard.spec   # → dist/LANBoard/{lanboard-server,lanboard-client}
+python packaging/smoke_test.py                    # check the frozen bundle
+python packaging/make_release.py                  # → release/LANBoard_CN_Project_2026.zip
 ```
 
 ## 5. Definition of done (per feature)
