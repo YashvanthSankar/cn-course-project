@@ -54,7 +54,7 @@ def qapp():
     return app
 
 
-def wait_until(pred, timeout: float = 3.0) -> bool:
+def wait_until(pred, timeout: float = 10.0) -> bool:   # generous: slow CI / Windows refused-connect delays
     """Pump the Qt event loop until ``pred()`` is true or ``timeout`` passes."""
     deadline = time.monotonic() + timeout
     while not pred():

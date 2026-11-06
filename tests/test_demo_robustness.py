@@ -1,13 +1,17 @@
 """Demo-day robustness: busy port, LAN address listing, reusing an existing server."""
+import os
 import socket
 import subprocess
 import sys
 import threading
+from pathlib import Path
 
 from lanboard.client.ui.server_launcher import is_lanboard_server
 from lanboard.server.discovery import lan_ipv4_addresses
 
 from test_e2e_client import ServerThread
+
+SRC = Path(__file__).resolve().parents[1] / "src"   # CI runs from a checkout, not an install
 
 
 def test_lan_addresses_are_usable():
@@ -25,7 +29,8 @@ def test_busy_port_gives_clear_error(tmp_path):
         port = blocker.getsockname()[1]
         r = subprocess.run([sys.executable, "-m", "lanboard.server", "--host", "127.0.0.1",
                             "--port", str(port), "--data", str(tmp_path), "--no-discovery"],
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, timeout=30,
+                           env={**os.environ, "PYTHONPATH": str(SRC)})
     assert r.returncode == 2
     assert "Cannot listen" in r.stderr and "Traceback" not in r.stderr
 

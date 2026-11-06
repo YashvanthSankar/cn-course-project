@@ -512,7 +512,10 @@ def test_toasts_stack_top_centre_and_group(env):
     w.toasts.show_grouped("joined", "bob", "joined", window_ms=10)
     w.toasts.show_grouped("joined", "carol", "joined", window_ms=10)
     w.toasts.show_grouped("joined", "dan", "joined", window_ms=10)
-    QTest.qWait(60)
+    for _ in range(200):                                    # burst window closes after 10 ms
+        if "bob, carol and 1 other joined" in w.toasts.texts():
+            break
+        QTest.qWait(10)
     assert "bob, carol and 1 other joined" in w.toasts.texts()
     toast = w.toasts._toasts[0]
     QTest.qWait(300)                                        # glide animation done

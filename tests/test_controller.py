@@ -1,5 +1,6 @@
 """SessionController sync rules, tested against a fake NetClient (no sockets)."""
 import os
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -198,7 +199,9 @@ def test_live_strokes_batched(env):
     for i in range(20):
         ctl.send_live("s1", "#000", 3, [i, i])
     assert not net.of(MsgType.STROKE_LIVE)
-    QTest.qWait(80)
+    deadline = time.monotonic() + 3                       # one 33 ms flush; CI runners can be slow
+    while not net.of(MsgType.STROKE_LIVE) and time.monotonic() < deadline:
+        QTest.qWait(10)
     live = net.of(MsgType.STROKE_LIVE)
     assert len(live) == 1 and len(live[0]["pts"]) == 40
     net.batching_enabled = False
