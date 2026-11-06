@@ -310,6 +310,10 @@ class ClientConnection:
         if room is None:
             self.error(Err.ROOM_NOT_FOUND, f"no room {code!r} on this server")
             return
+        if self.client_id and self.client_id in room.banned:
+            self.error(Err.KICKED, "you were removed from this room by its owner")
+            self.close(Reason.KICKED, flush=True)
+            return
 
         token = p.get("resume_token")
         s = room.by_token.get(token) if isinstance(token, str) else None

@@ -185,6 +185,7 @@ class Session:
         self.role = role
         self.resume_token = resume_token
         self.order = order                      # join order; used for owner promotion
+        self.client_id = ""                     # the app install it last connected from (kick = ban)
         self.conn: Any = None                   # current ClientConnection, None while offline
         self.hand = False
         self.disconnected_at: float | None = time.monotonic()
@@ -241,6 +242,9 @@ class Room:
 
         self.sessions: dict[str, Session] = {}
         self.by_token: dict[str, Session] = {}
+        # client_ids removed by the owner. A kicked client may not rejoin this room
+        # for as long as the server runs (kept in memory only, never persisted).
+        self.banned: set[str] = set()
         self._order = 0
 
         self.chat: deque[dict] = deque(maxlen=C.CHAT_HISTORY_MAX)
@@ -387,6 +391,7 @@ class Room:
         op can be sequenced between the moment the client is registered and
         the moment its catch-up is queued: the client sees a gap-free stream.
         """
+        s.client_id = getattr(conn, "client_id", "") or s.client_id
         s.conn = conn
         s.disconnected_at = None
         conn.session, conn.room = s, self
@@ -803,6 +808,9 @@ class Room:
             self._error(s, Err.FORBIDDEN, "you cannot kick yourself")
             return
         conn = t.conn
+        client_id = t.client_id or (getattr(conn, "client_id", "") if conn else "")
+        if client_id:
+            self.banned.add(client_id)             # kick = ban: no instant rejoin
         if conn is not None:
             # detach first so closing the socket does not broadcast "disconnected"
             t.conn = None
@@ -815,34 +823,34 @@ class Room:
     def on_room_settings(self, s: Session, p: dict) -> None:
         if not self._require_owner(s):
             return
+        # Validate every field first, then apply: a bad field must not leave the
+        # room half-changed with no ROOM_UPDATE telling anyone what changed.
+        if "locked" in p and not isinstance(p["locked"], bool):
+            raise BadMessage("locked must be a bool")
+        if "editors_can_clear" in p and not isinstance(p["editors_can_clear"], bool):
+            raise BadMessage("editors_can_clear must be a bool")
+        if "presenter" in p and p["presenter"] is not None and p["presenter"] not in self.sessions:
+            self._error(s, Err.NOT_FOUND, "presenter is not in this room")
+            return
+        name = clean_text(get_str(p, "name", 256), 64) if "name" in p else ""
+        pw = clean_password(p["password"]) if "password" in p else None
+
         notes: list[str] = []
-        if "locked" in p:
-            if not isinstance(p["locked"], bool):
-                raise BadMessage("locked must be a bool")
-            if p["locked"] != self.locked:
-                self.locked = p["locked"]
-                notes.append(f"{s.username} {'locked' if self.locked else 'unlocked'} the board")
-        if "name" in p:
-            name = clean_text(get_str(p, "name", 256), 64)
-            if name and name != self.name:
-                self.name = name
-                notes.append(f"{s.username} renamed the room to {name!r}")
+        if "locked" in p and p["locked"] != self.locked:
+            self.locked = p["locked"]
+            notes.append(f"{s.username} {'locked' if self.locked else 'unlocked'} the board")
+        if name and name != self.name:
+            self.name = name
+            notes.append(f"{s.username} renamed the room to {name!r}")
         if "editors_can_clear" in p:
-            if not isinstance(p["editors_can_clear"], bool):
-                raise BadMessage("editors_can_clear must be a bool")
             self.editors_can_clear = p["editors_can_clear"]
         if "password" in p:
-            pw = clean_password(p["password"])
             was = self.protected
             self.salt, self.verifier = pw if pw else (None, None)
             if pw or was:
                 notes.append(f"{s.username} {'set a' if pw else 'removed the'} room password")
         if "presenter" in p:
-            pres = p["presenter"]
-            if pres is not None and pres not in self.sessions:
-                self._error(s, Err.NOT_FOUND, "presenter is not in this room")
-                return
-            self.presenter = pres
+            self.presenter = p["presenter"]
         self._broadcast_room()
         for n in notes:
             self.system_chat(n)

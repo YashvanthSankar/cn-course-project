@@ -275,6 +275,13 @@ async def test_kick_invalidates_session(room):
     assert co.of(MsgType.USER_LEFT)[-1]["reason"] == Reason.KICKED
 
 
+async def test_room_settings_validated_before_applying(room):
+    o, co = join(room, "owner", "owner")
+    await room.handle(o, MsgType.ROOM_SETTINGS, {"locked": True, "name": "New", "presenter": "nobody"})
+    assert co.of(MsgType.ERROR)[-1]["code"] == Err.NOT_FOUND
+    assert room.locked is False and room.name != "New"        # nothing half-applied
+
+
 async def test_room_settings_and_presenter_viewport(room):
     o, co = join(room, "own", "owner")
     e, ce = join(room, "ed")

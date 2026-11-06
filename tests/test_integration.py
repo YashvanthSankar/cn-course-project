@@ -329,10 +329,12 @@ async def test_kick(server):
     await b.wait_until(lambda: not b.connected)              # socket closed by the server
     left = await a.wait_for(MsgType.USER_LEFT)
     assert left["reason"] == Reason.KICKED
-    old_uid = b.user_id
-    await b.connect()                                         # resume token was invalidated
-    assert b.joined["resumed"] is False and b.user_id != old_uid
-    await a.close(); await b.close()
+    with pytest.raises(JoinError) as exc:                     # kick = ban: the same app install
+        await b.connect(timeout=2)                            # cannot simply rejoin
+    assert exc.value.code == Err.KICKED
+    other = await make(server, "bob")                         # a different client still can
+    assert other.joined["resumed"] is False
+    await a.close(); await b.close(); await other.close()
 
 
 # ---------------------------------------------------------------------------

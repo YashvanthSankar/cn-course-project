@@ -533,7 +533,18 @@ class SessionController(QObject):
     def _on_op(self, m: dict) -> None:
         seq = int(m.get("seq", 0))
         if seq <= self.board.seq:
-            return                                   # duplicate: already applied
+            # Duplicate: already applied. But it may still be the ack of one of our own
+            # ops: the server accepted it, the link died before the echo arrived, and the
+            # resume was healed by a SNAPSHOT that already contains it. The server then
+            # de-duplicates our resend and re-echoes the original seq: settle it here,
+            # or it would stay "pending" (and be resent) forever.
+            op_id = m.get("op_id")
+            if op_id in self.pending:
+                self.pending.pop(op_id, None)
+                self._wire.pop(op_id, None)
+                self._rebuild_view()
+                self._emit_sync()
+            return
         if seq > self.board.seq + 1:
             self._reorder[seq] = m                   # gap: hold until predecessors arrive
             if len(self._reorder) > MAX_REORDER:

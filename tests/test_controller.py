@@ -149,6 +149,22 @@ def test_offline_edits_replayed_on_rejoin(env):
     assert len(ctl.board) == 2
 
 
+def test_ack_after_snapshot_healed_resume_settles_pending(env):
+    """Op accepted, echo lost with the link, resume healed by SNAPSHOT, then the dedupe re-echo."""
+    net, ctl, srv, statuses = env
+    ctl.add_object(stroke("a"))
+    sub = net.of(MsgType.OP_SUBMIT)[0]
+    echo = srv.accept(sub["op"], op_id=sub["op_id"])     # server applied it as seq 1 ...
+    net.drop()                                            # ... but the echo never arrived
+    net.sent.clear()
+    net.join()                                            # pending op is resent on rejoin
+    assert [p["op_id"] for p in net.of(MsgType.OP_SUBMIT)] == [sub["op_id"]]
+    net.message.emit(int(MsgType.SNAPSHOT), {"seq": 1, "board": srv.board.snapshot(), "hash": srv.board.hash()})
+    net.message.emit(int(MsgType.OP), echo)               # server de-duplicates and re-echoes seq 1
+    assert not ctl.pending and ctl.view.is_live("a")
+    assert statuses[-1]["state"] == "synced"
+
+
 def test_hash_mismatch_heals(env):
     net, ctl, srv, _ = env
     net.message.emit(int(MsgType.OP), srv.accept({"k": "add", "obj": stroke("a")}, user="u2"))
