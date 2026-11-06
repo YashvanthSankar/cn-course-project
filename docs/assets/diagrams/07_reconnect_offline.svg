@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 570" role="img" aria-label="Reconnect, session resume and offline queue replay">
+  <style>
+    text { font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 12px; fill: #1e293b; }
+    .s { font-size: 11px; fill: #475569; }
+    .b { font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; }
+    .m { font-family: "JetBrains Mono", Menlo, monospace; font-size: 11px; fill: #334155; }
+  </style>
+  <defs>
+    <marker id="d7-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#334155"/></marker>
+    <marker id="d7-ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/></marker>
+    <marker id="d7-at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f766e"/></marker>
+  </defs>
+
+  <!-- participants -->
+  <rect x="110" y="12" width="140" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
+  <text x="180" y="34" class="b" text-anchor="middle">Client (alice, u3)</text>
+  <rect x="450" y="12" width="140" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+  <text x="520" y="34" class="b" text-anchor="middle">Server · room</text>
+  <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
+    <line x1="180" y1="46" x2="180" y2="556"/>
+    <line x1="520" y1="46" x2="520" y2="556"/>
+  </g>
+
+  <!-- client state bar -->
+  <rect x="88" y="54" width="8" height="58" rx="3" fill="#22c55e"/>
+  <rect x="88" y="112" width="8" height="300" rx="3" fill="#f59e0b"/>
+  <rect x="88" y="412" width="8" height="144" rx="3" fill="#22c55e"/>
+  <text x="80" y="70" class="s b" text-anchor="end" style="fill:#15803d">joined</text>
+  <text x="80" y="128" class="s b" text-anchor="end" style="fill:#b45309">reconnecting</text>
+  <text x="80" y="142" class="s" text-anchor="end">banner shown,</text>
+  <text x="80" y="155" class="s" text-anchor="end">board usable</text>
+  <text x="80" y="428" class="s b" text-anchor="end" style="fill:#15803d">joined</text>
+  <text x="80" y="442" class="s" text-anchor="end">(resumed)</text>
+
+  <!-- normal traffic -->
+  <line x1="184" y1="70" x2="516" y2="70" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#d7-ag)" marker-end="url(#d7-ag)"/>
+  <text x="350" y="64" class="s" text-anchor="middle">OP traffic · PING every 3 s ↔ PONG (RTT)</text>
+
+  <!-- link lost -->
+  <path d="M250 100 L290 90 L310 106 L350 92 L370 106 L410 94 L450 104" fill="none" stroke="#dc2626" stroke-width="2"/>
+  <text x="350" y="122" class="s b" text-anchor="middle" style="fill:#b91c1c">link lost: Wi-Fi drop, cable pulled, laptop asleep</text>
+
+  <rect x="104" y="134" width="244" height="44" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+  <text x="112" y="151" class="s">no byte for 12 s (CLIENT_TIMEOUT), FIN, RST</text>
+  <text x="112" y="166" class="s">or socket error → abort socket, backoff</text>
+  <rect x="370" y="134" width="300" height="44" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="378" y="151" class="s">watchdog: silent &gt; 12 s → close; USER_LEFT {timeout}</text>
+  <text x="378" y="166" class="s">Session kept 600 s (SESSION_TTL): token still valid</text>
+
+  <rect x="104" y="190" width="244" height="44" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="112" y="207" class="s">user keeps drawing: ops go to view and</text>
+  <text x="112" y="222" class="s">the pending queue (offline-first)</text>
+
+  <!-- failed attempts -->
+  <line x1="184" y1="252" x2="300" y2="252" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="4 3"/>
+  <path d="M302 246 L312 258 M312 246 L302 258" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"/>
+  <text x="320" y="256" class="s">retry after 0.5 s: refused</text>
+  <line x1="184" y1="274" x2="300" y2="274" stroke="#94a3b8" stroke-width="1.3" stroke-dasharray="4 3"/>
+  <path d="M302 268 L312 280 M312 268 L302 280" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round"/>
+  <text x="320" y="278" class="s">retry after 1 s, then 2, 4, 5, 5 … s</text>
+  <text x="190" y="298" class="s">each delay × random 0.8–1.2 (jitter avoids a thundering herd)</text>
+
+  <!-- successful reconnect -->
+  <line x1="184" y1="324" x2="516" y2="324" stroke="#334155" stroke-width="1.4" marker-end="url(#d7-a)"/>
+  <text x="192" y="318"><tspan class="b">TCP connect → HELLO</tspan><tspan class="s"> (CHALLENGE comes back)</tspan></text>
+  <line x1="184" y1="356" x2="516" y2="356" stroke="#334155" stroke-width="1.4" marker-end="url(#d7-a)"/>
+  <text x="192" y="350"><tspan class="b">JOIN</tspan><tspan class="s"> {room, resume_token, last_seq: 130}</tspan></text>
+  <rect x="370" y="364" width="300" height="34" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="378" y="379" class="s">token → same Session: same user_id, role and op_id</text>
+  <text x="378" y="392" class="s">dedupe table; a half-open old socket is closed</text>
+
+  <line x1="516" y1="416" x2="184" y2="416" stroke="#334155" stroke-width="1.4" marker-end="url(#d7-a)"/>
+  <text x="192" y="410"><tspan class="b">JOINED</tspan><tspan class="s"> {resumed: true, same user_id, role, chat tail}</tspan></text>
+  <line x1="516" y1="448" x2="184" y2="448" stroke="#334155" stroke-width="1.4" marker-end="url(#d7-a)"/>
+  <text x="192" y="442"><tspan class="b">OP_BATCH</tspan><tspan class="s"> {ops 131 … 140} (SNAPSHOT if the tail is gone)</tspan></text>
+  <line x1="184" y1="480" x2="516" y2="480" stroke="#0f766e" stroke-width="1.5" marker-end="url(#d7-at)"/>
+  <text x="192" y="474"><tspan class="b" style="fill:#0f766e">OP_SUBMIT</tspan><tspan class="s"> × pending: in order, sent on JOINED, ≤ 100/s</tspan></text>
+  <rect x="370" y="488" width="300" height="34" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="378" y="503" class="s">op_id already accepted → re-send its original OP;</text>
+  <text x="378" y="516" class="s">new op_id → seq 141, 142 … (never applied twice)</text>
+  <line x1="516" y1="540" x2="184" y2="540" stroke="#334155" stroke-width="1.4" marker-end="url(#d7-a)"/>
+  <text x="192" y="534"><tspan class="b">OP</tspan><tspan class="s"> seq 141, 142 … (echo = ack, pending empties)</tspan></text>
+</svg>

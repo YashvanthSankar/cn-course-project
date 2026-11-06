@@ -1,0 +1,291 @@
+/* Print stylesheet for docs/TECHNICAL_DOCUMENTATION.md (rendered by build_docs.py).
+   A4, Charter body text, Inter for headings / tables / diagrams, JetBrains Mono for code.
+   The @font-face rules are injected by build_docs.py (they need absolute file URLs). */
+
+@page {
+  size: A4;
+  margin: 20mm 18mm 18mm 18mm;
+  @bottom-left {
+    content: "LANBoard · Technical Documentation";
+    font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+    font-size: 7.5pt;
+    color: #94a3b8;
+  }
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+    font-size: 7.5pt;
+    color: #64748b;
+  }
+  @top-right {
+    content: "CN Lab Project 2026";
+    font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+    font-size: 7.5pt;
+    color: #94a3b8;
+  }
+}
+@page cover {
+  margin: 0;
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+  @top-right { content: none; }
+}
+
+:root {
+  --ink: #1e293b;
+  --muted: #475569;
+  --faint: #94a3b8;
+  --rule: #cbd5e1;
+  --accent: #4f46e5;
+  --accent-soft: #eef2ff;
+  --teal: #0d9488;
+  --code-bg: #f6f7f9;
+}
+
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body {
+  font-family: Charter, "Bitstream Charter", Georgia, "Times New Roman", serif;
+  font-size: 10.3pt;
+  line-height: 1.45;
+  color: var(--ink);
+  margin: 0;
+  hyphens: auto;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: lining-nums;
+}
+
+/* ------------------------------------------------------------------ headings */
+h1, h2, h3, h4 {
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+  color: #0f172a;
+  line-height: 1.25;
+  break-after: avoid;
+  hyphens: none;
+}
+h2 {
+  font-size: 19pt;
+  font-weight: 700;
+  margin: 0 0 10pt 0;
+  padding-bottom: 6pt;
+  border-bottom: 2.2pt solid var(--accent);
+  break-before: page;
+}
+h2 .secnum { color: var(--accent); margin-right: 6pt; }
+h3 {
+  font-size: 12.5pt;
+  font-weight: 600;
+  margin: 16pt 0 5pt 0;
+}
+h3 .secnum { color: var(--accent); margin-right: 4pt; }
+h4 {
+  font-size: 10.5pt;
+  font-weight: 600;
+  margin: 11pt 0 3pt 0;
+  color: #334155;
+}
+h2 + h3 { margin-top: 6pt; }
+p { margin: 0 0 6.5pt 0; orphans: 3; widows: 3; }
+ul, ol { margin: 0 0 7pt 0; padding-left: 16pt; }
+li { margin-bottom: 2.2pt; }
+li > p { margin-bottom: 2pt; }
+strong { font-weight: 700; }
+a { color: var(--accent); text-decoration: none; }
+hr { border: 0; border-top: 0.6pt solid var(--rule); margin: 12pt 0; }
+
+/* ------------------------------------------------------------------ code */
+code, pre, kbd {
+  font-family: "JetBrains Mono", Menlo, Consolas, monospace;
+  font-variant-ligatures: none;
+}
+code {
+  font-size: 8.4pt;
+  background: var(--code-bg);
+  border: 0.5pt solid #e5e7eb;
+  border-radius: 2.5pt;
+  padding: 0.3pt 2.4pt;
+  hyphens: none;
+  word-break: break-word;
+}
+pre {
+  font-size: 7.9pt;
+  line-height: 1.42;
+  background: var(--code-bg);
+  border: 0.6pt solid #e2e8f0;
+  border-left: 2.4pt solid var(--accent);
+  border-radius: 3pt;
+  padding: 6pt 8pt;
+  margin: 4pt 0 9pt 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  break-inside: avoid;
+}
+pre code { background: none; border: 0; padding: 0; font-size: inherit; word-break: inherit; }
+kbd {
+  font-size: 7.8pt;
+  border: 0.6pt solid #cbd5e1;
+  border-bottom-width: 1.4pt;
+  border-radius: 2.5pt;
+  padding: 0 2.6pt;
+  background: #fff;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 4pt 0 10pt 0;
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+  font-size: 7.9pt;
+  line-height: 1.35;
+  hyphens: none;
+}
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th {
+  background: #eef2ff;
+  color: #1e1b4b;
+  font-weight: 600;
+  text-align: left;
+  border: 0.6pt solid #c7d2fe;
+  padding: 3.4pt 4.5pt;
+  vertical-align: bottom;
+}
+td {
+  border: 0.6pt solid #dbe1ea;
+  padding: 3pt 4.5pt;
+  vertical-align: top;
+}
+tbody tr:nth-child(even) td { background: #fafbfc; }
+td code, th code { font-size: 7.3pt; padding: 0 1.6pt; }
+table.compact { font-size: 7.4pt; }
+table.compact td, table.compact th { padding: 2.2pt 3.6pt; }
+table.trace td:nth-child(1) { width: 22%; }
+table.trace td:nth-child(2) { width: 34%; }
+table.trace td:nth-child(3) { width: 24%; }
+table.catalogue td:nth-child(1) { width: 6%; white-space: nowrap; }
+table.catalogue td:nth-child(2) { width: 15%; }
+table.catalogue td:nth-child(3) { width: 8%; white-space: nowrap; }
+
+/* ------------------------------------------------------------------ figures */
+figure {
+  margin: 8pt 0 12pt 0;
+  break-inside: avoid;
+  text-align: center;
+}
+figure svg { width: 100%; height: auto; display: block; margin: 0 auto; }
+figure img {
+  max-width: 100%;
+  border: 0.6pt solid #d4d8e0;
+  border-radius: 3pt;
+  display: block;
+  margin: 0 auto;
+}
+figure.narrow img, figure.narrow svg { width: 78%; }
+figure.half img { width: 62%; }
+figcaption {
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+  font-size: 8pt;
+  color: var(--muted);
+  margin-top: 5pt;
+  text-align: center;
+  line-height: 1.35;
+}
+figcaption b { color: var(--ink); }
+
+/* ------------------------------------------------------------------ callouts */
+.note, .warn, .key {
+  border-radius: 3pt;
+  padding: 6pt 9pt;
+  margin: 6pt 0 10pt 0;
+  break-inside: avoid;
+  font-size: 9.6pt;
+}
+.note { background: #f0f9ff; border-left: 2.6pt solid #0284c7; }
+.warn { background: #fffbeb; border-left: 2.6pt solid #d97706; }
+.key  { background: #f0fdf4; border-left: 2.6pt solid #16a34a; }
+.note p:last-child, .warn p:last-child, .key p:last-child { margin-bottom: 0; }
+
+.keep { break-inside: avoid; }
+.pagebreak { break-before: page; }
+
+/* ------------------------------------------------------------------ cover */
+.cover {
+  page: cover;
+  height: 297mm;
+  width: 210mm;
+  box-sizing: border-box;
+  padding: 34mm 22mm 20mm 22mm;
+  position: relative;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(109, 109, 255, 0.16), transparent 55%),
+    radial-gradient(ellipse at 0% 100%, rgba(163, 92, 247, 0.12), transparent 50%),
+    #ffffff;
+  break-after: page;
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+}
+.cover .logo { width: 22mm; height: 22mm; margin-bottom: 12mm; }
+.cover .logo svg { width: 100%; height: 100%; }
+.cover .kicker {
+  font-size: 10pt; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 4mm;
+}
+.cover h1 {
+  font-size: 30pt; font-weight: 700; line-height: 1.12; margin: 0 0 4mm 0; color: #0f172a;
+  letter-spacing: -0.01em;
+}
+.cover .subtitle { font-size: 15pt; color: #334155; margin: 0 0 3mm 0; font-weight: 500; }
+.cover .doc-kind { font-size: 11pt; color: var(--muted); margin-bottom: 16mm; }
+.cover .rule { width: 34mm; height: 1.6mm; background: linear-gradient(90deg, #6d6dff, #a35cf7); border-radius: 1mm; margin: 0 0 12mm 0; }
+.cover table { font-size: 9.6pt; width: 100%; margin-top: 2mm; }
+.cover th { font-size: 8.4pt; background: #eef2ff; }
+.cover td, .cover th { padding: 5pt 7pt; }
+.cover .meta {
+  position: absolute; left: 22mm; right: 22mm; bottom: 20mm;
+  font-size: 9pt; color: var(--muted); line-height: 1.6;
+  border-top: 0.6pt solid var(--rule); padding-top: 4mm;
+}
+.cover .meta b { color: var(--ink); }
+
+/* ------------------------------------------------------------------ table of contents */
+nav.toc { break-after: page; }
+nav.toc h2 { break-before: auto; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; }
+nav.toc li { margin: 0; }
+nav.toc a {
+  display: flex; align-items: baseline; color: var(--ink);
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+}
+nav.toc .lvl2 > a { font-size: 9.8pt; font-weight: 600; margin-top: 5.5pt; }
+nav.toc .lvl3 > a { font-size: 8.6pt; color: #334155; padding-left: 20pt; margin-top: 1.4pt; }
+nav.toc .num { width: 20pt; flex: none; color: var(--accent); }
+nav.toc .lvl3 .num { width: 26pt; color: #64748b; }
+nav.toc .title { flex: none; max-width: 85%; }
+nav.toc .dots { flex: 1; border-bottom: 0.7pt dotted #b6bfcc; margin: 0 4pt; transform: translateY(-2.5pt); }
+nav.toc .page { flex: none; width: 18pt; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ pagination overrides
+   Only the cover, contents, user guide and appendices start on a new page; other sections
+   flow on, so short sections do not leave half-empty pages. */
+h2 { break-before: auto; margin-top: 20pt; }
+#\31 2-user-guide, #appendix-a-configuration-constants, #appendix-b-requirements-traceability,
+#\31 -introduction { break-before: page; margin-top: 0; }
+nav.toc ol { column-count: 2; column-gap: 16pt; }
+nav.toc li.lvl2 { break-after: avoid; }
+nav.toc .lvl2 > a { font-size: 8.8pt; margin-top: 4pt; }
+nav.toc .lvl3 > a { font-size: 7.6pt; padding-left: 12pt; margin-top: 0.8pt; }
+nav.toc .num { width: 16pt; }
+nav.toc .lvl3 .num { width: 22pt; }
+nav.toc .title { max-width: 75%; }
+nav.toc .page { width: 14pt; }
+/* traceability table: fixed column widths */
+#appendix-b-requirements-traceability ~ table { table-layout: fixed; font-size: 7pt; }
+#appendix-b-requirements-traceability ~ table th:nth-child(1) { width: 15%; }
+#appendix-b-requirements-traceability ~ table th:nth-child(2) { width: 25%; }
+#appendix-b-requirements-traceability ~ table th:nth-child(3) { width: 25%; }
+#appendix-b-requirements-traceability ~ table th:nth-child(4) { width: 35%; }
+#appendix-b-requirements-traceability ~ table td code { font-size: 6.6pt; word-break: break-all; }
+/* short identifiers in tables never break mid-token (the traceability table overrides this) */
+td code { white-space: nowrap; word-break: normal; }
+td:last-child code { white-space: normal; }
+#appendix-b-requirements-traceability ~ table td code { white-space: normal; word-break: break-all; }

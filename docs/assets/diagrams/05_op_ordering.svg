@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 520" role="img" aria-label="Op submit, sequence assignment and broadcast-as-ack with a concurrent edit">
+  <style>
+    text { font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 12px; fill: #1e293b; }
+    .s { font-size: 11px; fill: #475569; }
+    .b { font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; }
+    .m { font-family: "JetBrains Mono", Menlo, monospace; font-size: 11px; fill: #334155; }
+  </style>
+  <defs>
+    <marker id="d5-at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f766e"/></marker>
+    <marker id="d5-av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7c3aed"/></marker>
+    <marker id="d5-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4f46e5"/></marker>
+  </defs>
+
+  <!-- participants -->
+  <rect x="30" y="12" width="140" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
+  <text x="100" y="34" class="b" text-anchor="middle">Alice (u3)</text>
+  <rect x="260" y="12" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+  <text x="340" y="34" class="b" text-anchor="middle">Server · Room (sequencer)</text>
+  <rect x="510" y="12" width="140" height="34" rx="8" fill="#f5f3ff" stroke="#7c3aed"/>
+  <text x="580" y="34" class="b" text-anchor="middle">Bob (u5)</text>
+  <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
+    <line x1="100" y1="46" x2="100" y2="350"/>
+    <line x1="340" y1="46" x2="340" y2="350"/>
+    <line x1="580" y1="46" x2="580" y2="350"/>
+  </g>
+
+  <!-- local optimistic edits -->
+  <rect x="14" y="58" width="196" height="38" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="22" y="74" class="s">sets X.color = red, shown at once</text>
+  <text x="22" y="88" class="s">(view = board + pending a:7)</text>
+  <rect x="470" y="58" width="196" height="38" rx="6" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text x="478" y="74" class="s">sets X.color = blue, shown at once</text>
+  <text x="478" y="88" class="s">(view = board + pending b:4)</text>
+
+  <!-- submits (diagonal = time in transit) -->
+  <line x1="102" y1="112" x2="336" y2="142" stroke="#0f766e" stroke-width="1.6" marker-end="url(#d5-at)"/>
+  <text x="112" y="110"><tspan class="b" style="fill:#0f766e">OP_SUBMIT</tspan><tspan class="s"> a:7 · X.color=red</tspan></text>
+  <line x1="578" y1="116" x2="344" y2="150" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#d5-av)"/>
+  <text x="570" y="112" text-anchor="end"><tspan class="b" style="fill:#6d28d9">OP_SUBMIT</tspan><tspan class="s"> b:4 · X.color=blue</tspan></text>
+
+  <!-- server pipeline -->
+  <rect x="222" y="160" width="236" height="62" rx="8" fill="#e0e7ff" stroke="#4f46e5"/>
+  <text x="232" y="177" class="s"><tspan class="b" style="fill:#1e293b">a:7 arrived first.</tspan> joined → permission →</text>
+  <text x="232" y="192" class="s">rate limit → validate → dedupe → <tspan class="b" style="fill:#3730a3">seq 101</tspan></text>
+  <text x="232" y="207" class="s">→ apply → append ops.jsonl → broadcast</text>
+
+  <!-- broadcast 101 -->
+  <line x1="338" y1="232" x2="104" y2="262" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="118" y="240"><tspan class="b" style="fill:#3730a3">OP</tspan><tspan class="s"> seq 101, a:7 (echo = ack)</tspan></text>
+  <line x1="342" y1="232" x2="576" y2="262" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="566" y="240" text-anchor="end"><tspan class="b" style="fill:#3730a3">OP</tspan><tspan class="s"> seq 101, a:7</tspan></text>
+
+  <rect x="282" y="270" width="116" height="24" rx="6" fill="#e0e7ff" stroke="#4f46e5"/>
+  <text x="340" y="286" class="s" text-anchor="middle">b:4 → <tspan class="b" style="fill:#3730a3">seq 102</tspan></text>
+
+  <!-- broadcast 102 -->
+  <line x1="338" y1="304" x2="104" y2="334" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="118" y="312"><tspan class="b" style="fill:#3730a3">OP</tspan><tspan class="s"> seq 102, b:4</tspan></text>
+  <line x1="342" y1="304" x2="576" y2="334" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="566" y="312" text-anchor="end"><tspan class="b" style="fill:#3730a3">OP</tspan><tspan class="s"> seq 102, b:4 (echo = ack)</tspan></text>
+
+  <!-- replica states -->
+  <rect x="14" y="350" width="250" height="56" rx="6" fill="#ffffff" stroke="#5eead4"/>
+  <text x="22" y="367" class="s">after 101: board X red, a:7 leaves pending</text>
+  <text x="22" y="382" class="s">after 102: board X <tspan class="b" style="fill:#2563eb">blue</tspan>, view = board</text>
+  <text x="22" y="397" class="m">board.hash() = H(102)</text>
+  <rect x="416" y="350" width="250" height="56" rx="6" fill="#ffffff" stroke="#c4b5fd"/>
+  <text x="424" y="367" class="s">after 101: board red, view still blue (b:4)</text>
+  <text x="424" y="382" class="s">after 102: board X <tspan class="b" style="fill:#2563eb">blue</tspan>, b:4 leaves pending</text>
+  <text x="424" y="397" class="m">board.hash() = H(102)</text>
+  <text x="340" y="383" class="h" text-anchor="middle" style="fill:#16a34a">identical</text>
+
+  <!-- result -->
+  <rect x="14" y="424" width="652" height="84" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="26" y="443" class="b">Why every replica converges</text>
+  <text x="26" y="460" class="s">The server is the only sequencer: each accepted op gets seq = previous + 1. Every client applies OPs strictly in seq</text>
+  <text x="26" y="475" class="s">order with the same deterministic Board.apply, so equal seq means an equal board. Two edits of one property: the</text>
+  <text x="26" y="490" class="s">later seq wins (last writer in server order). Every 25th seq the server also sends HASH {seq, hash} to prove it.</text>
+</svg>

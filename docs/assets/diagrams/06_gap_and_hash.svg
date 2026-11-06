@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 470" role="img" aria-label="Gap detection with RESYNC and OP_BATCH; hash checkpoint mismatch healed by a full snapshot">
+  <style>
+    text { font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 12px; fill: #1e293b; }
+    .s { font-size: 11px; fill: #475569; }
+    .b { font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; }
+    .m { font-family: "JetBrains Mono", Menlo, monospace; font-size: 10.5px; fill: #334155; }
+  </style>
+  <defs>
+    <marker id="d6-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#334155"/></marker>
+    <marker id="d6-at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f766e"/></marker>
+    <marker id="d6-aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d97706"/></marker>
+  </defs>
+
+  <!-- ===== Panel A ===== -->
+  <rect x="6" y="6" width="328" height="458" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="18" y="26" class="h">A. Missing op: gap → RESYNC → OP_BATCH</text>
+  <rect x="24" y="38" width="96" height="28" rx="7" fill="#f0fdfa" stroke="#0d9488"/>
+  <text x="72" y="56" class="b" text-anchor="middle">Client</text>
+  <rect x="220" y="38" width="96" height="28" rx="7" fill="#eef2ff" stroke="#4f46e5"/>
+  <text x="268" y="56" class="b" text-anchor="middle">Server</text>
+  <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
+    <line x1="72" y1="66" x2="72" y2="372"/>
+    <line x1="268" y1="66" x2="268" y2="372"/>
+  </g>
+
+  <line x1="266" y1="92" x2="76" y2="92" stroke="#334155" stroke-width="1.4" marker-end="url(#d6-a)"/>
+  <text x="170" y="86" class="s" text-anchor="middle"><tspan class="b" style="fill:#1e293b">OP</tspan> seq 57 → applied</text>
+
+  <line x1="266" y1="122" x2="120" y2="122" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <path d="M106 115 L120 129 M120 115 L106 129" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/>
+  <text x="170" y="116" class="s" text-anchor="middle"><tspan class="b" style="fill:#b91c1c">OP</tspan> seq 58 lost</text>
+  <text x="128" y="140" class="s" style="fill:#b91c1c">(e.g. a Chaos Lab drop)</text>
+
+  <line x1="266" y1="164" x2="76" y2="164" stroke="#334155" stroke-width="1.4" marker-end="url(#d6-a)"/>
+  <text x="170" y="158" class="s" text-anchor="middle"><tspan class="b" style="fill:#1e293b">OP</tspan> seq 59</text>
+
+  <rect x="14" y="174" width="190" height="44" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+  <text x="22" y="191" class="s">59 &gt; 57 + 1: hold it in the reorder</text>
+  <text x="22" y="206" class="s">buffer, start the 400 ms gap timer</text>
+
+  <line x1="74" y1="244" x2="264" y2="244" stroke="#0f766e" stroke-width="1.5" marker-end="url(#d6-at)"/>
+  <text x="80" y="238"><tspan class="b" style="fill:#0f766e">RESYNC</tspan><tspan class="s"> {last_seq: 57}</tspan></text>
+  <text x="80" y="258" class="s">(timer expired, 58 never came)</text>
+
+  <line x1="266" y1="290" x2="76" y2="290" stroke="#334155" stroke-width="1.4" marker-end="url(#d6-a)"/>
+  <text x="80" y="284"><tspan class="b">OP_BATCH</tspan><tspan class="s"> {ops: [58, 59]} from history</tspan></text>
+
+  <rect x="14" y="302" width="250" height="58" rx="6" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="22" y="319" class="s">the buffer was cleared when RESYNC left;</text>
+  <text x="22" y="334" class="s">apply 58, then 59 in seq order; any later</text>
+  <text x="22" y="349" class="s">copy with seq ≤ board.seq is a duplicate</text>
+
+  <text x="18" y="394" class="s b" style="fill:#1e293b">Other limits</text>
+  <text x="18" y="410" class="s">more than 256 ops buffered → RESYNC at once</text>
+  <text x="18" y="425" class="s">gap > 5000 ops or older than the history base</text>
+  <text x="18" y="440" class="s">→ the server answers with a SNAPSHOT instead</text>
+  <text x="18" y="455" class="s">OP_BATCH frames: at most 500 ops and ≈ 1 MiB each</text>
+
+  <!-- ===== Panel B ===== -->
+  <rect x="346" y="6" width="328" height="458" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="358" y="26" class="h">B. Hash checkpoint → mismatch → heal</text>
+  <rect x="364" y="38" width="96" height="28" rx="7" fill="#f0fdfa" stroke="#0d9488"/>
+  <text x="412" y="56" class="b" text-anchor="middle">Client</text>
+  <rect x="560" y="38" width="96" height="28" rx="7" fill="#eef2ff" stroke="#4f46e5"/>
+  <text x="608" y="56" class="b" text-anchor="middle">Server</text>
+  <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
+    <line x1="412" y1="66" x2="412" y2="372"/>
+    <line x1="608" y1="66" x2="608" y2="372"/>
+  </g>
+
+  <line x1="606" y1="92" x2="416" y2="92" stroke="#334155" stroke-width="1.4" marker-end="url(#d6-a)"/>
+  <text x="510" y="86" class="s" text-anchor="middle"><tspan class="b" style="fill:#1e293b">OP</tspan> seq 75 → applied</text>
+
+  <line x1="606" y1="124" x2="416" y2="124" stroke="#d97706" stroke-width="1.5" marker-end="url(#d6-aa)"/>
+  <text x="420" y="118"><tspan class="b" style="fill:#b45309">HASH</tspan><tspan class="s"> {seq: 75, hash: "b5dc5e7d…"}</tspan></text>
+  <text x="420" y="140" class="s">every 25th seq, and after a replace</text>
+
+  <rect x="354" y="152" width="250" height="58" rx="6" fill="#fef2f2" stroke="#f87171"/>
+  <text x="362" y="169" class="s">board.hash() at seq 75 ≠ server hash</text>
+  <text x="362" y="184" class="s">→ badge "mismatch", toast "Board diverged</text>
+  <text x="362" y="199" class="s">at seq 75; resynchronising."</text>
+
+  <line x1="414" y1="236" x2="604" y2="236" stroke="#0f766e" stroke-width="1.5" marker-end="url(#d6-at)"/>
+  <text x="420" y="230"><tspan class="b" style="fill:#0f766e">RESYNC</tspan><tspan class="s"> {last_seq: -1}</tspan></text>
+  <text x="420" y="250" class="s">(-1 = "send me everything")</text>
+
+  <line x1="606" y1="282" x2="416" y2="282" stroke="#334155" stroke-width="1.4" marker-end="url(#d6-a)"/>
+  <text x="420" y="276"><tspan class="b">SNAPSHOT</tspan><tspan class="s"> {seq, board:{objects}, hash}</tspan></text>
+
+  <rect x="354" y="294" width="250" height="66" rx="6" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="362" y="311" class="s">replace the confirmed replica, re-apply</text>
+  <text x="362" y="326" class="s">own pending ops on top, verify the hash</text>
+  <text x="362" y="341" class="s">→ badge <tspan class="b" style="fill:#15803d">✓ In sync · seq 75</tspan></text>
+
+  <text x="358" y="394" class="s b" style="fill:#1e293b">How the hash is computed (model.Board.hash)</text>
+  <text x="358" y="410" class="s">SHA-256 over every object (tombstones too), sorted</text>
+  <text x="358" y="425" class="s">by id, as canonical JSON of id, type, owner, z, style,</text>
+  <text x="358" y="440" class="s">geom, off, deleted; the first 16 hex digits are sent.</text>
+  <text x="358" y="455" class="s">It does not depend on arrival order or dict order.</text>
+</svg>

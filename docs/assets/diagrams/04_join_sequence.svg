@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 570" role="img" aria-label="Join and late-join sequence with password challenge">
+  <style>
+    text { font-family: Inter, "Helvetica Neue", Arial, sans-serif; font-size: 12px; fill: #1e293b; }
+    .s { font-size: 11px; fill: #475569; }
+    .b { font-weight: 600; }
+    .h { font-size: 13px; font-weight: 600; }
+    .m { font-family: "JetBrains Mono", Menlo, monospace; font-size: 11px; fill: #334155; }
+  </style>
+  <defs>
+    <marker id="d4-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#334155"/></marker>
+    <marker id="d4-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#dc2626"/></marker>
+    <marker id="d4-ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/></marker>
+  </defs>
+
+  <!-- participants -->
+  <rect x="40" y="12" width="160" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
+  <text x="120" y="34" class="b" text-anchor="middle">Client B (joining)</text>
+  <rect x="340" y="12" width="160" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+  <text x="420" y="34" class="b" text-anchor="middle">Server · room K7Q-2MX</text>
+  <rect x="540" y="12" width="130" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
+  <text x="605" y="34" class="b" text-anchor="middle">Client A (in room)</text>
+  <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
+    <line x1="120" y1="46" x2="120" y2="500"/>
+    <line x1="420" y1="46" x2="420" y2="500"/>
+    <line x1="605" y1="46" x2="605" y2="500"/>
+  </g>
+
+  <!-- 1 TCP -->
+  <line x1="122" y1="82" x2="416" y2="82" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#d4-ag)"/>
+  <text x="132" y="76" class="s">TCP 3-way handshake to :5050 (SYN, SYN-ACK, ACK)</text>
+
+  <!-- 2 HELLO -->
+  <line x1="122" y1="118" x2="416" y2="118" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="132" y="112"><tspan class="b">HELLO</tspan><tspan class="s"> {proto:1, app, username:"bob", client_id}</tspan></text>
+
+  <!-- 3 CHALLENGE -->
+  <line x1="418" y1="154" x2="124" y2="154" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="132" y="148"><tspan class="b">CHALLENGE</tspan><tspan class="s"> {nonce, server_id, server_name, proto}</tspan></text>
+
+  <!-- 4 JOIN without proof -->
+  <line x1="122" y1="190" x2="416" y2="190" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="132" y="184"><tspan class="b">JOIN</tspan><tspan class="s"> {room:"K7Q-2MX", create:false}</tspan></text>
+
+  <!-- 5 AUTH_REQUIRED -->
+  <line x1="418" y1="226" x2="124" y2="226" stroke="#dc2626" stroke-width="1.4" marker-end="url(#d4-ar)"/>
+  <text x="132" y="220"><tspan class="b" style="fill:#b91c1c">ERROR AUTH_REQUIRED</tspan><tspan class="s"> {salt, nonce}</tspan></text>
+
+  <!-- note at B -->
+  <rect x="20" y="238" width="290" height="44" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+  <text x="30" y="256" class="m">verifier = scrypt(password, salt)</text>
+  <text x="30" y="273" class="m">proof = HMAC-SHA256(verifier, nonce)</text>
+
+  <!-- 6 JOIN with proof -->
+  <line x1="122" y1="306" x2="416" y2="306" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="132" y="300"><tspan class="b">JOIN</tspan><tspan class="s"> {room, proof}: the password never leaves B</tspan></text>
+
+  <!-- note at server -->
+  <rect x="428" y="290" width="170" height="58" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="436" y="307" class="s">check_proof(): constant-time</text>
+  <text x="436" y="321" class="s">compare; nonce consumed;</text>
+  <text x="436" y="335" class="s">new session u7, role editor</text>
+
+  <!-- 7 JOINED -->
+  <line x1="418" y1="378" x2="124" y2="378" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="132" y="358"><tspan class="b">JOINED</tspan><tspan class="s"> {user_id:"u7", color, role, resume_token,</tspan></text>
+  <text x="132" y="372" class="s">room, participants, chat tail (200), server_time}</text>
+
+  <!-- 8 SNAPSHOT -->
+  <line x1="418" y1="414" x2="124" y2="414" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="132" y="408"><tspan class="b">SNAPSHOT</tspan><tspan class="s"> {seq:42, board, hash} (parts if &gt; 1 MiB)</tspan></text>
+
+  <!-- 9 USER_JOINED to A -->
+  <line x1="422" y1="446" x2="601" y2="446" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="430" y="440"><tspan class="b">USER_JOINED</tspan><tspan class="s"> {participant}</tspan></text>
+
+  <!-- 10 CHAT system to both -->
+  <line x1="422" y1="478" x2="601" y2="478" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <line x1="418" y1="478" x2="124" y2="478" stroke="#334155" stroke-width="1.4" marker-end="url(#d4-a)"/>
+  <text x="430" y="472"><tspan class="b">CHAT</tspan><tspan class="s"> system "bob joined"</tspan></text>
+  <text x="132" y="472"><tspan class="b">CHAT</tspan><tspan class="s"> system "bob joined"</tspan></text>
+
+  <!-- bottom note -->
+  <rect x="20" y="508" width="650" height="54" rx="8" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="32" y="526" class="s"><tspan class="b" style="fill:#1e293b">Room.admit()</tspan> runs without any await: JOINED and the SNAPSHOT are queued before another op can</text>
+  <text x="32" y="541" class="s">be sequenced, so B's stream continues gap-free from seq 42. A room without a password skips the</text>
+  <text x="32" y="556" class="s">AUTH_REQUIRED round. A reconnect sends JOIN {resume_token, last_seq} and gets OP_BATCH instead (§8.2).</text>
+</svg>
