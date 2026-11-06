@@ -31,9 +31,25 @@ from PySide6.QtNetwork import QAbstractSocket, QNetworkInterface
 _RUNNING: list["ServerProcess"] = []
 
 
+_VIRTUAL_HINTS = ("virtualbox", "vmware", "vethernet", "hyper-v", "wsl", "docker", "utun",
+                  "tailscale", "zerotier", "vboxnet", "bridge", "vmnet")
+
+
+def _is_virtual(iface: QNetworkInterface) -> bool:
+    """VM / container / VPN adapters: real but useless as an address for classmates."""
+    if iface.type() == QNetworkInterface.InterfaceType.Virtual:
+        return True
+    names = (iface.name() + " " + iface.humanReadableName()).lower()
+    return any(h in names for h in _VIRTUAL_HINTS)
+
+
 def lan_ipv4_addresses() -> list[str]:
-    """Non-loopback, non-link-local IPv4 addresses of interfaces that are up."""
+    """Non-loopback, non-link-local IPv4 addresses of interfaces that are up.
+
+    Physical adapters come first, so ``[0]`` is what the Invite popover shows.
+    """
     out: list[str] = []
+    virtual: set[str] = set()
     for iface in QNetworkInterface.allInterfaces():
         flags = iface.flags()
         if not (flags & QNetworkInterface.InterfaceFlag.IsUp) or not (flags & QNetworkInterface.InterfaceFlag.IsRunning):
@@ -48,8 +64,12 @@ def lan_ipv4_addresses() -> list[str]:
             if text.startswith("169.254.") or text.startswith("127.") or text in out:
                 continue
             out.append(text)
-    # private ranges (typical LANs) first
+            if _is_virtual(iface):
+                virtual.add(text)
+    # physical before virtual, then private ranges (typical LANs) first
     def rank(a: str) -> int:
+        if a in virtual or a.startswith("192.168.56."):    # .56 = VirtualBox host-only
+            return 5
         if a.startswith("192.168."):
             return 0
         if a.startswith("10."):
@@ -70,6 +90,31 @@ def port_accepts(port: int, host: str = "127.0.0.1", timeout: float = 0.15) -> b
             return True
     except OSError:
         return False
+
+
+def is_lanboard_server(port: int, host: str = "127.0.0.1", timeout: float = 1.0) -> bool:
+    """True if ``host:port`` answers our protocol: send PING (allowed before HELLO), expect PONG.
+
+    Used before reusing an already-listening port, so that some unrelated program
+    on 5050 is reported clearly instead of producing a confusing protocol error.
+    """
+    from lanboard.common.messages import MsgType
+    from lanboard.common.protocol import FrameDecoder, ProtocolError, encode
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            s.sendall(encode(MsgType.PING, {"t": 0}))
+            dec = FrameDecoder()
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                data = s.recv(4096)
+                if not data:
+                    return False
+                for msg_type, _ in dec.feed(data):
+                    return msg_type == MsgType.PONG
+    except (OSError, ProtocolError, ValueError):
+        return False
+    return False
 
 
 def server_command(port: int, data_dir: str | None = None) -> list[str]:
@@ -120,9 +165,13 @@ class ServerProcess(QObject):
 
     def start(self) -> None:
         if port_accepts(self.port):
-            # Someone (probably an earlier LANBoard) already serves this port: use it.
-            self.reused = True
-            QTimer.singleShot(0, self.ready.emit)
+            if is_lanboard_server(self.port):
+                # An earlier LANBoard server already serves this port: use it.
+                self.reused = True
+                QTimer.singleShot(0, self.ready.emit)
+            else:
+                QTimer.singleShot(0, lambda: self.failed.emit(
+                    f"Port {self.port} is used by another program. Pick a different port."))
             return
         data_dir = _default_data_dir()
         self.command = server_command(self.port, data_dir or None)

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import ssl
 import sys
@@ -84,7 +85,15 @@ async def run(args: argparse.Namespace) -> None:
     ctx = make_ssl_context(args.tls_cert, args.tls_key) if args.tls_cert else None
     server = Server(args.host, args.port, args.data, args.name,
                     discovery=not args.no_discovery, ssl_context=ctx)
-    await server.start()
+    try:
+        await server.start()
+    except OSError as exc:
+        # Most often: another server (maybe another LANBoard) already owns the port.
+        print(f"Cannot listen on {args.host}:{args.port}: {exc.strerror or exc}.\n"
+              f"Is another LANBoard server already running? "
+              f"Try a different port, e.g.  lanboard-server --port {args.port + 10}",
+              file=sys.stderr, flush=True)
+        raise SystemExit(2) from None
 
     wildcard = args.host in ("", "0.0.0.0", "::")
     addrs = lan_ipv4_addresses() if wildcard else [args.host]
@@ -114,12 +123,33 @@ async def run(args: argparse.Namespace) -> None:
         await server.stop(flush=True)
 
 
+def _owns_console() -> bool:
+    """True when this is a frozen Windows exe started by double-click (its own console).
+
+    Then the console window closes the moment we exit, so an error message would
+    flash by unread. A server started by the client (stdin = DEVNULL) or from a
+    terminal does not own its console and must never block.
+    """
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return False
+    try:
+        import ctypes
+        buf = (ctypes.c_uint * 2)()
+        return ctypes.windll.kernel32.GetConsoleProcessList(buf, 2) <= 1 and bool(sys.stdin and sys.stdin.isatty())
+    except Exception:
+        return False
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     try:
         asyncio.run(run(args))
     except KeyboardInterrupt:
         pass
+    except SystemExit as exc:
+        if exc.code not in (0, None) and _owns_console():
+            input("Press Enter to close...")
+        raise
 
 
 if __name__ == "__main__":

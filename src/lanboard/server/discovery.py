@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import socket
+import sys
 from typing import TYPE_CHECKING
 
 from lanboard.common import config as C
@@ -48,13 +49,60 @@ def local_ip_for(remote_ip: str) -> str | None:
         return None
 
 
+def _interface_ipv4s() -> list[str]:
+    """IPv4 address of every network interface, via the SIOCGIFADDR ioctl (POSIX).
+
+    The route probes below only find the interface behind the default route, so a
+    second network card (or an isolated switch with no gateway, i.e. internet off)
+    would be missed. Windows has no ``fcntl``; there ``getaddrinfo(hostname)``
+    already lists every adapter.
+    """
+    try:
+        import fcntl
+        import struct
+    except ImportError:
+        return []
+    req = 0x8915 if sys.platform.startswith("linux") else 0xC0206921     # SIOCGIFADDR
+    out: list[str] = []
+    try:
+        names = [name for _, name in socket.if_nameindex()]
+    except OSError:
+        return []
+    for name in names:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            try:
+                ifreq = fcntl.ioctl(s.fileno(), req, struct.pack("256s", name.encode()[:15]))
+            except OSError:
+                continue                        # interface has no IPv4 address
+            out.append(socket.inet_ntoa(ifreq[20:24]))   # sockaddr_in.sin_addr
+    return out
+
+
+def _rank(ip: str) -> int:
+    """Typical LAN ranges first; Docker bridges, VirtualBox host-only and VPN/CGNAT last."""
+    if ip.startswith("192.168.56."):
+        return 5                                # VirtualBox host-only adapter
+    if ip.startswith("192.168."):
+        return 0
+    if ip.startswith("10."):
+        return 1
+    if ip.startswith(("172.17.", "172.18.")):
+        return 4                                # usually Docker bridges
+    if ip.startswith("172."):
+        return 2
+    return 6                                    # 100.x CGNAT / VPN / public
+
+
 def lan_ipv4_addresses() -> list[str]:
-    """Best-effort list of this machine's non-loopback IPv4 addresses."""
+    """Best-effort list of this machine's non-loopback IPv4 addresses, most likely LAN first."""
     found: list[str] = []
     probes = ["10.255.255.255", "192.168.255.255", "172.31.255.255", "8.8.8.8"]
     for target in probes:
-        ip = local_ip_for(target)
+        ip = local_ip_for(target)               # UDP connect(): sends no packet
         if ip and ip not in found:
+            found.append(ip)
+    for ip in _interface_ipv4s():
+        if ip not in found:
             found.append(ip)
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
@@ -63,7 +111,8 @@ def lan_ipv4_addresses() -> list[str]:
                 found.append(ip)
     except OSError:
         pass
-    return [ip for ip in found if not ip.startswith("127.")]
+    found = [ip for ip in found if not ip.startswith(("127.", "169.254.", "0."))]
+    return sorted(found, key=lambda ip: (_rank(ip), found.index(ip)))
 
 
 class DiscoveryProtocol(asyncio.DatagramProtocol):
