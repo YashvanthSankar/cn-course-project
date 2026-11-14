@@ -4,7 +4,7 @@ Everything visual that is shared between widgets lives here so the app looks
 consistent:
 
 * :data:`LIGHT` / :data:`DARK` are colour palettes (plain dicts of design tokens).
-  Both share one flat accent, a deep teal, used for primary buttons, the active
+  Both share one flat accent, a muted cobalt blue, used for primary buttons, the active
   tool and the brand mark, with amber as the second colour (the logo's dot).
   There are no decorative gradients: every surface is a single colour.
 * :func:`load_fonts` registers the bundled fonts (Inter for the UI, JetBrains Mono
@@ -49,10 +49,10 @@ LIGHT: dict[str, str] = {
     "text": "#121626",
     "text2": "#474f66",
     "muted": "#868ea5",
-    "accent": "#0f766e",      # deep teal
+    "accent": "#1f57c3",      # cobalt blue
     "accent2": "#b45309",     # amber (second colour: snapshot/history frames, JSON literals)
-    "accent_hover": "#115e59",
-    "accent_soft": "#e1f3f0",
+    "accent_hover": "#1a4aa6",
+    "accent_soft": "#e8eefb",
     "accent_text": "#ffffff",
     "success": "#12a150",
     "success_soft": "#e2f6ea",
@@ -67,7 +67,7 @@ LIGHT: dict[str, str] = {
     "shadow": "#141a3340",
     "console": "#f7f8fc",     # Network tab "mission control" panels
     "console_line": "#e6e8f0",
-    "chart_in": "#0f766e",
+    "chart_in": "#1f57c3",
     "chart_out": "#f2711c",
     "chart_rtt": "#0fa968",
 }
@@ -84,10 +84,10 @@ DARK: dict[str, str] = {
     "text": "#e9ecf6",
     "text2": "#a9b1c8",
     "muted": "#6d7690",
-    "accent": "#14a090",
+    "accent": "#3b7be8",
     "accent2": "#f0b429",
-    "accent_hover": "#19b6a4",
-    "accent_soft": "#11312e",
+    "accent_hover": "#5a93f0",
+    "accent_soft": "#16233d",
     "accent_text": "#ffffff",
     "success": "#34d399",
     "success_soft": "#0f3327",
@@ -102,7 +102,7 @@ DARK: dict[str, str] = {
     "shadow": "#00000099",
     "console": "#0c111d",
     "console_line": "#1c2335",
-    "chart_in": "#2dc4b2",
+    "chart_in": "#5a93f0",
     "chart_out": "#fb923c",
     "chart_rtt": "#34d399",
 }
@@ -1253,16 +1253,16 @@ def icon_names() -> list[str]:
     return sorted(_ICONS)
 
 
-LOGO_TEAL = "#0f766e"
+LOGO_TILE = "#1f57c3"
 LOGO_AMBER = "#ffc53d"
 
 
 def paint_logo(p: QPainter, rect: QRectF) -> None:
-    """The LANBoard mark: a flat teal tile with a hand-drawn squiggle and an amber node."""
+    """The LANBoard mark: a flat blue tile with a hand-drawn squiggle and an amber node."""
     p.save()
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(LOGO_TEAL))
+    p.setBrush(QColor(LOGO_TILE))
     r = rect.width() * 0.26
     p.drawRoundedRect(rect, r, r)
     s = rect.width() / 24.0

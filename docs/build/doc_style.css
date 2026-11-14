@@ -36,8 +36,8 @@
   --muted: #475569;
   --faint: #94a3b8;
   --rule: #cbd5e1;
-  --accent: #0f766e;
-  --accent-soft: #e6f4f1;
+  --accent: #1f57c3;
+  --accent-soft: #e8eefb;
   --teal: #0d9488;
   --code-bg: #f6f7f9;
 }
@@ -143,11 +143,11 @@ table {
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
 th {
-  background: #e6f4f1;
-  color: #0c3f3a;
+  background: #e8eefb;
+  color: #13274a;
   font-weight: 600;
   text-align: left;
-  border: 0.6pt solid #bfe3dd;
+  border: 0.6pt solid #c9d8f3;
   padding: 3.4pt 4.5pt;
   vertical-align: bottom;
 }
@@ -218,7 +218,7 @@ figcaption b { color: var(--ink); }
   padding: 20mm 20mm 18mm 20mm;
   position: relative;
   background: #ffffff;
-  border-top: 5mm solid #0f766e;
+  border-top: 5mm solid #1f57c3;
   break-after: page;
   font-family: Inter, "Helvetica Neue", Arial, sans-serif;
 }
@@ -246,7 +246,7 @@ figcaption b { color: var(--ink); }
 .cover .hero-cap { font-size: 8pt; color: var(--muted); margin: 2.5mm 1mm 6mm 1mm; line-height: 1.45; }
 .cover .stats { display: flex; gap: 3mm; margin-bottom: 6mm; }
 .cover .stats > div {
-  flex: 1; background: #fdf6ec; border: 0.6pt solid #cfe8e3; border-radius: 2mm; padding: 2.6mm 3mm;
+  flex: 1; background: #fdf6ec; border: 0.6pt solid #d3def5; border-radius: 2mm; padding: 2.6mm 3mm;
 }
 .cover .stats b {
   display: block; font-size: 17pt; font-weight: 700; line-height: 1.1; margin-bottom: 1mm;
@@ -254,7 +254,7 @@ figcaption b { color: var(--ink); }
 }
 .cover .stats span { display: block; font-size: 7.6pt; color: #475569; line-height: 1.35; }
 .cover table { font-size: 9pt; width: 100%; margin: 0; }
-.cover th { font-size: 8pt; background: #e6f4f1; }
+.cover th { font-size: 8pt; background: #e8eefb; }
 .cover td, .cover th { padding: 3.6pt 7pt; }
 .cover .meta {
   position: absolute; left: 20mm; right: 20mm; bottom: 14mm;

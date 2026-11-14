@@ -8,7 +8,7 @@
   </style>
   <defs>
     <marker id="d6-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#334155"/></marker>
-    <marker id="d6-at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f766e"/></marker>
+    <marker id="d6-at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1f57c3"/></marker>
     <marker id="d6-aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d97706"/></marker>
   </defs>
 
@@ -17,7 +17,7 @@
   <text x="18" y="26" class="h">A. Missing op: gap → RESYNC → OP_BATCH</text>
   <rect x="24" y="38" width="96" height="28" rx="7" fill="#f0fdfa" stroke="#0d9488"/>
   <text x="72" y="56" class="b" text-anchor="middle">Client</text>
-  <rect x="220" y="38" width="96" height="28" rx="7" fill="#e6f4f1" stroke="#0f766e"/>
+  <rect x="220" y="38" width="96" height="28" rx="7" fill="#e8eefb" stroke="#1f57c3"/>
   <text x="268" y="56" class="b" text-anchor="middle">Server</text>
   <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
     <line x1="72" y1="66" x2="72" y2="372"/>
@@ -39,8 +39,8 @@
   <text x="22" y="191" class="s">59 &gt; 57 + 1: hold it in the reorder</text>
   <text x="22" y="206" class="s">buffer, start the 400 ms gap timer</text>
 
-  <line x1="74" y1="244" x2="264" y2="244" stroke="#0f766e" stroke-width="1.5" marker-end="url(#d6-at)"/>
-  <text x="80" y="238"><tspan class="b" style="fill:#0f766e">RESYNC</tspan><tspan class="s"> {last_seq: 57}</tspan></text>
+  <line x1="74" y1="244" x2="264" y2="244" stroke="#1f57c3" stroke-width="1.5" marker-end="url(#d6-at)"/>
+  <text x="80" y="238"><tspan class="b" style="fill:#1f57c3">RESYNC</tspan><tspan class="s"> {last_seq: 57}</tspan></text>
   <text x="80" y="258" class="s">(timer expired, 58 never came)</text>
 
   <line x1="266" y1="290" x2="76" y2="290" stroke="#334155" stroke-width="1.4" marker-end="url(#d6-a)"/>
@@ -62,7 +62,7 @@
   <text x="358" y="26" class="h">B. Hash checkpoint → mismatch → heal</text>
   <rect x="364" y="38" width="96" height="28" rx="7" fill="#f0fdfa" stroke="#0d9488"/>
   <text x="412" y="56" class="b" text-anchor="middle">Client</text>
-  <rect x="560" y="38" width="96" height="28" rx="7" fill="#e6f4f1" stroke="#0f766e"/>
+  <rect x="560" y="38" width="96" height="28" rx="7" fill="#e8eefb" stroke="#1f57c3"/>
   <text x="608" y="56" class="b" text-anchor="middle">Server</text>
   <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
     <line x1="412" y1="66" x2="412" y2="372"/>
@@ -81,8 +81,8 @@
   <text x="362" y="184" class="s">→ badge "mismatch", toast "Board diverged</text>
   <text x="362" y="199" class="s">at seq 75; resynchronising."</text>
 
-  <line x1="414" y1="236" x2="604" y2="236" stroke="#0f766e" stroke-width="1.5" marker-end="url(#d6-at)"/>
-  <text x="420" y="230"><tspan class="b" style="fill:#0f766e">RESYNC</tspan><tspan class="s"> {last_seq: -1}</tspan></text>
+  <line x1="414" y1="236" x2="604" y2="236" stroke="#1f57c3" stroke-width="1.5" marker-end="url(#d6-at)"/>
+  <text x="420" y="230"><tspan class="b" style="fill:#1f57c3">RESYNC</tspan><tspan class="s"> {last_seq: -1}</tspan></text>
   <text x="420" y="250" class="s">(-1 = "send me everything")</text>
 
   <line x1="606" y1="282" x2="416" y2="282" stroke="#334155" stroke-width="1.4" marker-end="url(#d6-a)"/>

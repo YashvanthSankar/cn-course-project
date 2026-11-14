@@ -15,7 +15,7 @@
   <!-- participants -->
   <rect x="40" y="12" width="160" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
   <text x="120" y="34" class="b" text-anchor="middle">Client B (joining)</text>
-  <rect x="340" y="12" width="160" height="34" rx="8" fill="#e6f4f1" stroke="#0f766e"/>
+  <rect x="340" y="12" width="160" height="34" rx="8" fill="#e8eefb" stroke="#1f57c3"/>
   <text x="420" y="34" class="b" text-anchor="middle">Server · room K7Q-2MX</text>
   <rect x="540" y="12" width="130" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
   <text x="605" y="34" class="b" text-anchor="middle">Client A (in room)</text>
@@ -55,7 +55,7 @@
   <text x="132" y="300"><tspan class="b">JOIN</tspan><tspan class="s"> {room, proof}: the password never leaves B</tspan></text>
 
   <!-- note at server -->
-  <rect x="428" y="290" width="170" height="58" rx="6" fill="#e6f4f1" stroke="#4fb3a6"/>
+  <rect x="428" y="290" width="170" height="58" rx="6" fill="#e8eefb" stroke="#6b93d6"/>
   <text x="436" y="307" class="s">check_proof(): constant-time</text>
   <text x="436" y="321" class="s">compare; nonce consumed;</text>
   <text x="436" y="335" class="s">new session u7, role editor</text>

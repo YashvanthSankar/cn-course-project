@@ -183,7 +183,7 @@ def make_pdf(path: str) -> None:
     p = QPainter(pdf)
     w, h = pdf.width(), pdf.height()
     p.fillRect(0, 0, w, h, QColor("#ffffff"))
-    p.fillRect(0, 0, w, int(h * 0.2), QColor("#0f766e"))
+    p.fillRect(0, 0, w, int(h * 0.2), QColor("#1f57c3"))
     f = QFont(theme.UI_FAMILY or "Inter")
     f.setPixelSize(int(h * 0.075)); f.setBold(True)
     p.setFont(f); p.setPen(QColor("#ffffff"))
@@ -274,7 +274,7 @@ def build_board(ctl, others) -> None:
     # clients
     for i, label in enumerate(("Client A  (Qt)", "Client B  (Qt)", "Client C  (Qt)")):
         y = 150 + i * 150
-        add({"type": "rect", "style": {"color": indigo, "width": 3, "fill": "#e6f4f1"},
+        add({"type": "rect", "style": {"color": indigo, "width": 3, "fill": "#e8eefb"},
              "geom": {"x": 80, "y": y, "w": 220, "h": 96}})
         add({"type": "text", "style": {"color": ink, "font_size": 20},
              "geom": {"x": 104, "y": y + 30, "text": label}})
@@ -726,7 +726,7 @@ def render_terminal(prompt: str, frame: str) -> QImage:
     p.drawText(QRectF(0, 0, w, bar), Qt.AlignmentFlag.AlignCenter, "lanboard-server — dashboard")
     p.setFont(mono)
     y = bar + pad + fm.ascent()
-    p.setPen(QColor("#7cc9bf"))
+    p.setPen(QColor("#8fb0e6"))
     p.drawText(QPointF(pad, y), prompt)
     y += lh * 1.6
     for ln in lines:

@@ -174,7 +174,7 @@ class NetworkHero(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = QRectF(self.rect())
         w, h = r.width(), r.height()
-        p.fillRect(r, QColor("#0c3f3a"))            # deep teal "board" panel, flat
+        p.fillRect(r, QColor("#13274a"))            # deep navy panel, flat
         glow = QRadialGradient(QPointF(w * HERO_SERVER[0], h * HERO_SERVER[1]), w * 0.75)
         glow.setColorAt(0.0, QColor(255, 255, 255, 22))
         glow.setColorAt(1.0, QColor(255, 255, 255, 0))
@@ -266,7 +266,7 @@ class NetworkHero(QWidget):
         p.drawRoundedRect(tile.adjusted(-6, -6, 6, 6), 18, 18)
         p.setBrush(QColor("#ffffff"))
         p.drawRoundedRect(tile, 14, 14)
-        theme.icon("server", theme.LOGO_TEAL, 20).paint(p, QRectF(sp.x() - 10, tile.top() + 7, 20, 20).toRect())
+        theme.icon("server", theme.LOGO_TILE, 20).paint(p, QRectF(sp.x() - 10, tile.top() + 7, 20, 20).toRect())
         p.setFont(theme.mono_font(10, QFont.Weight.Bold))
         p.setPen(QColor("#2c2a6b"))
         p.drawText(QRectF(tile.left(), tile.top() + 28, tile.width(), 16), Qt.AlignmentFlag.AlignCenter,

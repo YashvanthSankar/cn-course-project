@@ -17,7 +17,7 @@
   <g>
     <circle cx="40" cy="48" r="5" fill="#0d9488"/>
     <rect x="54" y="34" width="268" height="28" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
-    <text x="62" y="52" class="m">10</text><text x="88" y="52"><tspan class="b" style="fill:#0f766e">Alice</tspan><tspan class="s"> add stroke A1</tspan></text>
+    <text x="62" y="52" class="m">10</text><text x="88" y="52"><tspan class="b" style="fill:#1f57c3">Alice</tspan><tspan class="s"> add stroke A1</tspan></text>
   </g>
   <g>
     <circle cx="40" cy="86" r="5" fill="#b45309"/>
@@ -27,7 +27,7 @@
   <g>
     <circle cx="40" cy="124" r="5" fill="#0d9488"/>
     <rect x="54" y="110" width="268" height="28" rx="6" fill="#f0fdfa" stroke="#5eead4"/>
-    <text x="62" y="128" class="m">12</text><text x="88" y="128"><tspan class="b" style="fill:#0f766e">Alice</tspan><tspan class="s"> B1.color: black → red</tspan></text>
+    <text x="62" y="128" class="m">12</text><text x="88" y="128"><tspan class="b" style="fill:#1f57c3">Alice</tspan><tspan class="s"> B1.color: black → red</tspan></text>
   </g>
   <g>
     <circle cx="40" cy="162" r="5" fill="#b45309"/>
@@ -35,11 +35,11 @@
     <text x="62" y="166" class="m">13</text><text x="88" y="166"><tspan class="b" style="fill:#92400e">Bob</tspan><tspan class="s"> B1.color: red → green</tspan></text>
   </g>
 
-  <text x="54" y="200" class="s b" style="fill:#0f766e">Alice presses Ctrl+Z</text>
+  <text x="54" y="200" class="s b" style="fill:#1f57c3">Alice presses Ctrl+Z</text>
   <g>
     <circle cx="40" cy="226" r="5" fill="#0d9488"/>
     <rect x="54" y="212" width="268" height="28" rx="6" fill="#ccfbf1" stroke="#0d9488"/>
-    <text x="62" y="230" class="m">14</text><text x="88" y="230"><tspan class="b" style="fill:#0f766e">Alice</tspan><tspan class="s"> delete A1 (inverse of seq 10)</tspan></text>
+    <text x="62" y="230" class="m">14</text><text x="88" y="230"><tspan class="b" style="fill:#1f57c3">Alice</tspan><tspan class="s"> delete A1 (inverse of seq 10)</tspan></text>
   </g>
 
   <text x="54" y="264" class="s b" style="fill:#92400e">Bob presses Ctrl+Z</text>
@@ -49,11 +49,11 @@
     <text x="62" y="294" class="m">15</text><text x="88" y="294"><tspan class="b" style="fill:#92400e">Bob</tspan><tspan class="s"> B1.color: green → red (inverse of 13)</tspan></text>
   </g>
 
-  <text x="54" y="328" class="s b" style="fill:#0f766e">Alice presses Ctrl+Shift+Z (redo)</text>
+  <text x="54" y="328" class="s b" style="fill:#1f57c3">Alice presses Ctrl+Shift+Z (redo)</text>
   <g>
     <circle cx="40" cy="354" r="5" fill="#0d9488"/>
     <rect x="54" y="340" width="268" height="28" rx="6" fill="#ccfbf1" stroke="#0d9488"/>
-    <text x="62" y="358" class="m">16</text><text x="88" y="358"><tspan class="b" style="fill:#0f766e">Alice</tspan><tspan class="s"> restore A1</tspan></text>
+    <text x="62" y="358" class="m">16</text><text x="88" y="358"><tspan class="b" style="fill:#1f57c3">Alice</tspan><tspan class="s"> restore A1</tspan></text>
   </g>
   <rect x="14" y="384" width="308" height="76" rx="8" fill="#f0fdf4" stroke="#86efac"/>
   <text x="26" y="403" class="b" style="fill:#15803d">Board after seq 16, on every replica</text>
@@ -63,7 +63,7 @@
 
   <!-- Alice reasoning -->
   <rect x="340" y="34" width="330" height="166" rx="8" fill="#ffffff" stroke="#0d9488"/>
-  <text x="352" y="54" class="b" style="fill:#0f766e">Alice's undo stack (newest on top)</text>
+  <text x="352" y="54" class="b" style="fill:#1f57c3">Alice's undo stack (newest on top)</text>
   <rect x="352" y="62" width="306" height="22" rx="4" fill="#fef2f2" stroke="#fca5a5"/>
   <text x="360" y="77" class="m">update B1 {style.color: red} prev {black}</text>
   <rect x="352" y="88" width="306" height="22" rx="4" fill="#f0fdf4" stroke="#86efac"/>

@@ -28,14 +28,14 @@ SHOTS = os.path.join(ROOT, "docs", "assets", "screens")
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "docs", "LANBoard_Presentation.pptx")
 
 FONT, MONO = "Inter", "JetBrains Mono"
-INDIGO, VIOLET = "0F766E", "B45309"
+INDIGO, VIOLET = "1F57C3", "B45309"
 INK, TEXT2, MUTED = "111827", "374151", "6B7280"
 BG_DARK, BG_DARK2 = "0F1220", "1C2033"
 CARD, LINE = "F4F5FB", "D9DCEA"
 GREEN, AMBER, RED, CYAN = "16A34A", "D97706", "DC2626", "0891B2"
 
 TEAM = {
-    "Y": ("Yashvanth S", "CS24I1029", "Server core & state", "0F766E"),
+    "Y": ("Yashvanth S", "CS24I1029", "Server core & state", "1F57C3"),
     "J": ("Jeevanandham T", "CS24I1035", "Protocol & networking", "0891B2"),
     "S": ("Akula Sai Teja", "CS24I1054", "Canvas & drawing tools", "DB2777"),
     "N": ("Nithillakrishi P Y", "CS24I1039", "UI & collaboration", "059669"),
@@ -177,7 +177,7 @@ def picture(slide, name, x, y, w=None, h=None, crop=None, border=True, shadow=Tr
         eff = etree.SubElement(sp, qn("a:effectLst"))
         sh = etree.SubElement(eff, qn("a:outerShdw"))
         sh.set("blurRad", "190500"); sh.set("dist", "38100"); sh.set("dir", "5400000"); sh.set("algn", "t")
-        clr = etree.SubElement(sh, qn("a:srgbClr")); clr.set("val", "0C3F3A")
+        clr = etree.SubElement(sh, qn("a:srgbClr")); clr.set("val", "13274A")
         a = etree.SubElement(clr, qn("a:alpha")); a.set("val", "22000")
     return pic, (x, y, w, h)
 
@@ -202,7 +202,7 @@ def content_slide(title, who=None, subtitle=None, dark=False):
     tc = "FFFFFF" if dark else INK
     text(s, 0.6, 0.42, 9.6, 0.7, title, size=28, bold=True, color=tc, name="Title")
     if subtitle:
-        text(s, 0.6, 1.08, 10.5, 0.4, subtitle, size=15, color="7CC9BF" if dark else MUTED, name="Subtitle")
+        text(s, 0.6, 1.08, 10.5, 0.4, subtitle, size=15, color="8FB0E6" if dark else MUTED, name="Subtitle")
     if who:
         name, _roll, area, col = TEAM[who]
         chip = box(s, 10.35, 0.48, 2.4, 0.44, fill=col, radius=0.22,
@@ -259,13 +259,13 @@ def msg(slide, x1, x2, y, label, color=INDIGO, size=11, above=True, dash=False):
 s = prs.slides.add_slide(BLANK)
 SLIDE_NO[0] += 1
 bg = box(s, 0, 0, SW, SH, fill=INDIGO, shape=MSO_SHAPE.RECTANGLE, name="Background")
-bg.fill.solid(); bg.fill.fore_color.rgb = rgb("0C3F3A")   # flat deep teal
+bg.fill.solid(); bg.fill.fore_color.rgb = rgb("13274A")   # flat deep navy
 logo = box(s, 0.8, 0.8, 0.9, 0.9, fill=INDIGO, radius=0.22, label="~", size=40, bold=True, color="FFFFFF")
 text(s, 0.8, 1.95, 11, 1.2, "LANBoard", size=66, bold=True, color="FFFFFF")
 text(s, 0.8, 3.1, 11, 0.6, "A LAN-only, real-time collaborative whiteboard over our own TCP protocol",
-     size=22, color="BFE3DD")
+     size=22, color="C9D8F3")
 text(s, 0.8, 3.7, 11, 0.4, "Computer Networks Lab Project 2026  ·  Python 3.12 asyncio server  ·  PySide6 client",
-     size=14, color="7CC9BF")
+     size=14, color="8FB0E6")
 for i, k in enumerate("YJSN"):
     name, roll, area, col = TEAM[k]
     x = 0.8 + i * 3.0
@@ -298,7 +298,7 @@ for i, (h, d, col) in enumerate(goals):
         color="FFFFFF")
     text(s, x + 0.25, 2.9, 2.4, 0.4, h, size=20, bold=True)
     text(s, x + 0.25, 3.35, 2.4, 0.8, d, size=13, color=TEXT2)
-box(s, 0.6, 4.6, 12.13, 1.9, fill="E6F4F1", radius=0.16)
+box(s, 0.6, 4.6, 12.13, 1.9, fill="E8EEFB", radius=0.16)
 text(s, 0.95, 4.82, 11.4, 0.4, "Constraints from the brief", size=16, bold=True, color=INDIGO)
 bullets(s, 0.95, 5.25, 11.4, [
     ("Client-server over TCP/IP sockets: ", "a central server coordinates sessions, state and event distribution."),
@@ -349,7 +349,7 @@ for i, t in enumerate(("Listener + ClientConnection", "Room actors: board, op lo
     box(s, 5.3, 3.12 + i * 0.5, 2.75, 0.4, fill="FFFFFF", radius=0.08, label=t, size=11, color=TEXT2)
 for i, nm in enumerate(("Laptop A · owner", "Laptop B · editor", "Laptop C · viewer")):
     y = 1.95 + i * 1.5
-    box(s, 1.0, y, 2.6, 1.05, fill="E6F4F1", line=INDIGO, radius=0.14,
+    box(s, 1.0, y, 2.6, 1.05, fill="E8EEFB", line=INDIGO, radius=0.14,
         label=[[("Client (PySide6)", {"bold": True, "size": 14})], [(nm, {"size": 11, "color": MUTED})]])
     arrow(s, 3.62, y + 0.52, 5.08, 3.8, color=INDIGO, width=2.25, tail=True)
 text(s, 3.2, 2.0, 2.1, 0.3, "TCP 5050 · framed JSON", size=11, color=INDIGO, bold=True, align=PP_ALIGN.CENTER)
@@ -386,7 +386,7 @@ cols = [
         ("Model", "Board.apply(op), validate_op, hash()  ·  model.py"),
         ("Undo, auth", "UndoManager · scrypt / HMAC  ·  undo.py, auth.py"),
     ]),
-    ("Server (asyncio, one thread)", "0F766E", [
+    ("Server (asyncio, one thread)", "1F57C3", [
         ("Listener", "start_server, TCP_NODELAY, max clients  ·  server.py"),
         ("Connection", "reader loop + writer loop, bounded queue"),
         ("Room", "permission → rate limit → validate → seq → log → broadcast  ·  room.py"),
@@ -595,9 +595,9 @@ UDP is used for one job only: discovery, because only UDP can broadcast. The scr
 s = content_slide("Frame format & message catalogue", "J", "[ length u32 big-endian | type u8 | UTF-8 JSON ]  ·  length = 1 + len(payload)  ·  max 8 MiB")
 fx = 0.6
 for w, lab, sub, col in [(2.6, "length", "4 bytes, u32 BE", INDIGO), (1.6, "type", "1 byte", VIOLET),
-                         (7.9, "payload", "N-1 bytes of UTF-8 JSON", "0F766E")]:
+                         (7.9, "payload", "N-1 bytes of UTF-8 JSON", "1F57C3")]:
     box(s, fx, 1.7, w, 0.95, fill=col, radius=0.06,
-        label=[[(lab, {"bold": True, "size": 16, "color": "FFFFFF"})], [(sub, {"size": 11, "color": "E6F4F1"})]])
+        label=[[(lab, {"bold": True, "size": 16, "color": "FFFFFF"})], [(sub, {"size": 11, "color": "E8EEFB"})]])
     fx += w + 0.02
 mono_box(s, 0.6, 2.85, 12.13, 0.95, [
     "00 00 00 45 | 01 | {\"proto\":1,\"app\":\"lanboard\",\"username\":\"alice\",\"client_id\":\"3f2a9c\"}",
@@ -1031,16 +1031,16 @@ Chaos Lab and the cut-the-cable button, then show recovery, the time-lapse, and 
 s = prs.slides.add_slide(BLANK)
 SLIDE_NO[0] += 1
 bg = box(s, 0, 0, SW, SH, fill=INDIGO, shape=MSO_SHAPE.RECTANGLE, name="Background")
-bg.fill.solid(); bg.fill.fore_color.rgb = rgb("0C3F3A")   # flat deep teal
+bg.fill.solid(); bg.fill.fore_color.rgb = rgb("13274A")   # flat deep navy
 text(s, 0.8, 2.2, 11.7, 1.2, "Thank you", size=60, bold=True, color="FFFFFF")
-text(s, 0.8, 3.35, 11.7, 0.6, "Questions?", size=28, color="BFE3DD")
-text(s, 0.8, 4.3, 11.7, 0.5, "One server-ordered op log  ·  framed TCP  ·  recovery you can watch", size=16, color="7CC9BF")
+text(s, 0.8, 3.35, 11.7, 0.6, "Questions?", size=28, color="C9D8F3")
+text(s, 0.8, 4.3, 11.7, 0.5, "One server-ordered op log  ·  framed TCP  ·  recovery you can watch", size=16, color="8FB0E6")
 for i, k in enumerate("YJSN"):
     name, roll, area, col = TEAM[k]
     x = 0.8 + i * 3.0
     box(s, x, 5.5, 0.36, 0.36, fill=col, shape=MSO_SHAPE.OVAL)
     text(s, x + 0.5, 5.47, 2.4, 0.3, name, size=13, bold=True, color="FFFFFF")
-    text(s, x + 0.5, 5.77, 2.4, 0.3, area, size=11, color="BFE3DD")
+    text(s, x + 0.5, 5.77, 2.4, 0.3, area, size=11, color="C9D8F3")
 notes(s, """
 Close and take questions. Each member answers questions on their own area; the likely viva questions and short
 answers are in docs/PRESENTER_GUIDE.md.

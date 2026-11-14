@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="LANBoard logo">
-  <!-- Same mark as client/ui/theme.paint_logo: flat teal tile, squiggle, node -->
-  <rect x="0" y="0" width="24" height="24" rx="6.24" fill="#0f766e"/>
+  <!-- Same mark as client/ui/theme.paint_logo: flat blue tile, squiggle, node -->
+  <rect x="0" y="0" width="24" height="24" rx="6.24" fill="#1f57c3"/>
   <path d="M5 15.5 C7.5 8 10 8 11.2 12.5 C12.4 17 15 16.5 17.2 9.5" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="18" cy="7.5" r="2.3" fill="#ffc53d"/>
 </svg>

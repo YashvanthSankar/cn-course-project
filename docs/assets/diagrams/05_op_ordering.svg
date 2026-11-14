@@ -7,15 +7,15 @@
     .m { font-family: "JetBrains Mono", Menlo, monospace; font-size: 11px; fill: #334155; }
   </style>
   <defs>
-    <marker id="d5-at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f766e"/></marker>
+    <marker id="d5-at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1f57c3"/></marker>
     <marker id="d5-av" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#b45309"/></marker>
-    <marker id="d5-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f766e"/></marker>
+    <marker id="d5-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1f57c3"/></marker>
   </defs>
 
   <!-- participants -->
   <rect x="30" y="12" width="140" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
   <text x="100" y="34" class="b" text-anchor="middle">Alice (u3)</text>
-  <rect x="260" y="12" width="160" height="34" rx="8" fill="#e6f4f1" stroke="#0f766e"/>
+  <rect x="260" y="12" width="160" height="34" rx="8" fill="#e8eefb" stroke="#1f57c3"/>
   <text x="340" y="34" class="b" text-anchor="middle">Server · Room (sequencer)</text>
   <rect x="510" y="12" width="140" height="34" rx="8" fill="#fdf6ec" stroke="#b45309"/>
   <text x="580" y="34" class="b" text-anchor="middle">Bob (u5)</text>
@@ -34,31 +34,31 @@
   <text x="478" y="88" class="s">(view = board + pending b:4)</text>
 
   <!-- submits (diagonal = time in transit) -->
-  <line x1="102" y1="112" x2="336" y2="142" stroke="#0f766e" stroke-width="1.6" marker-end="url(#d5-at)"/>
-  <text x="112" y="110"><tspan class="b" style="fill:#0f766e">OP_SUBMIT</tspan><tspan class="s"> a:7 · X.color=red</tspan></text>
+  <line x1="102" y1="112" x2="336" y2="142" stroke="#1f57c3" stroke-width="1.6" marker-end="url(#d5-at)"/>
+  <text x="112" y="110"><tspan class="b" style="fill:#1f57c3">OP_SUBMIT</tspan><tspan class="s"> a:7 · X.color=red</tspan></text>
   <line x1="578" y1="116" x2="344" y2="150" stroke="#b45309" stroke-width="1.6" marker-end="url(#d5-av)"/>
   <text x="570" y="112" text-anchor="end"><tspan class="b" style="fill:#92400e">OP_SUBMIT</tspan><tspan class="s"> b:4 · X.color=blue</tspan></text>
 
   <!-- server pipeline -->
-  <rect x="222" y="160" width="236" height="62" rx="8" fill="#e6f4f1" stroke="#0f766e"/>
+  <rect x="222" y="160" width="236" height="62" rx="8" fill="#e8eefb" stroke="#1f57c3"/>
   <text x="232" y="177" class="s"><tspan class="b" style="fill:#1e293b">a:7 arrived first.</tspan> joined → permission →</text>
-  <text x="232" y="192" class="s">rate limit → validate → dedupe → <tspan class="b" style="fill:#115e59">seq 101</tspan></text>
+  <text x="232" y="192" class="s">rate limit → validate → dedupe → <tspan class="b" style="fill:#1a4aa6">seq 101</tspan></text>
   <text x="232" y="207" class="s">→ apply → append ops.jsonl → broadcast</text>
 
   <!-- broadcast 101 -->
-  <line x1="338" y1="232" x2="104" y2="262" stroke="#0f766e" stroke-width="1.6" marker-end="url(#d5-ai)"/>
-  <text x="118" y="240"><tspan class="b" style="fill:#115e59">OP</tspan><tspan class="s"> seq 101, a:7 (echo = ack)</tspan></text>
-  <line x1="342" y1="232" x2="576" y2="262" stroke="#0f766e" stroke-width="1.6" marker-end="url(#d5-ai)"/>
-  <text x="566" y="240" text-anchor="end"><tspan class="b" style="fill:#115e59">OP</tspan><tspan class="s"> seq 101, a:7</tspan></text>
+  <line x1="338" y1="232" x2="104" y2="262" stroke="#1f57c3" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="118" y="240"><tspan class="b" style="fill:#1a4aa6">OP</tspan><tspan class="s"> seq 101, a:7 (echo = ack)</tspan></text>
+  <line x1="342" y1="232" x2="576" y2="262" stroke="#1f57c3" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="566" y="240" text-anchor="end"><tspan class="b" style="fill:#1a4aa6">OP</tspan><tspan class="s"> seq 101, a:7</tspan></text>
 
-  <rect x="282" y="270" width="116" height="24" rx="6" fill="#e6f4f1" stroke="#0f766e"/>
-  <text x="340" y="286" class="s" text-anchor="middle">b:4 → <tspan class="b" style="fill:#115e59">seq 102</tspan></text>
+  <rect x="282" y="270" width="116" height="24" rx="6" fill="#e8eefb" stroke="#1f57c3"/>
+  <text x="340" y="286" class="s" text-anchor="middle">b:4 → <tspan class="b" style="fill:#1a4aa6">seq 102</tspan></text>
 
   <!-- broadcast 102 -->
-  <line x1="338" y1="304" x2="104" y2="334" stroke="#0f766e" stroke-width="1.6" marker-end="url(#d5-ai)"/>
-  <text x="118" y="312"><tspan class="b" style="fill:#115e59">OP</tspan><tspan class="s"> seq 102, b:4</tspan></text>
-  <line x1="342" y1="304" x2="576" y2="334" stroke="#0f766e" stroke-width="1.6" marker-end="url(#d5-ai)"/>
-  <text x="566" y="312" text-anchor="end"><tspan class="b" style="fill:#115e59">OP</tspan><tspan class="s"> seq 102, b:4 (echo = ack)</tspan></text>
+  <line x1="338" y1="304" x2="104" y2="334" stroke="#1f57c3" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="118" y="312"><tspan class="b" style="fill:#1a4aa6">OP</tspan><tspan class="s"> seq 102, b:4</tspan></text>
+  <line x1="342" y1="304" x2="576" y2="334" stroke="#1f57c3" stroke-width="1.6" marker-end="url(#d5-ai)"/>
+  <text x="566" y="312" text-anchor="end"><tspan class="b" style="fill:#1a4aa6">OP</tspan><tspan class="s"> seq 102, b:4 (echo = ack)</tspan></text>
 
   <!-- replica states -->
   <rect x="14" y="350" width="250" height="56" rx="6" fill="#ffffff" stroke="#5eead4"/>
