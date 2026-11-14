@@ -1,12 +1,23 @@
 <div class="cover">
+<div class="cover-head">
 <div class="logo">@@LOGO@@</div>
-<div class="kicker">CN Lab Project 2026</div>
-<h1>LANBoard: LAN-Based Multi-User Collaborative Whiteboard</h1>
-<div class="subtitle">Technical Documentation and User Guide</div>
-<div class="doc-kind">Python 3.12 asyncio TCP server · PySide6 (Qt 6) desktop client · LANBoard protocol v1</div>
-<div class="rule"></div>
+<div>
+<div class="kicker">Computer Networks Lab · Project 2026</div>
+<h1>LANBoard</h1>
+<div class="subtitle">A LAN-based multi-user collaborative whiteboard</div>
+</div>
+</div>
+<div class="doc-kind"><b>Technical Documentation and User Guide</b> &nbsp;·&nbsp; Python 3.12 asyncio TCP server · PySide6 (Qt 6) client · protocol v1</div>
+<div class="hero">@@HERO@@</div>
+<div class="hero-cap">Six people on one board over the LAN: live strokes and cursors, sticky notes, an imported PDF page and chat. The status bar shows the server's sequence number and the board hash that every replica checks.</div>
+<div class="stats">
+<div><b>TCP</b><span>one ordered stream per client, server-assigned sequence numbers</span></div>
+<div><b>318</b><span>automated tests, including every feature through real app windows</span></div>
+<div><b>3</b><span>platforms: macOS (.app / .dmg), Windows, Linux</span></div>
+<div><b>0</b><span>internet, accounts or cloud services needed</span></div>
+</div>
 <table>
-<thead><tr><th>Team member</th><th>Roll no.</th><th>Area of contribution</th></tr></thead>
+<thead><tr><th>Team member</th><th>Roll no.</th><th>Area of responsibility</th></tr></thead>
 <tbody>
 <tr><td>Yashvanth S</td><td>CS24I1029</td><td>Server core &amp; state</td></tr>
 <tr><td>Jeevanandham T</td><td>CS24I1035</td><td>Protocol &amp; networking</td></tr>
@@ -14,7 +25,7 @@
 <tr><td>Nithillakrishi P Y</td><td>CS24I1039</td><td>UI &amp; collaboration features</td></tr>
 </tbody>
 </table>
-<div class="meta"><b>Date:</b> 6 November 2026 &nbsp;·&nbsp; <b>Course:</b> Computer Networks Lab &nbsp;·&nbsp; <b>Submission deadline:</b> 15 November 2026<br><b>Source of this document:</b> docs/TECHNICAL_DOCUMENTATION.md, built with docs/build/build_docs.py. Every constant, message code and worked example in it is checked against the source code at build time.</div>
+<div class="meta"><b>Date:</b> 14 November 2026 &nbsp;·&nbsp; <b>Course:</b> Computer Networks Lab &nbsp;·&nbsp; <b>Submission deadline:</b> 15 November 2026<br><b>Source of this document:</b> docs/TECHNICAL_DOCUMENTATION.md, built with docs/build/build_docs.py. Every constant, message code and worked example in it is checked against the source code at build time.</div>
 </div>
 
 [[TOC]]

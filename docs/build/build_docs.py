@@ -292,6 +292,8 @@ def convert(md_text: str) -> tuple[str, list[dict]]:
     for i, fig in enumerate(figures):
         body = body.replace(f"<p>@@FIG{i}@@</p>", fig)
     body = body.replace("@@LOGO@@", svg_markup(DOCS / "assets" / "diagrams" / "00_logo.svg"))
+    hero = DOCS / "assets" / "screens" / "dark.png"
+    body = body.replace("@@HERO@@", f'<img src="{hero.as_uri()}" alt="LANBoard main window">')
 
     headings = []
 
