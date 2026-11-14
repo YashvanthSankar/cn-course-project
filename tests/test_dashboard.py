@@ -32,7 +32,7 @@ async def test_dashboard_renders_rooms_people_and_logs(tmp_path):
             a.submit({"k": "add", "obj": {"id": a.new_id(), "type": "stroke",
                                                 "style": {"color": "#000000", "width": 2},
                                                 "geom": {"pts": [i, 0, i + 10, 10]}}})
-        await a.settle()
+        await a.settle(timeout=30)   # slow CI runners (macOS took ~5 min for the suite)
         room = srv.rooms["LAB"]
         room.locked = True
         ring = RingLogHandler(size=3)
@@ -64,7 +64,7 @@ async def test_dashboard_renders_rooms_people_and_logs(tmp_path):
         a.submit({"k": "add", "obj": {"id": a.new_id(), "type": "stroke",
                                             "style": {"color": "#000000", "width": 2},
                                             "geom": {"pts": [0, 0, 5, 5]}}})
-        await a.settle()
+        await a.settle(timeout=30)   # slow CI runners (macOS took ~5 min for the suite)
         await asyncio.sleep(0.05)
         assert "ops/s" in plain(dash.render())
         assert dash._rates["LAB"] > 0
