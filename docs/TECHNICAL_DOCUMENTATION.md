@@ -722,7 +722,7 @@ Press <kbd>?</kbd> or <kbd>F1</kbd> for the cheat sheet. Besides the tool keys: 
 
 ### 13.1 Test suite overview
 
-`.venv/bin/python -m pytest -q` runs **276 tests** in about 40 s (all passed on 6 November 2026), headless (`QT_QPA_PLATFORM=offscreen`).
+`.venv/bin/python -m pytest -q` runs **318 tests** in about 90 s (all passed on 14 November 2026), headless (`QT_QPA_PLATFORM=offscreen`).
 
 | File | Tests | What it covers |
 |---|---|---|
@@ -738,6 +738,8 @@ Press <kbd>?</kbd> or <kbd>F1</kbd> for the cheat sheet. Besides the tool keys: 
 | `test_canvas.py`, `test_geometry.py` | 32 + 28 | tools, rendering, export, images/PDF, RDP, hit tests, Smart Ink |
 | `test_ui_smoke.py`, `test_auth.py` | 26 + 1 | main window, panels, connect dialog, toasts, themes; challenge–response |
 | `test_demo_robustness.py` | 3 | busy port gives a clear error, LAN address listing, reusing only a real LANBoard server |
+| `test_e2e_app.py` | 39 | every user-facing feature through real windows against a real server (§13.3) |
+| `test_dashboard.py` | 3 | server dashboard: rooms, people, offline sessions, op rate, log ring, `--dashboard` flag |
 
 ### 13.2 Convergence and chaos tests
 
@@ -746,6 +748,8 @@ Press <kbd>?</kbd> or <kbd>F1</kbd> for the cheat sheet. Besides the tool keys: 
 ### 13.3 End-to-end tests with the real client
 
 `test_e2e_client.py` runs the asyncio server on a background thread (like another machine) and real `NetClient` + `SessionController` objects on the Qt loop: two clients drawing concurrently converge with the server; a late joiner gets the board and undo removes only the undoer's work; edits made after a "cut cable" survive; with 30 % drops, 30 % duplicates and 20–60 ms jitter the replica still converges; password and viewer permissions hold.
+
+`test_e2e_app.py` goes one level higher: it runs the real server with two or three complete `MainWindow`s (real `CanvasView`, side panel, toolbars) and drives them with real mouse and keyboard events. Only modal dialogs are answered automatically. Each test checks that the *other* window sees the effect: pen with live preview, shapes, text and sticky notes, eraser, select/move/recolour/delete, undo/redo, live cursors, laser and ping, image and PDF import, export, chat, participants and raised hands, the people menu, viewer role, lock, kick (and that the kicked app cannot rejoin), clear and undo, room settings and password, saves, history scrub/restore/playback, present and follow, ownership hand-over, reconnect with offline edits, leave, the Network tab, sticky votes, keyboard shortcuts, dark mode and LAN discovery. Writing these tests found nine bugs, all fixed (B.6).
 
 ### 13.4 Stress tool
 
@@ -844,7 +848,7 @@ All tunables live in `common/config.py` unless another file is named. The build 
 
 ## Appendix B. Requirements traceability
 
-Every requirement and rubric item of the brief (docs/SPEC.md), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed below the table (B.1–B.5) and in §14.
+Every requirement and rubric item of the brief (docs/SPEC.md), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed below the table (B.1–B.6) and in §14.
 
 | Requirement | How we meet it | Code | Tests |
 |---|---|---|---|
@@ -884,7 +888,8 @@ Every requirement and rubric item of the brief (docs/SPEC.md), how LANBoard meet
 * **B.2** *(open, documented)* The desktop client has no TLS; the verifier (an HMAC key) is sent in clear at room creation and password change (§10.6, §14).
 * **B.3** *(fixed)* A kicked user could rejoin immediately; kicked client ids are now banned for the server's lifetime (`test_integration::test_kick`).
 * **B.4** *(fixed)* `ROOM_SETTINGS` now validates every field before applying any (`test_server::test_room_settings_validated_before_applying`).
-* **B.5** *(open)* The server dashboard has no automated tests.
+* **B.5** *(fixed)* The server dashboard had no automated tests; `test_dashboard.py` now covers it.
+* **B.6** *(fixed)* The end-to-end window tests (§13.3) found nine UI-level bugs: Ctrl/Cmd+Enter in a text editor focused chat instead of committing; an image inserted offline never reached others (ops were replayed before the image upload) and showed a raw "unknown blob" error; imports and exports showed duplicate toasts; the "raised a hand" toast never fired; editors could press Present although the server ignores their view; a kicked user could rejoin through "Back to start" (new client id per session); viewers could press Save; viewers' laser pointer was not relayed.
 
 ## Appendix C. Areas of responsibility and third-party software
 

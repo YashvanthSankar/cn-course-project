@@ -959,23 +959,25 @@ so they never block drawing. Dark mode is a full theme: Qt stylesheet, painted i
 
 # 27. testing -----------------------------------------------------------------------------------
 s = content_slide("Testing", None, "pytest + pytest-asyncio, real server and real client in the loop")
-stat(s, 0.6, 1.6, 2.9, "276", "tests, all passing (≈40 s)", big_size=40)
-stat(s, 3.7, 1.6, 2.9, "14", "test modules: protocol → UI", big_size=40, color=VIOLET)
+stat(s, 0.6, 1.6, 2.9, "318", "tests, all passing (≈90 s)", big_size=40)
+stat(s, 3.7, 1.6, 2.9, "16", "test modules: protocol → UI", big_size=40, color=VIOLET)
 stat(s, 6.8, 1.6, 2.9, "6 bots", "random concurrent edits + random disconnects converge", big_size=32, color=GREEN)
 stat(s, 9.9, 1.6, 2.83, "8 bots", "stress run: 1,771 ops, ALL REPLICAS CONVERGED", big_size=32, color=CYAN)
 layers = [("Unit", "protocol framing & partial reads, model apply/validate, geometry, undo rules, auth"),
           ("Server", "room pipeline, permissions, rate limit, persistence crash cases, multi-part"),
           ("Integration", "bots over real TCP: late join, resume, RESYNC, HASH, kick, passwords"),
-          ("Client", "NetClient state machine, controller ordering, canvas tools, UI smoke, end-to-end")]
+          ("Client", "NetClient, controller ordering, canvas tools, every feature through real windows")]
 for i, (h, d) in enumerate(layers):
     y = 3.3 + i * 0.75
     box(s, 0.6, y, 2.2, 0.62, fill=INDIGO, radius=0.08, label=h, size=13, bold=True, color="FFFFFF")
     text(s, 3.0, y + 0.17, 9.7, 0.4, d, size=13, color=TEXT2)
 mono_box(s, 0.6, 6.35, 12.13, 0.5, ["$ python -m lanboard.tools.bot --port 47811 --room PERF8 --bots 8 --rate 20 --seconds 12   →   ALL REPLICAS CONVERGED"], size=11)
 notes(s, """
-Any member (suggest Yashvanth). 276 tests pass in about 40 seconds. They cover each layer: the codec including split
+Any member (suggest Yashvanth). 318 tests pass in about 90 seconds. They cover each layer: the codec including split
 and merged reads, the model and undo rules, the server room pipeline and persistence crash cases, integration tests
 with headless bots over real TCP, and client tests that drive the real NetClient, controller and widgets offscreen.
+39 end-to-end tests run two or three complete app windows against a real server with real mouse and keyboard
+input and check that the other window sees every feature; writing them found and fixed nine UI bugs.
 The convergence test runs six bots editing at random while randomly disconnecting and resuming, and asserts every
 replica hashes to the server's board. The stress tool prints ALL REPLICAS CONVERGED at the end of each run.
 """)

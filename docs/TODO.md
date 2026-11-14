@@ -3,7 +3,7 @@
 **Deadline:** 15 Nov 2026, 23:55 IST (no extensions). **Internal target:** submit 15 Nov by 18:00.
 **Core freeze:** 10 Nov. Everything after that is extras + deliverables.
 
-## Status (6 Nov)
+## Status (14 Nov)
 
 The application code is complete and pushed. It was written by Yashvanth with AI assistance (Claude); those
 commits carry a `Co-Authored-By` trailer. The per-day plan further down is kept as the map of **who owns which
@@ -11,10 +11,11 @@ area**: each owner must study that code until they can explain and modify it, an
 the viva (see `docs/PRESENTER_GUIDE.md`). Its boxes are left unticked on purpose. Ticking them would claim that
 the listed member wrote that code.
 
-Done and verified on one machine (276 automated tests, including end-to-end, chaos and convergence tests, plus
+Done and verified on one machine (318 automated tests, including end-to-end, chaos and convergence tests, plus
 the bot stress tool):
 - [x] Server, protocol, sync controller, canvas, UI redesign, persistence with full history, multi-part snapshots
-- [x] Standalone server and client executables (PyInstaller, macOS)
+- [x] Every user-facing feature tested end to end through real windows against a real server (`tests/test_e2e_app.py`)
+- [x] Standalone server and client executables (PyInstaller), plus `LANBoard.app` and a `.dmg` for macOS
 - [x] Technical Documentation PDF (`docs/LANBoard_Technical_Documentation.pdf`, 42 pages, with requirements traceability)
 - [x] PPT (`docs/LANBoard_Presentation.pptx`, 30 slides) and `docs/PRESENTER_GUIDE.md`
 - [x] Windows / Linux / macOS builds (GitHub Actions, tests + smoke test green on all three)
