@@ -52,7 +52,14 @@ At startup it prints the LAN address that clients should use. It also answers LA
 uv pip install --python .venv/bin/python pyinstaller
 .venv/bin/pyinstaller --noconfirm packaging/lanboard.spec
 ```
-This produces `dist/LANBoard/lanboard-server` and `dist/LANBoard/lanboard-client`, which share one runtime folder.
+This produces `dist/LANBoard/lanboard-server` and `dist/LANBoard/lanboard-client`, which share one runtime folder (on Windows they end in `.exe`).
+
+On macOS the same command also builds `dist/LANBoard.app`, a double-clickable app that holds both executables. To wrap it in a disk image:
+```bash
+.venv/bin/python packaging/make_icns.py   # only if packaging/LANBoard.icns is missing
+.venv/bin/python packaging/make_dmg.py    # -> dist/LANBoard-<version>-macOS.dmg
+```
+The app is not notarised, so the first launch needs right-click > Open. GitHub Actions builds all three platforms (and the DMG) on every push; see `.github/workflows/build.yml`.
 
 **Firewall notes:**
 - Windows: allow the server through Defender, and make sure the network profile is *Private*.

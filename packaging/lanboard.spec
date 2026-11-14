@@ -4,9 +4,13 @@
 # They share one _internal/ runtime. The client's "start a server on this
 # computer" option finds lanboard-server next to itself
 # (client/ui/server_launcher.py: Path(sys.executable).with_name("lanboard-server[.exe]")),
-# so the two executables must stay in the same folder. Do not wrap the client
-# in a macOS .app BUNDLE: sys.executable would then point inside
-# LANBoard.app/Contents/MacOS and the sibling server would not be found.
+# so the two executables must stay in the same folder.
+#
+# On macOS the spec ALSO builds dist/LANBoard.app (double-clickable, with an
+# icon; packaging/make_dmg.py wraps it in a .dmg). Both executables go into
+# LANBoard.app/Contents/MacOS, so the sibling lookup above still works, and the
+# client is listed first so it becomes CFBundleExecutable, and LSBackgroundOnly
+# is forced off (otherwise the console server would make it a background app).
 #
 # Build (same command on Windows, macOS and Linux; PyInstaller cannot
 # cross-compile, so each OS builds its own bundle, see .github/workflows/build.yml):
@@ -16,11 +20,14 @@
 # Cross-platform notes:
 #   * EXE names have no extension: PyInstaller adds ".exe" on Windows by itself.
 #   * Only os.path.join is used for paths, never "/" or "\\".
-#   * No icon file is referenced (the window icon is drawn at run time by
-#     ui/theme.app_icon()), so there is no .ico / .icns that could be missing.
+#   * The window icon is drawn at run time by ui/theme.app_icon(). Only the
+#     macOS .app uses an icon file, packaging/LANBoard.icns (make_icns.py);
+#     the build still works without it.
 #   * upx is off: UPX-packed Qt DLLs are a classic cause of antivirus false
 #     positives on Windows lab PCs, and UPX breaks code signing on macOS.
 import os
+import sys
+
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 SRC = os.path.join(ROOT, "src")
@@ -73,3 +80,31 @@ client_exe = EXE(client_pyz, client_a.scripts, PY_OPTIONS, exclude_binaries=True
 coll = COLLECT(server_exe, server_a.binaries, server_a.datas,
                client_exe, client_a.binaries, client_a.datas,
                upx=False, name="LANBoard")
+
+if sys.platform == "darwin":
+    import re
+    with open(os.path.join(SRC, "lanboard", "__init__.py"), encoding="utf-8") as f:
+        VERSION = re.search(r'__version__\s*=\s*"([^"]+)"', f.read()).group(1)
+    ICNS = os.path.join(SPECPATH, "LANBoard.icns")
+    # client first: BUNDLE takes CFBundleExecutable from the first EXE in the TOC
+    app_coll = COLLECT(client_exe, client_a.binaries, client_a.datas,
+                       server_exe, server_a.binaries, server_a.datas,
+                       upx=False, name="LANBoard-app")
+    app = BUNDLE(app_coll, name="LANBoard.app",
+                 icon=ICNS if os.path.exists(ICNS) else None,
+                 bundle_identifier="in.ac.cn.lanboard",
+                 version=VERSION,
+                 info_plist={
+                     "CFBundleDisplayName": "LANBoard",
+                     "CFBundleShortVersionString": VERSION,
+                     "NSHighResolutionCapable": True,
+                     # COLLECT takes console mode from its LAST exe (the server), which
+                     # would make PyInstaller hide the app: it is a normal GUI app
+                     "LSBackgroundOnly": False,
+                     "LSMinimumSystemVersion": "11.0",
+                     # macOS 15+ asks before an app talks to other machines on the
+                     # LAN; this is the text shown in that prompt
+                     "NSLocalNetworkUsageDescription":
+                         "LANBoard connects to whiteboard servers on your local network "
+                         "and finds them with a LAN broadcast.",
+                 })

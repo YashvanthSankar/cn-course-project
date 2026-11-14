@@ -319,6 +319,11 @@ WINDOWS (10/11, 64-bit)            folder: executables\\{win}\\LANBoard
 macOS (Apple Silicon unless the folder name says x64)
                                     folder: executables/{mac}/LANBoard
 ----------------------------------------------------------------------
+  EASIEST: open executables/{mac}/LANBoard-<version>-macOS.dmg, drag
+  LANBoard onto Applications, then right-click LANBoard > Open the first
+  time (it is not notarised). "Host new room" starts the bundled server.
+
+  Terminal alternative (the plain folder build):
   * Double-click the zip (Archive Utility keeps the permissions and links).
   * A downloaded zip is quarantined by Gatekeeper ("cannot be opened" /
     "developer cannot be verified"). Clear it once, in Terminal:
@@ -423,6 +428,11 @@ def main() -> int:
                 packer.add_tree(dist, f"executables/{tag}/LANBoard")
                 platforms.append(tag)
                 print(f"  + executables/{tag}/LANBoard  (from {dist})")
+                for dmg in sorted(dist.parent.glob("LANBoard-*-macOS.dmg")):
+                    if dmg.stat().st_mtime < head_time:
+                        warn(f"{dmg.name} is older than the last commit: rerun packaging/make_dmg.py")
+                    packer.add_bytes(f"executables/{tag}/{dmg.name}", dmg.read_bytes(), 0o644)
+                    print(f"  + executables/{tag}/{dmg.name}")
             else:
                 warn(f"{dist} has no lanboard-server/lanboard-client: build it first")
         for extra in sorted(p for p in (out_dir / "extra").iterdir() if p.is_dir()):

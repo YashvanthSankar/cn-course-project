@@ -4,7 +4,8 @@
 #
 # Each job: install deps -> run the test suite headless -> build -> smoke-test
 # the frozen executables (packaging/smoke_test.py) -> upload
-# LANBoard-<OS>.zip as a workflow artifact.
+# LANBoard-<OS>.zip as a workflow artifact. On macOS it also builds
+# LANBoard.app and uploads LANBoard-<version>-macOS.dmg.
 #
 # The bundle is zipped by us *before* upload: actions/upload-artifact drops
 # Unix permission bits and follows symlinks, which would leave non-executable
@@ -86,6 +87,25 @@ jobs:
       - name: Smoke-test frozen executables
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python packaging/smoke_test.py --dist dist/LANBoard --seconds 6
+
+      # macOS: the spec also builds dist/LANBoard.app; wrap it in a .dmg and
+      # check its signature and that the bundled server runs from inside it
+      - name: Build and check DMG (macOS)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && runner.os == 'macOS' }}
+        run: |
+          codesign --verify --deep --strict dist/LANBoard.app
+          dist/LANBoard.app/Contents/MacOS/lanboard-server --help > /dev/null
+          python packaging/make_dmg.py
+
+      - name: Upload DMG (macOS)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && runner.os == 'macOS' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: LANBoard-macOS-dmg
+          path: dist/LANBoard-*-macOS.dmg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
 
       - name: Zip bundle (keep permissions and symlinks)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

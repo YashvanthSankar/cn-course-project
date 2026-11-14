@@ -1268,6 +1268,7 @@ def paint_logo(p: QPainter, rect: QRectF) -> None:
     p.scale(s, s)
     pen = _pen(QColor("white"), 2.2)
     p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)   # stroke only: the tile's gradient brush would fill the curve
     path = QPainterPath(QPointF(5, 15.5))
     path.cubicTo(7.5, 8, 10, 8, 11.2, 12.5)
     path.cubicTo(12.4, 17, 15, 16.5, 17.2, 9.5)
