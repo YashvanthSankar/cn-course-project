@@ -15,7 +15,7 @@
   <!-- participants -->
   <rect x="110" y="12" width="140" height="34" rx="8" fill="#f0fdfa" stroke="#0d9488"/>
   <text x="180" y="34" class="b" text-anchor="middle">Client (alice, u3)</text>
-  <rect x="450" y="12" width="140" height="34" rx="8" fill="#eef2ff" stroke="#4f46e5"/>
+  <rect x="450" y="12" width="140" height="34" rx="8" fill="#e6f4f1" stroke="#0f766e"/>
   <text x="520" y="34" class="b" text-anchor="middle">Server · room</text>
   <g stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4 4">
     <line x1="180" y1="46" x2="180" y2="556"/>
@@ -44,7 +44,7 @@
   <rect x="104" y="134" width="244" height="44" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
   <text x="112" y="151" class="s">no byte for 12 s (CLIENT_TIMEOUT), FIN, RST</text>
   <text x="112" y="166" class="s">or socket error → abort socket, backoff</text>
-  <rect x="370" y="134" width="300" height="44" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <rect x="370" y="134" width="300" height="44" rx="6" fill="#e6f4f1" stroke="#4fb3a6"/>
   <text x="378" y="151" class="s">watchdog: silent &gt; 12 s → close; USER_LEFT {timeout}</text>
   <text x="378" y="166" class="s">Session kept 600 s (SESSION_TTL): token still valid</text>
 
@@ -66,7 +66,7 @@
   <text x="192" y="318"><tspan class="b">TCP connect → HELLO</tspan><tspan class="s"> (CHALLENGE comes back)</tspan></text>
   <line x1="184" y1="356" x2="516" y2="356" stroke="#334155" stroke-width="1.4" marker-end="url(#d7-a)"/>
   <text x="192" y="350"><tspan class="b">JOIN</tspan><tspan class="s"> {room, resume_token, last_seq: 130}</tspan></text>
-  <rect x="370" y="364" width="300" height="34" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <rect x="370" y="364" width="300" height="34" rx="6" fill="#e6f4f1" stroke="#4fb3a6"/>
   <text x="378" y="379" class="s">token → same Session: same user_id, role and op_id</text>
   <text x="378" y="392" class="s">dedupe table; a half-open old socket is closed</text>
 
@@ -76,7 +76,7 @@
   <text x="192" y="442"><tspan class="b">OP_BATCH</tspan><tspan class="s"> {ops 131 … 140} (SNAPSHOT if the tail is gone)</tspan></text>
   <line x1="184" y1="480" x2="516" y2="480" stroke="#0f766e" stroke-width="1.5" marker-end="url(#d7-at)"/>
   <text x="192" y="474"><tspan class="b" style="fill:#0f766e">OP_SUBMIT</tspan><tspan class="s"> × pending: in order, sent on JOINED, ≤ 100/s</tspan></text>
-  <rect x="370" y="488" width="300" height="34" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+  <rect x="370" y="488" width="300" height="34" rx="6" fill="#e6f4f1" stroke="#4fb3a6"/>
   <text x="378" y="503" class="s">op_id already accepted → re-send its original OP;</text>
   <text x="378" y="516" class="s">new op_id → seq 141, 142 … (never applied twice)</text>
   <line x1="516" y1="540" x2="184" y2="540" stroke="#334155" stroke-width="1.4" marker-end="url(#d7-a)"/>

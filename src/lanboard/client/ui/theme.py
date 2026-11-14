@@ -4,8 +4,9 @@ Everything visual that is shared between widgets lives here so the app looks
 consistent:
 
 * :data:`LIGHT` / :data:`DARK` are colour palettes (plain dicts of design tokens).
-  Both share one vivid accent: an indigo → violet gradient used for primary
-  buttons, the active tool and the brand mark.
+  Both share one flat accent, a deep teal, used for primary buttons, the active
+  tool and the brand mark, with amber as the second colour (the logo's dot).
+  There are no decorative gradients: every surface is a single colour.
 * :func:`load_fonts` registers the bundled fonts (Inter for the UI, JetBrains Mono
   for numbers and JSON) from ``client/assets/fonts`` with ``QFontDatabase``. It
   works from a source checkout and from the PyInstaller bundle (``sys._MEIPASS``)
@@ -28,7 +29,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import (QBrush, QColor, QFont, QFontDatabase, QIcon, QLinearGradient, QPainter,
+from PySide6.QtGui import (QBrush, QColor, QFont, QFontDatabase, QIcon, QPainter,
                            QPainterPath, QPainterPathStroker, QPalette, QPen, QPixmap, QPolygonF)
 from PySide6.QtWidgets import QApplication
 
@@ -48,10 +49,10 @@ LIGHT: dict[str, str] = {
     "text": "#121626",
     "text2": "#474f66",
     "muted": "#868ea5",
-    "accent": "#5b5cf0",      # indigo
-    "accent2": "#9b5cf6",     # violet (gradient end)
-    "accent_hover": "#4b4ce0",
-    "accent_soft": "#ececfe",
+    "accent": "#0f766e",      # deep teal
+    "accent2": "#b45309",     # amber (second colour: snapshot/history frames, JSON literals)
+    "accent_hover": "#115e59",
+    "accent_soft": "#e1f3f0",
     "accent_text": "#ffffff",
     "success": "#12a150",
     "success_soft": "#e2f6ea",
@@ -66,7 +67,7 @@ LIGHT: dict[str, str] = {
     "shadow": "#141a3340",
     "console": "#f7f8fc",     # Network tab "mission control" panels
     "console_line": "#e6e8f0",
-    "chart_in": "#5b5cf0",
+    "chart_in": "#0f766e",
     "chart_out": "#f2711c",
     "chart_rtt": "#0fa968",
 }
@@ -83,10 +84,10 @@ DARK: dict[str, str] = {
     "text": "#e9ecf6",
     "text2": "#a9b1c8",
     "muted": "#6d7690",
-    "accent": "#7c7dff",
-    "accent2": "#b07cff",
-    "accent_hover": "#9091ff",
-    "accent_soft": "#262a5c",
+    "accent": "#14a090",
+    "accent2": "#f0b429",
+    "accent_hover": "#19b6a4",
+    "accent_soft": "#11312e",
     "accent_text": "#ffffff",
     "success": "#34d399",
     "success_soft": "#0f3327",
@@ -101,7 +102,7 @@ DARK: dict[str, str] = {
     "shadow": "#00000099",
     "console": "#0c111d",
     "console_line": "#1c2335",
-    "chart_in": "#8b8cff",
+    "chart_in": "#2dc4b2",
     "chart_out": "#fb923c",
     "chart_rtt": "#34d399",
 }
@@ -271,13 +272,15 @@ def mono_css() -> str:
 # shared painting helpers
 # ---------------------------------------------------------------------------
 
-def accent_gradient(r: QRectF, t: dict[str, str] | None = None, vertical: bool = False) -> QLinearGradient:
-    """The brand gradient (accent → accent2) across ``r``."""
+def accent_gradient(r: QRectF, t: dict[str, str] | None = None, vertical: bool = False) -> QBrush:
+    """The brand fill for ``r``: the flat accent colour.
+
+    Kept as a helper (rather than inlining ``QColor(t["accent"])``) so every
+    accent-filled shape (active tool, chat bubbles, sliders, the Network header)
+    changes together. ``r`` and ``vertical`` are unused since the fill is flat.
+    """
     t = t or tokens()
-    g = QLinearGradient(r.topLeft(), r.bottomLeft() if vertical else r.topRight())
-    g.setColorAt(0.0, QColor(t["accent"]))
-    g.setColorAt(1.0, QColor(t["accent2"]))
-    return g
+    return QBrush(QColor(t["accent"]))
 
 
 def paint_shadow(p: QPainter, r: QRectF, radius: float, spread: int = 10, strength: float = 1.0,
@@ -322,8 +325,8 @@ def stylesheet(t: dict[str, str]) -> str:
     Widgets opt into special looks through ``objectName`` (``#TopBar``) or
     dynamic properties (``[role="primary"]``) so code never hard-codes colours.
     """
-    grad = (f"qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {t['accent']}, stop:1 {t['accent2']})")
-    grad_hover = (f"qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {t['accent_hover']}, stop:1 {t['accent']})")
+    grad = t['accent']               # primary buttons: flat accent, no gradient
+    grad_hover = t['accent_hover']
     mono = mono_css()
     return f"""
     * {{ outline: 0; }}
@@ -397,10 +400,8 @@ def stylesheet(t: dict[str, str]) -> str:
                                    font-weight: 600; padding: 8px 16px; }}
     QPushButton[role="primary"]:hover {{ background: {grad_hover}; }}
     QPushButton[role="primary"]:disabled {{ background: {t['border_strong']}; color: {t['surface']}; }}
-    QPushButton[role="danger"] {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f0484e,
-                                  stop:1 #c81e5b); color: white; border: none; font-weight: 700; }}
-    QPushButton[role="danger"]:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ff5a60,
-                                  stop:1 #dc2a6a); }}
+    QPushButton[role="danger"] {{ background: #d93a40; color: white; border: none; font-weight: 700; }}
+    QPushButton[role="danger"]:hover {{ background: #e5484d; }}
     QPushButton[role="danger"]:pressed {{ background: #b81d3f; }}
     QPushButton[role="ghost"] {{ background: transparent; border: none; color: {t['accent']}; padding: 4px 8px; }}
     QPushButton[role="ghost"]:hover {{ background: {t['accent_soft']}; }}
@@ -1252,15 +1253,16 @@ def icon_names() -> list[str]:
     return sorted(_ICONS)
 
 
+LOGO_TEAL = "#0f766e"
+LOGO_AMBER = "#ffc53d"
+
+
 def paint_logo(p: QPainter, rect: QRectF) -> None:
-    """The LANBoard mark: a gradient tile with a hand-drawn squiggle and a node."""
+    """The LANBoard mark: a flat teal tile with a hand-drawn squiggle and an amber node."""
     p.save()
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
-    grad.setColorAt(0, QColor("#6d6dff"))
-    grad.setColorAt(1, QColor("#a35cf7"))
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QBrush(grad))
+    p.setBrush(QColor(LOGO_TEAL))
     r = rect.width() * 0.26
     p.drawRoundedRect(rect, r, r)
     s = rect.width() / 24.0
@@ -1273,7 +1275,7 @@ def paint_logo(p: QPainter, rect: QRectF) -> None:
     path.cubicTo(7.5, 8, 10, 8, 11.2, 12.5)
     path.cubicTo(12.4, 17, 15, 16.5, 17.2, 9.5)
     p.drawPath(path)
-    p.setBrush(QColor("#ffd166"))
+    p.setBrush(QColor(LOGO_AMBER))
     p.setPen(Qt.PenStyle.NoPen)
     p.drawEllipse(QPointF(18, 7.5), 2.3, 2.3)
     p.restore()

@@ -17,8 +17,8 @@
   <text x="660" y="44" class="ms" text-anchor="end">4 + N</text>
 
   <!-- header + payload boxes -->
-  <rect x="20" y="52" width="200" height="56" fill="#eef2ff" stroke="#4f46e5" stroke-width="1.4"/>
-  <line x1="70" y1="52" x2="70" y2="62" stroke="#818cf8"/><line x1="120" y1="52" x2="120" y2="62" stroke="#818cf8"/><line x1="170" y1="52" x2="170" y2="62" stroke="#818cf8"/>
+  <rect x="20" y="52" width="200" height="56" fill="#e6f4f1" stroke="#0f766e" stroke-width="1.4"/>
+  <line x1="70" y1="52" x2="70" y2="62" stroke="#4fb3a6"/><line x1="120" y1="52" x2="120" y2="62" stroke="#4fb3a6"/><line x1="170" y1="52" x2="170" y2="62" stroke="#4fb3a6"/>
   <text x="120" y="78" class="b" text-anchor="middle">length N</text>
   <text x="120" y="96" class="s" text-anchor="middle">uint32, big-endian (network order)</text>
 
@@ -36,7 +36,7 @@
 
   <!-- example -->
   <text x="20" y="178" class="h">Example: HELLO, 73 bytes on the wire</text>
-  <rect x="20" y="188" width="200" height="34" fill="#ffffff" stroke="#4f46e5"/>
+  <rect x="20" y="188" width="200" height="34" fill="#ffffff" stroke="#0f766e"/>
   <text x="120" y="210" class="m" text-anchor="middle">00 00 00 45</text>
   <rect x="220" y="188" width="80" height="34" fill="#ffffff" stroke="#d97706"/>
   <text x="260" y="210" class="m" text-anchor="middle">01</text>
@@ -49,11 +49,11 @@
   <!-- type groups -->
   <text x="20" y="272" class="h">Type byte: the high nibble groups the messages</text>
   <g>
-    <rect x="20"  y="282" width="86" height="34" rx="6" fill="#eef2ff" stroke="#818cf8"/>
+    <rect x="20"  y="282" width="86" height="34" rx="6" fill="#e6f4f1" stroke="#4fb3a6"/>
     <text x="63"  y="297" class="b" text-anchor="middle">0x0_</text><text x="63" y="310" class="s" text-anchor="middle">control</text>
     <rect x="112" y="282" width="86" height="34" rx="6" fill="#f0fdfa" stroke="#2dd4bf"/>
     <text x="155" y="297" class="b" text-anchor="middle">0x1_</text><text x="155" y="310" class="s" text-anchor="middle">presence</text>
-    <rect x="204" y="282" width="86" height="34" rx="6" fill="#e0e7ff" stroke="#4f46e5"/>
+    <rect x="204" y="282" width="86" height="34" rx="6" fill="#e6f4f1" stroke="#0f766e"/>
     <text x="247" y="297" class="b" text-anchor="middle">0x2_</text><text x="247" y="310" class="s" text-anchor="middle">board ops</text>
     <rect x="296" y="282" width="86" height="34" rx="6" fill="#fdf4ff" stroke="#d946ef"/>
     <text x="339" y="297" class="b" text-anchor="middle">0x3_</text><text x="339" y="310" class="s" text-anchor="middle">chat</text>

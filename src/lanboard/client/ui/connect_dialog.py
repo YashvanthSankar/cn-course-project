@@ -35,7 +35,7 @@ import re
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QElapsedTimer, QPointF, QRectF, QSettings, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPixmap, QRadialGradient
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import (QCompleter, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                                QPushButton, QSizePolicy, QStyle, QStyledItemDelegate, QToolButton, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -174,13 +174,9 @@ class NetworkHero(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = QRectF(self.rect())
         w, h = r.width(), r.height()
-        g = QLinearGradient(r.topLeft(), r.bottomRight())
-        g.setColorAt(0.0, QColor("#5b5cf0"))
-        g.setColorAt(0.5, QColor("#7a4fe6"))
-        g.setColorAt(1.0, QColor("#1e1a4d"))
-        p.fillRect(r, g)
+        p.fillRect(r, QColor("#0c3f3a"))            # deep teal "board" panel, flat
         glow = QRadialGradient(QPointF(w * HERO_SERVER[0], h * HERO_SERVER[1]), w * 0.75)
-        glow.setColorAt(0.0, QColor(255, 255, 255, 46))
+        glow.setColorAt(0.0, QColor(255, 255, 255, 22))
         glow.setColorAt(1.0, QColor(255, 255, 255, 0))
         p.fillRect(r, glow)
         # dot grid: the "whiteboard" texture
@@ -270,7 +266,7 @@ class NetworkHero(QWidget):
         p.drawRoundedRect(tile.adjusted(-6, -6, 6, 6), 18, 18)
         p.setBrush(QColor("#ffffff"))
         p.drawRoundedRect(tile, 14, 14)
-        theme.icon("server", "#5b5cf0", 20).paint(p, QRectF(sp.x() - 10, tile.top() + 7, 20, 20).toRect())
+        theme.icon("server", theme.LOGO_TEAL, 20).paint(p, QRectF(sp.x() - 10, tile.top() + 7, 20, 20).toRect())
         p.setFont(theme.mono_font(10, QFont.Weight.Bold))
         p.setPen(QColor("#2c2a6b"))
         p.drawText(QRectF(tile.left(), tile.top() + 28, tile.width(), 16), Qt.AlignmentFlag.AlignCenter,

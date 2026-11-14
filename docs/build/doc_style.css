@@ -36,8 +36,8 @@
   --muted: #475569;
   --faint: #94a3b8;
   --rule: #cbd5e1;
-  --accent: #4f46e5;
-  --accent-soft: #eef2ff;
+  --accent: #0f766e;
+  --accent-soft: #e6f4f1;
   --teal: #0d9488;
   --code-bg: #f6f7f9;
 }
@@ -143,11 +143,11 @@ table {
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
 th {
-  background: #eef2ff;
-  color: #1e1b4b;
+  background: #e6f4f1;
+  color: #0c3f3a;
   font-weight: 600;
   text-align: left;
-  border: 0.6pt solid #c7d2fe;
+  border: 0.6pt solid #bfe3dd;
   padding: 3.4pt 4.5pt;
   vertical-align: bottom;
 }
@@ -217,10 +217,8 @@ figcaption b { color: var(--ink); }
   box-sizing: border-box;
   padding: 20mm 20mm 18mm 20mm;
   position: relative;
-  background:
-    radial-gradient(ellipse at 100% 0%, rgba(109, 109, 255, 0.18), transparent 55%),
-    radial-gradient(ellipse at 0% 100%, rgba(163, 92, 247, 0.12), transparent 50%),
-    #ffffff;
+  background: #ffffff;
+  border-top: 5mm solid #0f766e;
   break-after: page;
   font-family: Inter, "Helvetica Neue", Arial, sans-serif;
 }
@@ -248,15 +246,15 @@ figcaption b { color: var(--ink); }
 .cover .hero-cap { font-size: 8pt; color: var(--muted); margin: 2.5mm 1mm 6mm 1mm; line-height: 1.45; }
 .cover .stats { display: flex; gap: 3mm; margin-bottom: 6mm; }
 .cover .stats > div {
-  flex: 1; background: #f5f3ff; border: 0.6pt solid #ddd6fe; border-radius: 2mm; padding: 2.6mm 3mm;
+  flex: 1; background: #fdf6ec; border: 0.6pt solid #cfe8e3; border-radius: 2mm; padding: 2.6mm 3mm;
 }
 .cover .stats b {
   display: block; font-size: 17pt; font-weight: 700; line-height: 1.1; margin-bottom: 1mm;
-  background: linear-gradient(90deg, #6d6dff, #a35cf7); -webkit-background-clip: text; color: transparent;
+  color: var(--accent);
 }
 .cover .stats span { display: block; font-size: 7.6pt; color: #475569; line-height: 1.35; }
 .cover table { font-size: 9pt; width: 100%; margin: 0; }
-.cover th { font-size: 8pt; background: #eef2ff; }
+.cover th { font-size: 8pt; background: #e6f4f1; }
 .cover td, .cover th { padding: 3.6pt 7pt; }
 .cover .meta {
   position: absolute; left: 20mm; right: 20mm; bottom: 14mm;

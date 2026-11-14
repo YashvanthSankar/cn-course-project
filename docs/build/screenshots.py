@@ -183,7 +183,7 @@ def make_pdf(path: str) -> None:
     p = QPainter(pdf)
     w, h = pdf.width(), pdf.height()
     p.fillRect(0, 0, w, h, QColor("#ffffff"))
-    p.fillRect(0, 0, w, int(h * 0.2), QColor("#4f46e5"))
+    p.fillRect(0, 0, w, int(h * 0.2), QColor("#0f766e"))
     f = QFont(theme.UI_FAMILY or "Inter")
     f.setPixelSize(int(h * 0.075)); f.setBold(True)
     p.setFont(f); p.setPen(QColor("#ffffff"))
@@ -267,21 +267,21 @@ def shoot_connect() -> None:
 # =============================================================================
 def build_board(ctl, others) -> None:
     """A small architecture sketch, drawn by several real clients."""
-    ink, indigo, violet = "#1b2130", "#4f46e5", "#7c3aed"
+    ink, indigo, violet = "#1b2130", "#1d4ed8", "#c2410c"   # board inks: blue, burnt orange
     add = ctl.add_object
     add({"type": "text", "style": {"color": ink, "font_size": 34},
          "geom": {"x": 80, "y": 40, "text": "LANBoard: how one edit travels"}})
     # clients
     for i, label in enumerate(("Client A  (Qt)", "Client B  (Qt)", "Client C  (Qt)")):
         y = 150 + i * 150
-        add({"type": "rect", "style": {"color": indigo, "width": 3, "fill": "#eef0ff"},
+        add({"type": "rect", "style": {"color": indigo, "width": 3, "fill": "#e6f4f1"},
              "geom": {"x": 80, "y": y, "w": 220, "h": 96}})
         add({"type": "text", "style": {"color": ink, "font_size": 20},
              "geom": {"x": 104, "y": y + 30, "text": label}})
         add({"type": "arrow", "style": {"color": indigo, "width": 3},
              "geom": {"x1": 310, "y1": y + 48, "x2": 520, "y2": 330}})
     # server
-    add({"type": "rect", "style": {"color": violet, "width": 4, "fill": "#f3eaff"},
+    add({"type": "rect", "style": {"color": violet, "width": 4, "fill": "#fdf1e3"},
          "geom": {"x": 530, "y": 250, "w": 260, "h": 170}})
     add({"type": "text", "style": {"color": ink, "font_size": 22},
          "geom": {"x": 556, "y": 270, "text": "Server (asyncio)"}})
@@ -677,7 +677,7 @@ def shoot_dashboard() -> None:
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=ROOT)
         for k in range(24):
             ctl = clients[k % 3][1]
-            ctl.add_object({"type": "rect", "style": {"color": "#4f46e5", "width": 2},
+            ctl.add_object({"type": "rect", "style": {"color": "#1d4ed8", "width": 2},
                             "geom": {"x": k * 20, "y": 10, "w": 40, "h": 30}})
             wait(250)
         wait(1200)
@@ -726,7 +726,7 @@ def render_terminal(prompt: str, frame: str) -> QImage:
     p.drawText(QRectF(0, 0, w, bar), Qt.AlignmentFlag.AlignCenter, "lanboard-server — dashboard")
     p.setFont(mono)
     y = bar + pad + fm.ascent()
-    p.setPen(QColor("#a5b4fc"))
+    p.setPen(QColor("#7cc9bf"))
     p.drawText(QPointF(pad, y), prompt)
     y += lh * 1.6
     for ln in lines:

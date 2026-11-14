@@ -7,7 +7,7 @@
     .m { font-family: "JetBrains Mono", Menlo, monospace; font-size: 11px; }
   </style>
   <defs>
-    <marker id="d1-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4f46e5"/></marker>
+    <marker id="d1-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0f766e"/></marker>
     <marker id="d1-aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d97706"/></marker>
   </defs>
 
@@ -24,11 +24,11 @@
   <text x="512" y="80" class="s">runs with it disabled</text>
 
   <!-- Server -->
-  <rect x="240" y="74" width="220" height="128" rx="12" fill="#ffffff" stroke="#4f46e5" stroke-width="1.6"/>
+  <rect x="240" y="74" width="220" height="128" rx="12" fill="#ffffff" stroke="#0f766e" stroke-width="1.6"/>
   <text x="256" y="96" class="h">LANBoard server</text>
   <text x="256" y="111" class="m" style="fill:#475569">lanboard-server --port 5050</text>
-  <rect x="256" y="120" width="188" height="22" rx="6" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="266" y="135" class="s b" style="fill:#3730a3">TCP 5050 · asyncio listener</text>
+  <rect x="256" y="120" width="188" height="22" rx="6" fill="#e6f4f1" stroke="#4fb3a6"/>
+  <text x="266" y="135" class="s b" style="fill:#115e59">TCP 5050 · asyncio listener</text>
   <rect x="256" y="148" width="188" height="22" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
   <text x="266" y="163" class="s b" style="fill:#92400e">UDP 5051 · discovery responder</text>
   <text x="256" y="190" class="s">rooms, op log, chat on disk (--data)</text>
@@ -40,10 +40,10 @@
   <text x="62" y="182" class="s" style="fill:#92400e">② unicast reply: port, rooms</text>
 
   <!-- TCP links -->
-  <line x1="120" y1="272" x2="296" y2="204" stroke="#4f46e5" stroke-width="2" marker-start="url(#d1-ai)" marker-end="url(#d1-ai)"/>
-  <line x1="350" y1="272" x2="350" y2="204" stroke="#4f46e5" stroke-width="2" marker-start="url(#d1-ai)" marker-end="url(#d1-ai)"/>
-  <line x1="570" y1="272" x2="404" y2="204" stroke="#4f46e5" stroke-width="2" marker-start="url(#d1-ai)" marker-end="url(#d1-ai)"/>
-  <text x="358" y="236" class="s b" style="fill:#3730a3">③ TCP :5050</text>
+  <line x1="120" y1="272" x2="296" y2="204" stroke="#0f766e" stroke-width="2" marker-start="url(#d1-ai)" marker-end="url(#d1-ai)"/>
+  <line x1="350" y1="272" x2="350" y2="204" stroke="#0f766e" stroke-width="2" marker-start="url(#d1-ai)" marker-end="url(#d1-ai)"/>
+  <line x1="570" y1="272" x2="404" y2="204" stroke="#0f766e" stroke-width="2" marker-start="url(#d1-ai)" marker-end="url(#d1-ai)"/>
+  <text x="358" y="236" class="s b" style="fill:#115e59">③ TCP :5050</text>
   <text x="358" y="250" class="s">one persistent connection</text>
   <text x="358" y="263" class="s">per client, full duplex</text>
 
@@ -68,7 +68,7 @@
   </g>
 
   <!-- Legend -->
-  <line x1="30" y1="368" x2="62" y2="368" stroke="#4f46e5" stroke-width="2"/>
+  <line x1="30" y1="368" x2="62" y2="368" stroke="#0f766e" stroke-width="2"/>
   <text x="70" y="372" class="s">TCP: framed protocol, reliable and ordered (all application traffic)</text>
   <line x1="510" y1="368" x2="540" y2="368" stroke="#d97706" stroke-width="1.5" stroke-dasharray="5 4"/>
   <text x="548" y="372" class="s">UDP: discovery only</text>
