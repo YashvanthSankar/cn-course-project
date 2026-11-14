@@ -64,6 +64,13 @@ client_a = Analysis([os.path.join(SPECPATH, "client_entry.py")], pathex=[SRC],
                     hiddenimports=["PySide6.QtSvg", "pypdfium2"],
                     excludes=QT_EXCLUDES, noarchive=False)
 
+# On Windows, Qt uses the system ICU shim. Python 3.14 may cause PyInstaller
+# to collect a different icuuc.dll, whose exports are incompatible with Qt.
+# Leaving that DLL in the bundle prevents the client from starting.
+if sys.platform == "win32":
+    server_a.binaries = [entry for entry in server_a.binaries if os.path.basename(entry[0]).lower() != "icuuc.dll"]
+    client_a.binaries = [entry for entry in client_a.binaries if os.path.basename(entry[0]).lower() != "icuuc.dll"]
+
 server_pyz = PYZ(server_a.pure)
 client_pyz = PYZ(client_a.pure)
 
