@@ -61,6 +61,7 @@ class ClientShell(QObject):
         self.window = None
         self.last: ConnectParams | None = None
         self.servers: list = []           # ServerProcess objects we started (kept alive)
+        self.client_id: str | None = None  # NetClient.client_id reused by every session
 
     def show_connect(self, error_text: str = "", prefill: ConnectParams | None = None) -> None:
         dlg = ConnectDialog(prefill=prefill, error_text=error_text, settings=self.settings)
@@ -83,6 +84,11 @@ class ClientShell(QObject):
             self.servers.append(p.server)
         self.last = p
         self.net = NetClient()
+        # One client id for the whole app run (not per session): the server bans a
+        # kicked client id from the room, which must survive "Back to start" + Join.
+        if self.client_id:
+            self.net.client_id = self.client_id
+        self.client_id = self.net.client_id
         self.controller = SessionController(self.net)
         self.window = MainWindow(self.controller, settings=self.settings, lan_addresses=p.lan_addresses)
         self.window.session_ended.connect(self.on_session_ended)

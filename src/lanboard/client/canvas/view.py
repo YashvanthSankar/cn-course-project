@@ -162,6 +162,19 @@ class InlineEditor(QGraphicsTextItem):
         # Defer: a focus-out can happen in the middle of our own event handling
         QTimer.singleShot(0, lambda: self.view.commit_editor(self))
 
+    def sceneEvent(self, ev) -> bool:  # noqa: N802
+        # While typing, keys that are also window shortcuts must reach the editor:
+        # plain letters (tool keys V/P/T...), Backspace/Delete ("Delete selection")
+        # and Ctrl/Cmd+Enter (commit here, "Focus chat" in the window).
+        if ev.type() == QEvent.Type.ShortcutOverride:
+            mods = ev.modifiers() & ~(Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.KeypadModifier)
+            if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape) or (
+                    not mods and (ev.text().isprintable() and ev.text()
+                                  or ev.key() in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete))):
+                ev.accept()
+                return True
+        return super().sceneEvent(ev)
+
     def keyPressEvent(self, ev) -> None:
         if ev.key() == Qt.Key.Key_Escape:
             self.view.cancel_editor()
@@ -1135,6 +1148,6 @@ class CanvasView(QGraphicsView):
         except Exception as e:                           # pragma: no cover - defensive
             self._notice("error", f"Export failed: {e}")
             return False
-        self._notice("info" if ok else "error",
-                     f"Exported to {os.path.basename(path)}" if ok else f"Could not write {path}")
+        self._notice("success" if ok else "error",
+                     f"Exported to {path}" if ok else f"Could not write {path}")
         return ok

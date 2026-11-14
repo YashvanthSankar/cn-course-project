@@ -90,8 +90,10 @@ class MainWindow(QMainWindow):
         self._hosting_announced = False
         self._can_undo = self._can_redo = False
         self._known_people: dict[str, bool] | None = None     # uid -> online, for join/leave toasts
+        self._known_hands: dict[str, bool] = {}               # uid -> hand up, for "raised a hand" toasts
         self._names: dict[str, str] = {}                      # uid -> last known username
         self._my_role: str | None = None
+        self._pending_save: str | None = None                 # Ctrl+S save waiting for the server
         self._icon_actions: list[tuple[QAction, str, str | None]] = []
         self.setWindowIcon(theme.app_icon())
         self.setWindowTitle("LANBoard")
@@ -151,7 +153,8 @@ class MainWindow(QMainWindow):
         self.act_lock = self._act("Lock board", "lock", self._on_lock, checkable=True,
                                   tip="Lock the board (owner only): only you can draw", on_color="accent")
         self.act_present = self._act("Present", "present", self._on_present, checkable=True,
-                                     tip="Present: broadcast your view so others can follow it", on_color="accent")
+                                     tip="Present (owner or chosen presenter): broadcast your view so others "
+                                         "can follow it", on_color="accent")
         self.act_hand = self._act("Raise hand", "hand", self._on_hand, checkable=True,
                                   tip="Raise / lower your hand", on_color="warn")
         self.act_image = self._act("Insert image…", "image", self.insert_image)
@@ -325,6 +328,7 @@ class MainWindow(QMainWindow):
         ctl.sync_status.connect(self.on_sync_status)
         ctl.undo_state.connect(self.on_undo_state)
         ctl.notice.connect(self.on_notice)
+        ctl.saves_ready.connect(self._on_saves)
         ctl.connection_state.connect(self.on_connection_state)
         ctl.signal_received.connect(self.on_signal)
         ctl.participants_changed.connect(self._update_permissions)
@@ -572,6 +576,9 @@ class MainWindow(QMainWindow):
                              "warn" if room.get("locked") else "info")
         presenter = room.get("presenter")
         me_id = (self.controller.me or {}).get("user_id")
+        if presenter and presenter == me_id and presenter != getattr(self, "_last_presenter", None) \
+                and not _safe(self.controller.is_owner):
+            self.toasts.show("The owner made you the presenter. Press Present to share your view.", "info")
         if presenter and presenter != me_id and presenter != getattr(self, "_last_presenter", None):
             who = _safe(lambda: self.controller.name_of(presenter), presenter)
             self.toasts.show(f"{who} is presenting. Right-click them in People and choose Follow.", "info")
@@ -612,9 +619,14 @@ class MainWindow(QMainWindow):
             for uid in set(self._known_people) - set(now):
                 if uid != me_id and self._known_people[uid]:
                     self.toasts.show_grouped("left", self._names.get(uid, "Someone"), "left the room", "info")
+            for uid, p in parts.items():
+                # the server turns SIGNAL hand_up into a USER_UPDATE, so a raised hand shows up here
+                if uid != me_id and p.get("hand") and not self._known_hands.get(uid, False):
+                    self.toasts.show(f"✋ {p.get('username') or uid} raised a hand", "warn")
         self._names.update({uid: p.get("username") or uid for uid, p in parts.items()})
         if parts:
             self._known_people = now
+            self._known_hands = {uid: bool(p.get("hand")) for uid, p in parts.items()}
 
     def on_sync_status(self, st: dict) -> None:
         self._last_sync = dict(st)
@@ -639,10 +651,8 @@ class MainWindow(QMainWindow):
         self.toasts.show(text, level)
 
     def on_signal(self, user_id: str, kind: str) -> None:
-        me_id = (self.controller.me or {}).get("user_id")
-        if kind == "hand_up" and user_id != me_id:
-            who = _safe(lambda: self.controller.name_of(user_id), user_id)
-            self.toasts.show(f"✋ {who} raised a hand", "warn")
+        """Relayed SIGNALs (pings are drawn by the canvas). Raised hands arrive as
+        participant updates instead, see :meth:`_on_people`."""
 
     def on_follow_changed(self, user_id) -> None:
         """Canvas stopped (or started) following, e.g. because the user panned away."""
@@ -761,6 +771,15 @@ class MainWindow(QMainWindow):
         self.act_settings.setEnabled(owner)
         self.act_image.setEnabled(can_edit)
         self.act_pdf.setEnabled(can_edit)
+        role = (getattr(ctl, "me", None) or {}).get("role")
+        self.act_save.setEnabled(role in ("owner", "editor"))      # the server refuses viewers' saves
+        # the server relays VIEWPORT only from the owner or the presenter the owner picked
+        me_id = (getattr(ctl, "me", None) or {}).get("user_id")
+        may_present = owner or bool(me_id and (getattr(ctl, "room", None) or {}).get("presenter") == me_id)
+        self.act_present.setEnabled(may_present)
+        if not may_present and self.act_present.isChecked():
+            self.act_present.setChecked(False)          # programmatic: does not re-trigger
+            self._on_present(False)
         self._update_style_context()
 
     # ------------------------------------------------------------------ action handlers
@@ -791,24 +810,20 @@ class MainWindow(QMainWindow):
     def insert_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Insert image", "",
                                               "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp)")
-        if path and self.canvas.insert_image_file(path) is False:
-            self.toasts.show("That image could not be inserted (unreadable or too large).", "error")
+        if path:
+            self.canvas.insert_image_file(path)     # the canvas reports success / failure itself
 
     def import_pdf(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Import PDF", "", "PDF documents (*.pdf)")
-        if path and self.canvas.import_pdf(path) is False:
-            self.toasts.show("That PDF could not be imported.", "error")
+        if path:
+            self.canvas.import_pdf(path)            # progress and errors come as canvas notices
 
     def export(self) -> None:
         code = (self.controller.room or {}).get("code", "board")
         path = export_dialog(self, f"lanboard-{code}")
         if path:
             try:
-                ok = self.canvas.export(path)
-                if ok is False:
-                    self.toasts.show(f"Could not export to {path}", "error")
-                else:
-                    self.toasts.show(f"Exported to {path}", "success")
+                self.canvas.export(path)              # reports "Exported to ..." / why not itself
             except Exception as exc:              # disk full, permissions...
                 self.toasts.show(f"Export failed: {exc}", "error")
 
@@ -817,7 +832,15 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(self, "Save board", "Save the board on the server as:",
                                         text=time.strftime("board-%Y%m%d-%H%M"))
         if ok and name.strip():
+            self._pending_save = name.strip()[:64]
             self.controller.save(name.strip())
+
+    def _on_saves(self, saves: list) -> None:
+        """The server answers SAVE with the new list: confirm a Ctrl+S save with a toast."""
+        name = self._pending_save
+        if name and any(s.get("name") == name for s in saves or []):
+            self._pending_save = None
+            self.toasts.show(f"Saved “{name}” on the server", "success")
 
     def open_saves(self) -> None:
         SavesDialog(self.controller, self).exec()

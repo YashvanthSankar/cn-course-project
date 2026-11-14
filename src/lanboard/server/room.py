@@ -724,9 +724,9 @@ class Room:
             self._relay(s, MsgType.STROKE_END, out)
 
     def on_laser(self, s: Session, p: dict) -> None:
-        out = {"pts": get_pts(p)}
-        if s.role != "viewer":
-            self._relay(s, MsgType.LASER, out)
+        # Pointing is not editing: viewers keep the laser (it is never saved, and
+        # _relay rate-limits it like every other ephemeral message).
+        self._relay(s, MsgType.LASER, {"pts": get_pts(p)})
 
     def on_viewport(self, s: Session, p: dict) -> None:
         out = {k: get_num(p, k) for k in ("x", "y", "w", "h")}

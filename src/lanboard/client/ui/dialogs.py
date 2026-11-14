@@ -48,6 +48,9 @@ class SavesDialog(QDialog):
         self.save_btn = QPushButton("Save current board")
         self.save_btn.setProperty("role", "primary")
         self.save_btn.clicked.connect(self._save)
+        if (getattr(controller, "me", None) or {}).get("role") == "viewer":
+            self.save_btn.setEnabled(False)
+            self.save_btn.setToolTip("Viewers cannot save boards")
         row.addWidget(self.save_btn)
         lay.addLayout(row)
 

@@ -305,7 +305,8 @@ async def test_ephemeral_relay_rules(room):
     await room.handle(v, MsgType.STROKE_LIVE, live)
     await room.handle(v, MsgType.LASER, {"pts": [1, 2]})
     assert co.of(MsgType.CURSOR) == [{"x": 1, "y": 2, "user_id": v.user_id}]
-    assert not co.of(MsgType.STROKE_LIVE) and not co.of(MsgType.LASER)
+    assert not co.of(MsgType.STROKE_LIVE)              # a viewer's live strokes are not relayed...
+    assert co.of(MsgType.LASER) == [{"pts": [1, 2], "user_id": v.user_id}]   # ...but pointing is allowed
     await room.handle(o, MsgType.STROKE_LIVE, live)
     assert cv.of(MsgType.STROKE_LIVE)[0]["user_id"] == o.user_id
     assert not co.of(MsgType.STROKE_LIVE)         # never echoed to the sender

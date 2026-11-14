@@ -62,6 +62,8 @@ from ..common.undo import UndoManager
 
 GAP_TIMEOUT_MS = 400        # how long to wait for a missing seq before RESYNC
 MAX_REORDER = 256           # buffered out-of-order ops before forcing a RESYNC
+BLOB_RETRIES = 3            # BLOB_GET retries when the server does not have the image (yet)
+BLOB_RETRY_MS = 700         # back-off step between those retries
 
 
 def _differs(a: dict | None, b: dict | None) -> bool:
@@ -127,6 +129,7 @@ class SessionController(QObject):
         self._blob_requested: set[str] = set()
         self._blob_parts: dict[str, dict[int, bytes]] = {}
         self._blob_uploads: list[str] = []      # uploads to (re)send once joined
+        self._blob_retries: dict[str, int] = {}  # hash -> BLOB_GET retries after NOT_FOUND
 
         # gap detection timer
         self._gap_timer = QTimer(self)
@@ -482,14 +485,17 @@ class SessionController(QObject):
         self.room_changed.emit(self.room)
         self.participants_changed.emit()
         self.chat_reset.emit(self.chat)
-        # offline-first: replay everything not yet acknowledged, in original order.
-        # The server drops op_ids it already accepted and re-echoes them.
-        self._resend_queue = list(self._wire.items())
-        self._pump_resend()
+        # Images first: the server handles one connection's frames in order, so the
+        # blobs are stored before the queued ops that reference them are sequenced
+        # (otherwise other clients would ask for an image the server doesn't have yet).
         for h in self._blob_uploads:
             self._upload_blob(h)
         self._blob_uploads.clear()
         self._blob_requested.clear()                       # re-request anything still missing
+        # offline-first: replay everything not yet acknowledged, in original order.
+        # The server drops op_ids it already accepted and re-echoes them.
+        self._resend_queue = list(self._wire.items())
+        self._pump_resend()
         self._emit_sync()
 
     RESEND_PER_TICK = 100          # stay under the server's 120 ops/s token bucket
@@ -706,7 +712,22 @@ class SessionController(QObject):
         self.chat_added.emit(p)
 
     def _on_error(self, p: dict) -> None:
+        h = p.get("hash")
+        if isinstance(h, str) and p.get("code") == Err.NOT_FOUND and h in self._blob_requested:
+            # BLOB_GET raced the uploader (its upload has not finished yet): ask again a
+            # little later instead of showing a raw "unknown blob" error.
+            tries = self._blob_retries.get(h, 0)
+            if tries < BLOB_RETRIES:
+                self._blob_retries[h] = tries + 1
+                QTimer.singleShot(BLOB_RETRY_MS * (tries + 1), lambda h=h: self._retry_blob(h))
+            return
         self.notice.emit("error", p.get("msg") or p.get("code", "error"))
+
+    def _retry_blob(self, h: str) -> None:
+        if h in self._blobs:
+            return
+        self._blob_requested.discard(h)
+        self.blob_bytes(h)
 
     def _on_history(self, p: dict) -> None:
         """Re-emit HISTORY once complete. The payload is always the merged one:
