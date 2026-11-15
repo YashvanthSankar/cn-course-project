@@ -32,7 +32,7 @@ Numbers you can quote (all checked against the code on 2026-11-06):
 - Measured traffic: a 1-second stroke costs 121 frames and 10,497 B unbatched, or 31 frames and 3,927 B batched. The committed stroke goes from 121 points (1,851 B) to 26 points (499 B) after RDP. A cursor frame is 26 B, so 3,120 B/s at 120 Hz and 520 B/s at 20 Hz.
 - Stress test (`python -m lanboard.tools.bot --bots 8 --rate 20 --seconds 12`, on loopback): 1,771 ops in 12.1 s, RTT about 0.2 ms, 0 resyncs, 0 rejects, 70 hash checks per bot, ALL REPLICAS CONVERGED.
 
-Note: `docs/ARCHITECTURE.md` §3.4 still says PING every 5 s and a drop after 15 s, and calls the message `JOIN_ROOM`. The code uses 3 s, 12 s and `JOIN`. Quote the code.
+`docs/ARCHITECTURE.md` §3.4 uses the same values as the code: PING every 3 s, a drop after 12 s of silence, and the `JOIN` message.
 
 ---
 
