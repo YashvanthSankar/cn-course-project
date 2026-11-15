@@ -384,7 +384,7 @@ Put one video per team member in this folder before submitting, e.g.
   01_<Name>_<RollNo>.mp4
 
 Each member explains their own contribution using the presentation and the
-source code, with name and face clearly visible (see docs/SPEC.md,
+source code, with name and face clearly visible (see docs/PROJECT_BRIEF.md,
 "Explanation Video").
 """
 

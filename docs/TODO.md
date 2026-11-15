@@ -40,7 +40,7 @@ Everyone commits their own work from their own machine and account. Reviews go t
 | **Nithillakrishi P Y** | CS24I1039 | **UI & collaboration**: main window, host/join dialogs, participant list, chat panel, live cursors, roles/admin UI (lock, kick), version-history timeline, presentation mode, docs PDF + PPT lead | `ui/` |
 
 Shared: `common/model.py` (board model + `apply(op)`) is co-owned by Yashvanth & Akula. The protocol
-spec in `docs/TECH.md` is co-owned by Jeevanandham & Yashvanth.
+spec in `docs/ARCHITECTURE.md` is co-owned by Jeevanandham & Yashvanth.
 
 ## Schedule
 
@@ -73,7 +73,7 @@ spec in `docs/TECH.md` is co-owned by Jeevanandham & Yashvanth.
 ### Day 4 — Mon 9 Nov: reliability
 - [ ] **Jeevanandham**: auto-reconnect with backoff, `resume_token + last_seq`, resend pending ops; gap detection → RESYNC; dup drop
 - [ ] **Yashvanth**: op-log tail vs full snapshot on resume; per-client `op_id` dedupe; bounded send queues; log compaction
-- [ ] **Akula**: optimistic pending layer + rollback on reject; per-user undo/redo with conflict rules (TECH §5)
+- [ ] **Akula**: optimistic pending layer + rollback on reject; per-user undo/redo with conflict rules (ARCHITECTURE.md §5)
 - [ ] **Nithillakrishi**: live cursors with name tags (CURSOR 20 Hz); "reconnecting…" banner
 
 ### Day 5 — Tue 10 Nov: persistence & access control → 🔒 CORE FREEZE

@@ -859,7 +859,7 @@ All tunables live in `common/config.py` unless another file is named. The build 
 
 ## Appendix B. Requirements traceability
 
-Every requirement and rubric item of the brief (docs/SPEC.md), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed below the table (B.1–B.6) and in §14.
+Every requirement and rubric item of the brief (docs/PROJECT_BRIEF.md), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed below the table (B.1–B.6) and in §14.
 
 | Requirement | How we meet it | Code | Tests |
 |---|---|---|---|

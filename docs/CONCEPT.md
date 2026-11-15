@@ -1,4 +1,4 @@
-# IDEA — LANBoard: LAN-only Collaborative Whiteboard
+# CONCEPT — LANBoard: LAN-only Collaborative Whiteboard
 
 > Working name: **LANBoard**. Rename freely.
 
@@ -9,7 +9,7 @@ TCP application protocol with a server-ordered operation log.
 
 ## Problem (from the spec)
 Multiple users on a LAN must share one consistent canvas in near real time, without internet,
-through a central server using socket programming. See `docs/spec/`.
+through a central server using socket programming. See `docs/brief/`.
 
 ## Core idea in three sentences
 1. **The server is the single source of order.** Every accepted edit gets a global sequence

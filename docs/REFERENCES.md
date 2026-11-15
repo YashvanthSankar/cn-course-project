@@ -7,7 +7,7 @@ High-level product research is in [`RESEARCH.md`](RESEARCH.md).
 > ⚠️ **Academic-integrity note.** Two repos below (bhanu07052007/LAN-Collaborative-Whiteboard and
 > wxxxh-k/CollabBoard) were pushed on 1–2 Nov 2026 with feature lists that match this brief almost
 > exactly. They are probably other teams' submissions for the same assignment. **Do not open their
-> source.** Our design is already fixed in `TECH.md`, and any similarity would look bad. They are
+> source.** Our design is already fixed in `ARCHITECTURE.md`, and any similarity would look bad. They are
 > listed only so we know they exist.
 
 ## Study first, by owner
@@ -33,7 +33,7 @@ High-level product research is in [`RESEARCH.md`](RESEARCH.md).
 - Gists: [Cartroo asyncio chat room](https://gist.github.com/Cartroo/063f0c03808e9622d33b41f140a63f6a) and [jcrist readexactly framing](https://gist.github.com/jcrist/d7271415011cdc528ba82d2e5f328808).
 
 ### Qt client networking & LAN discovery
-- [bhowiebkr/client-server-socket-example](https://github.com/bhowiebkr/client-server-socket-example) (Apache-2.0): a QTcpSocket/QTcpServer pair. The author explains why Qt networking beat threads, the same argument as our TECH.md.
+- [bhowiebkr/client-server-socket-example](https://github.com/bhowiebkr/client-server-socket-example) (Apache-2.0): a QTcpSocket/QTcpServer pair. The author explains why Qt networking beat threads, the same argument as our ARCHITECTURE.md.
 - [CabbageDevelopment/qasync](https://github.com/CabbageDevelopment/qasync) (BSD-2): asyncio on the Qt loop. Fallback only. We use QTcpSocket.
 - [python-zeroconf/python-zeroconf](https://github.com/python-zeroconf/python-zeroconf) (LGPL-2.1+): mDNS alternative to our UDP broadcast. We keep our own broadcast because it is simpler and makes a better CN write-up.
 - [jholtmann/ip_discovery](https://github.com/jholtmann/ip_discovery) (no license): 30-line UDP broadcast discovery that shows `SO_BROADCAST`/`SO_REUSEADDR` setup.

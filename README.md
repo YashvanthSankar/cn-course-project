@@ -69,10 +69,10 @@ The app is not notarised, so the first launch needs right-click > Open. GitHub A
 ## Docs
 | Doc | Contents |
 |---|---|
-| [`docs/SPEC.md`](docs/SPEC.md) | the project brief |
-| [`docs/IDEA.md`](docs/IDEA.md) | concept, scope, demo story |
+| [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) | the project brief |
+| [`docs/CONCEPT.md`](docs/CONCEPT.md) | concept, scope, demo story |
 | [`docs/FEATURES.md`](docs/FEATURES.md) | feature list incl. signature features |
-| [`docs/TECH.md`](docs/TECH.md) | architecture, wire protocol, sync & undo semantics |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | architecture, wire protocol, sync & undo semantics |
 | [`docs/CLIENT_API.md`](docs/CLIENT_API.md) | internal contracts between client modules |
 | [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) | code layout, testing, build |
 | [`docs/TODO.md`](docs/TODO.md) | plan, owners, checklist |

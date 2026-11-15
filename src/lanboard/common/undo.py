@@ -1,6 +1,6 @@
 """Per-user undo/redo for a multi-user board.
 
-Semantics (documented in docs/TECH.md section 5):
+Semantics (documented in docs/ARCHITECTURE.md section 5):
 
 * Each user's stack holds only **their own** actions. Undo never touches
   anybody else's work.

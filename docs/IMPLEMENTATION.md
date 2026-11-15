@@ -1,6 +1,6 @@
 # IMPLEMENTATION — Code Layout, Modules & Build Plan
 
-Read `docs/TECH.md` first (protocol and semantics). This file covers *where code goes* and *how each
+Read `docs/ARCHITECTURE.md` first (protocol and semantics). This file covers *where code goes* and *how each
 piece is built and tested*. Owners are listed in `docs/TODO.md`.
 
 ## 1. Repository layout
@@ -57,7 +57,7 @@ cn-course-project/
 │   ├── smoke_test.py         # runs the frozen bundle (server + headless client + bots)
 │   └── make_release.py       # assembles the submission zip
 ├── .github/workflows/build.yml   # Windows/Linux/macOS: tests -> build -> smoke test -> artifact
-└── docs/                     # SPEC, IDEA, TECH, IMPLEMENTATION, CLIENT_API, TODO, RESEARCH, spec PDF
+└── docs/                     # PROJECT_BRIEF, CONCEPT, ARCHITECTURE, IMPLEMENTATION, CLIENT_API, TODO, RESEARCH, brief/ (PDF)
 ```
 
 ## 2. Module details
@@ -124,7 +124,7 @@ class UndoManager: record(op); undo(board); redo(board)
 - Two layers: **confirmed** `Board` (only server-ordered ops) and **pending** ops (local, unacked).
   Render = confirmed + pending overlay. On echo → pop from pending. On reject → drop + re-render.
 - `UndoManager` records *my* ops when they are submitted (the normalised op). `undo()` walks back,
-  skipping entries whose filtered inverse is empty under the current view (rules in TECH §5).
+  skipping entries whose filtered inverse is empty under the current view (rules in ARCHITECTURE.md §5).
 - Tools emit ops; never mutate the scene directly → one code path for local and remote changes.
 - Live preview: pen collects points, a 33 ms `QTimer` flushes `STROKE_LIVE`; on release → RDP →
   `OP_SUBMIT add stroke`.
@@ -168,5 +168,5 @@ python packaging/make_release.py                  # → release/LANBoard_CN_Proj
 - Works across ≥ 2 machines on LAN with internet off
 - Has a test (unit or integration) where feasible
 - Server enforces it (never only the client) if it touches permissions
-- Documented in TECH.md (protocol) and user guide notes
+- Documented in ARCHITECTURE.md (protocol) and user guide notes
 - Code commented (spec requires commented source)

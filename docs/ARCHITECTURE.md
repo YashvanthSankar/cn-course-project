@@ -1,4 +1,4 @@
-# TECH — Stack, Architecture & Protocol
+# ARCHITECTURE — Stack, Design & Wire Protocol
 
 ## 1. Stack
 | Layer | Choice | Why |

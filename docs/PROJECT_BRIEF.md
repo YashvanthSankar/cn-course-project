@@ -1,6 +1,6 @@
 # CN Lab Project: LAN-Based Multi-User Collaborative Whiteboard
 
-> Markdown transcription of the official project brief (`docs/spec/CN_Lab_Project_2026_Whiteboard_Spec.pdf`).
+> Markdown transcription of the official project brief (`docs/brief/CN_Lab_Project_2026_Whiteboard_Spec.pdf`).
 > The PDF is the authoritative version.
 
 **Submission deadline:** 15th November 2026, 11:55 pm IST. No further extensions will be given.
