@@ -14,6 +14,44 @@ Computer Networks Lab Project 2026.
 | Akula Sai Teja | CS24I1054 | Canvas & drawing tools |
 | Nithillakrishi P Y | CS24I1039 | UI & collaboration features |
 
+## Contributions
+Each member owns one area of the project end to end: its code, its tests and its part of the
+documentation, presentation and explanation video. The modules in each area are listed below (paths are
+below `src/lanboard/`). The git history records who committed each change. Talking points and viva
+questions for every area are in [`docs/PRESENTER_GUIDE.md`](docs/PRESENTER_GUIDE.md); the module map is
+in [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md).
+
+**Yashvanth S (CS24I1029): server core & state** (slides 2–9)
+- `server/server.py`: TCP listener, one `ClientConnection` per socket with reader/writer tasks, handshake, bounded send queues and the idle-client watchdog.
+- `server/room.py`: the `Room` sequencer: op pipeline (permission, rate limit, validation, dedupe, `seq`, broadcast, HASH), sessions, roles, lock and kick, chat, saves and history.
+- `server/persistence.py`: write-ahead op log, atomic snapshots, history archive and restore after a restart.
+- `server/dashboard.py`: the live terminal dashboard (`--dashboard`).
+- `common/model.py` (with Akula): the shared `Board`, `apply`, `normalise`, `validate_op` and `hash`.
+- `client/controller.py` (his half): the confirmed board replica and the ordering rules.
+- Packaging (`packaging/`) and integration.
+
+**Jeevanandham T (CS24I1035): protocol & networking** (slides 10–17)
+- `common/protocol.py`: length-prefixed framing, the incremental `FrameDecoder` and multi-part transfers.
+- `common/messages.py`: the message catalogue and `MsgType` codes.
+- `client/net.py`: `NetClient` over `QTcpSocket`: handshake, heartbeat, reconnect with backoff and resume.
+- `client/controller.py` (his half): duplicate and gap handling, resync, hash checks and multi-part snapshots.
+- `server/discovery.py` and `client/discovery.py`: UDP LAN discovery ("Nearby servers").
+- `client/chaos.py` and `client/metrics.py`: the Chaos Lab fault injector and the network HUD metrics.
+- `tools/bot.py`: the headless bot client and stress test.
+
+**Akula Sai Teja (CS24I1054): canvas & drawing tools** (slides 18–21)
+- `client/canvas/`: `CanvasView` (pan, zoom, image and PDF import, export), `CanvasScene`, the canvas items, the drawing tools (pen, highlighter, eraser, shapes, text, sticky notes, select, laser) and the minimap.
+- `common/geometry.py`: RDP stroke simplification, hit-testing and Smart Ink shape recognition.
+- `common/undo.py`: per-user undo/redo with inverse ops and conflict filtering.
+- `common/model.py` (with Yashvanth): the board model the tools submit ops against.
+
+**Nithillakrishi P Y (CS24I1039): UI & collaboration features** (slides 22–26)
+- `client/ui/`: the main window and permission-aware controls, connect dialog, top bar and consistency badge, chat, people list (roles, kick, follow), time-lapse history, Network Inspector, HUD and Chaos Lab panels, toasts and the light/dark theme.
+- Lead for the Technical Documentation PDF and the presentation.
+
+Shared by the team: `common/auth.py` (password hashing and proofs), `common/config.py` (ports, timeouts and
+limits), and slides 1 and 27–30 (title, testing, challenges, demo plan, Q&A).
+
 ## Highlights
 - **Server-ordered op log**: every edit gets a global sequence number, so every replica converges. Duplicates, gaps and reordering are all handled.
 - **Recovery**: late joiners get a snapshot. Reconnecting clients get only the ops they missed. Offline edits are queued and replayed.

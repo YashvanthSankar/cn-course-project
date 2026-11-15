@@ -89,13 +89,14 @@ Figure 1 shows a typical deployment. Any laptop on the LAN can host the server, 
 | `common/messages.py` | `MsgType` codes, payload contracts (docstring), `Err`, `Reason` | Jeevanandham |
 | `common/model.py` | `Board`, `apply`, `normalise`, `validate_op`, `hash` | Yashvanth, Akula |
 | `common/undo.py` | per-user `UndoManager`, inverse ops, conflict filtering | Akula |
-| `common/auth.py`, `common/config.py`, `common/geometry.py` | scrypt/HMAC, tunables, RDP / hit tests / Smart Ink | team |
+| `common/geometry.py` | RDP stroke simplification, hit tests, Smart Ink | Akula |
+| `common/auth.py`, `common/config.py` | scrypt/HMAC, tunables | team |
 | `server/server.py` | listener, `ClientConnection` (reader/writer), handshake, watchdog | Yashvanth |
 | `server/room.py` | `Room` sequencer, op pipeline, sessions, roles, chat, saves, history, blobs | Yashvanth |
 | `server/persistence.py` | snapshot + write-ahead op log + history archive, atomic writes | Yashvanth |
 | `server/discovery.py`, `server/dashboard.py` | UDP discovery responder, live terminal dashboard | Jeevanandham, Yashvanth |
 | `client/net.py`, `chaos.py`, `metrics.py`, `discovery.py` | TCP client, Chaos Lab fault injector, HUD metrics, UDP browser | Jeevanandham |
-| `client/controller.py` | replica, optimistic view, gap/duplicate handling, hash check, undo, throttling | Jeevanandham, Akula |
+| `client/controller.py` | replica, optimistic view, gap/duplicate handling, hash check, undo, throttling | Yashvanth, Jeevanandham |
 | `client/canvas/*` | `CanvasView`, `CanvasScene`, items, tools, minimap, export | Akula |
 | `client/ui/*` | main window, connect dialog, panels (people, chat, history, network), theme | Nithillakrishi |
 | `tools/bot.py` | headless protocol client and stress tool | Jeevanandham |
