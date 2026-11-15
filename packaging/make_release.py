@@ -11,6 +11,7 @@ Layout of the zip (entries at the zip root)::
     source/...                             `git archive HEAD`: committed files only
     docs/LANBoard_Technical_Documentation.pdf
     docs/LANBoard_Presentation.pptx
+    docs/LANBoard_Contributions_Report.pdf
     video/README.txt                       drop the member explanation videos here
 
 Inputs:
@@ -23,7 +24,7 @@ Inputs:
   ``LANBoard/`` folder or as the ``LANBoard-<OS>.zip`` produced by
   .github/workflows/build.yml (the downloaded GitHub artifact, a zip that holds
   that zip, works too).
-* The two documents are looked up in ``docs/``, the repository root and
+* The documents are looked up in ``docs/``, ``report/``, the repository root and
   ``release/docs/``; missing ones only produce a warning.
 
 Unix permission bits and symlinks are stored in the zip (the macOS bundle has
@@ -52,6 +53,7 @@ ZIP_NAME = "LANBoard_CN_Project_2026.zip"
 DOCS = {
     "LANBoard_Technical_Documentation.pdf": "Technical Documentation (PDF)",
     "LANBoard_Presentation.pptx": "Presentation (PPT)",
+    "LANBoard_Contributions_Report.pdf": "Team contributions report (PDF)",
 }
 WIN_PATH_WARN = 150      # longest in-zip path; Windows Explorer fails beyond ~260 incl. the target folder
 
@@ -232,7 +234,7 @@ def add_source(packer: Packer) -> str:
 
 
 def find_doc(name: str, out_dir: Path) -> Path | None:
-    for d in (ROOT / "docs", ROOT, out_dir / "docs"):
+    for d in (ROOT / "docs", ROOT / "report", ROOT, out_dir / "docs"):
         if (d / name).is_file():
             return d / name
     return None
@@ -457,7 +459,7 @@ def main() -> int:
             p = find_doc(name, out_dir)
             docs_found[name] = p is not None
             if p is None:
-                warn(f"docs/{name} not found (looked in docs/, repo root, release/docs/)")
+                warn(f"docs/{name} not found (looked in docs/, report/, repo root, release/docs/)")
                 continue
             packer.add_bytes(f"docs/{name}", p.read_bytes(), 0o644)
             print(f"  + docs/{name}  (from {p})")

@@ -1,12 +1,89 @@
-# LANBoard: LAN-only real-time collaborative whiteboard
+# LANBoard
 
-A standalone, internet-free whiteboard for a local network. One machine runs the **server**, and any
-number of **clients** join a room to draw, write, chat and present together. Everything travels over
-our own framed TCP protocol.
+A shared whiteboard for a local network: one machine runs the server, everyone else draws on the
+same board, and nothing ever touches the internet.
 
-Computer Networks Lab Project 2026.
+![LANBoard with several people drawing on one board](docs/assets/screens/light.png)
 
-## Team
+Computer Networks Lab Project 2026, IIITDM Kancheepuram.
+
+## What it does
+
+You start a server on one laptop. Everyone else opens the client, picks that server from the
+*Nearby servers* list (or types its IP and port) and joins a room with a short code. From then on
+every stroke, shape, sticky note and chat message shows up on all the other screens. All traffic
+goes over our own framed protocol on TCP, and discovery uses UDP broadcast. There are no accounts
+and no cloud service.
+
+The parts we are most pleased with:
+
+- **One order for every edit.** The server gives each edit a sequence number, and every client
+  applies edits in that order, so all copies of the board end up the same. Duplicates, gaps and
+  reordering are handled.
+- **Recovery.** A late joiner gets a snapshot of the board. A client that reconnects gets only the
+  edits it missed. Edits made while offline are queued and sent when the link comes back.
+- **A sync badge you can trust.** The server sends a hash of its board every 25 edits. Each client
+  compares it with its own copy, shows *In sync* when they match, and fetches a fresh copy by
+  itself when they don't.
+- **Network tab.** A live HUD (round-trip time, traffic), a frame-by-frame inspector, and a Chaos
+  Lab that adds latency, drops and duplicates or "cuts the cable", so you can watch the board
+  recover.
+- **Working together.** Per-user undo and redo, live cursors, chat, owner/editor/viewer roles,
+  password rooms, lock and kick, shapes, text, sticky notes with voting, images, PDF slides you can
+  draw on, a laser pointer, follow-the-presenter, a time-lapse of the whole board history, and
+  export to PNG, SVG or PDF.
+
+The full list is in [`docs/FEATURES.md`](docs/FEATURES.md).
+
+## Quick start
+
+You need Python 3.12. We use [uv](https://docs.astral.sh/uv/), but plain `venv` and `pip` work too.
+
+```bash
+uv venv --python 3.12 .venv            # or: python3.12 -m venv .venv
+uv pip install --python .venv/bin/python -e . pytest pytest-asyncio
+```
+
+**Start the server** on the host machine:
+
+```bash
+.venv/bin/python -m lanboard.server --port 5050            # add --dashboard for a live terminal view
+```
+
+When it starts it prints the LAN address that clients should use, for example
+`Clients on this LAN can connect to: 192.168.1.20:5050`. It also answers discovery probes on
+UDP port 5051.
+
+**Start the client** on every participant's machine:
+
+```bash
+.venv/bin/python -m lanboard.client
+```
+
+- To host, choose *Host new room*. If no server is running yet, tick *Start a server on this
+  computer* and the client starts one for you.
+- To join, pick the server under *Nearby servers*, or type its IP and port, then enter the room code.
+- For quick tests with several windows you can skip the dialog:
+  `.venv/bin/python -m lanboard.client --user alice --room DEMO --create`, then the same with
+  another name and without `--create`.
+
+**Stress test.** With a server running, this starts 8 bots that draw at the same time and checks at
+the end that every copy of the board matches:
+
+```bash
+.venv/bin/python -m lanboard.tools.bot --port 5050 --room DEMO --bots 8 --seconds 30
+```
+
+**Firewall notes**
+
+- Windows: allow the server through Defender Firewall, and make sure the network profile is
+  *Private*.
+- macOS: allow incoming connections when asked.
+- Campus Wi-Fi often blocks traffic between clients. For demos, use a phone hotspot or a small
+  switch.
+
+## Team and contributions
+
 | Name | Roll no. | Area |
 |---|---|---|
 | Yashvanth S | CS24I1029 | Server core & state |
@@ -14,113 +91,135 @@ Computer Networks Lab Project 2026.
 | Akula Sai Teja | CS24I1054 | Canvas & drawing tools |
 | Nithillakrishi P Y | CS24I1039 | UI & collaboration features |
 
-## Contributions
-Each member built one area of the project end to end: its code, its tests and its part of the
-documentation, presentation and explanation video. The modules each member built are listed below (paths are
-below `src/lanboard/`), and the git history records each member's commits. Talking points and viva
-questions for every area are in [`docs/PRESENTER_GUIDE.md`](docs/PRESENTER_GUIDE.md); the module map is
-in [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md).
+Each of us built one area end to end: the code, its tests, and our part of the documentation,
+the slides and the explanation video. The git history shows each member's commits. Paths below are
+relative to `src/lanboard/`. Talking points and likely viva questions for every area are in
+[`docs/PRESENTER_GUIDE.md`](docs/PRESENTER_GUIDE.md), and the module map is in
+[`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md). For a short write-up of who built what and how it
+works, read the [contributions report](report/LANBoard_Contributions_Report.pdf).
 
-**Yashvanth S (CS24I1029): server core & state** (slides 2–9)
-- `server/server.py`: TCP listener, one `ClientConnection` per socket with reader/writer tasks, handshake, bounded send queues and the idle-client watchdog.
-- `server/room.py`: the `Room` sequencer: op pipeline (permission, rate limit, validation, dedupe, `seq`, broadcast, HASH), sessions, roles, lock and kick, chat, saves and history.
-- `server/persistence.py`: write-ahead op log, atomic snapshots, history archive and restore after a restart.
+**Yashvanth S (CS24I1029): server core and state** (slides 2 to 9)
+- `server/server.py`: the TCP listener, one `ClientConnection` per socket with reader and writer
+  tasks, the handshake, bounded send queues and the idle-client watchdog.
+- `server/room.py`: the `Room` sequencer. It runs the op pipeline (permission, rate limit,
+  validation, dedupe, `seq`, broadcast, HASH) and handles sessions, roles, lock and kick, chat,
+  saves and history.
+- `server/persistence.py`: the write-ahead op log, atomic snapshots, the history archive and
+  restore after a restart.
 - `server/dashboard.py`: the live terminal dashboard (`--dashboard`).
+- Multi-part transfers for large snapshots and histories (`encode_parts` and `PartAssembler` in
+  `common/protocol.py`).
 - `common/model.py` (with Akula): the shared `Board`, `apply`, `normalise`, `validate_op` and `hash`.
 - `client/controller.py` (his half): the confirmed board replica and the ordering rules.
-- Packaging (`packaging/`) and integration.
-
-**Jeevanandham T (CS24I1035): protocol & networking** (slides 10–17)
-- `common/protocol.py`: length-prefixed framing, the incremental `FrameDecoder` and multi-part transfers.
-- `common/messages.py`: the message catalogue and `MsgType` codes.
-- `client/net.py`: `NetClient` over `QTcpSocket`: handshake, heartbeat, reconnect with backoff and resume.
-- `client/controller.py` (his half): duplicate and gap handling, resync, hash checks and multi-part snapshots.
-- `server/discovery.py` and `client/discovery.py`: UDP LAN discovery ("Nearby servers").
-- `client/chaos.py` and `client/metrics.py`: the Chaos Lab fault injector and the network HUD metrics.
 - `tools/bot.py`: the headless bot client and stress test.
+- Integration of all four areas, the end-to-end tests, and most of the documentation.
 
-**Akula Sai Teja (CS24I1054): canvas & drawing tools** (slides 18–21)
-- `client/canvas/`: `CanvasView` (pan, zoom, image and PDF import, export), `CanvasScene`, the canvas items, the drawing tools (pen, highlighter, eraser, shapes, text, sticky notes, select, laser) and the minimap.
-- `common/geometry.py`: RDP stroke simplification, hit-testing and Smart Ink shape recognition.
-- `common/undo.py`: per-user undo/redo with inverse ops and conflict filtering.
-- `common/model.py` (with Yashvanth): the board model the tools submit ops against.
+**Jeevanandham T (CS24I1035): protocol and networking** (slides 10 to 17)
+- `common/protocol.py`: length-prefixed framing and the incremental `FrameDecoder`.
+- `common/messages.py`: the message catalogue and the `MsgType` codes.
+- `client/net.py`: `NetClient` over `QTcpSocket`, with the handshake, heartbeats, reconnect with
+  backoff, and resume.
+- `client/controller.py` (his half): duplicate and gap handling, resync and hash checks.
+- `client/discovery.py`: UDP LAN discovery ("Nearby servers"), and the multi-adapter fixes in
+  `server/discovery.py`.
+- `client/chaos.py` and `client/metrics.py`: the Chaos Lab fault injector and the network HUD
+  metrics.
+- Demo-day fixes for busy ports and machines with several network adapters.
 
-**Nithillakrishi P Y (CS24I1039): UI & collaboration features** (slides 22–26)
-- `client/ui/`: the main window and permission-aware controls, connect dialog, top bar and consistency badge, chat, people list (roles, kick, follow), time-lapse history, Network Inspector, HUD and Chaos Lab panels, toasts and the light/dark theme.
-- Lead for the Technical Documentation PDF and the presentation.
+**Akula Sai Teja (CS24I1054): canvas and drawing tools** (slides 18 to 21)
+- `client/canvas/`: `CanvasView` (pan, zoom, image and PDF import, export), `CanvasScene`, the
+  canvas items, the drawing tools (pen, highlighter, eraser, shapes, text, sticky notes, select,
+  laser) and the minimap.
+- `common/geometry.py`: RDP stroke simplification, hit testing and Smart Ink shape recognition.
+- `common/undo.py`: per-user undo and redo with inverse ops and conflict filtering.
+- `common/model.py` (with Yashvanth): the board model that the tools submit ops against.
+- Builds: the cross-platform PyInstaller spec, the GitHub Actions builds for Windows, Linux and
+  macOS, the packaging smoke test, the release zip, and the macOS app and DMG (`packaging/`).
 
-Shared by the team: `common/auth.py` (password hashing and proofs), `common/config.py` (ports, timeouts and
-limits), and slides 1 and 27–30 (title, testing, challenges, demo plan, Q&A).
+**Nithillakrishi P Y (CS24I1039): UI and collaboration features** (slides 22 to 26)
+- `client/ui/`: the main window and its permission-aware controls, the connect dialog, the top bar
+  and sync badge, chat, the people list (roles, kick, follow), time-lapse history, the Network
+  Inspector, HUD and Chaos Lab panels, toasts, and the light and dark theme.
+- The canvas-first UI redesign.
+- The fix for the Qt library conflict in the Windows executable (`packaging/lanboard.spec`).
 
-## Highlights
-- **Server-ordered op log**: every edit gets a global sequence number, so every replica converges. Duplicates, gaps and reordering are all handled.
-- **Recovery**: late joiners get a snapshot. Reconnecting clients get only the ops they missed. Offline edits are queued and replayed.
-- **Consistency Verifier**: the server broadcasts board hashes, and clients show a live ✓ *In sync* badge and heal themselves if their copy diverges.
-- **Network Inspector, Chaos Lab and live HUD**: watch the protocol frame by frame, inject latency, drops and duplicates, or "cut the cable", and watch the board stay consistent.
-- **Collaboration**: per-user undo/redo, live cursors, chat, roles (owner/editor/viewer), password rooms, lock and kick, shapes, text, sticky notes with voting, images, PDF slide annotation, laser pointer, follow-the-presenter, time-lapse history, and export to PNG, SVG or PDF.
+Shared by the team: `common/auth.py` (password hashing and proofs), `common/config.py` (ports,
+timeouts and limits), and slides 1 and 27 to 30 (title, testing, challenges, demo plan, Q&A).
 
-See [`docs/FEATURES.md`](docs/FEATURES.md) for the full list.
+## How it works
 
-## Run from source
+The server is a single Python `asyncio` process. Each client is a PySide6 (Qt 6) app. They talk
+over TCP on port 5050, and every message is one frame: a 4-byte length, a 1-byte type, then a JSON
+payload. A board edit goes to the server as an op. The server checks the sender's role, gives the
+op the next sequence number for the room, writes it to its log on disk and sends it to everyone in
+the room, including the sender. Every client applies ops in sequence order with the same code the
+server uses, so all boards stay identical.
+
+Clients send a ping every 3 seconds, and a link that stays silent for 12 seconds is treated as
+dead. A client that drops out reconnects on its own and tells the server the last sequence number it
+saw, so the server sends only what it missed. Discovery is a UDP broadcast on port 5051 that each
+server answers. The full design is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the
+authoritative message catalogue is the docstring of
+[`src/lanboard/common/messages.py`](src/lanboard/common/messages.py).
+
+## Testing
+
 ```bash
-uv venv --python 3.12 .venv            # or: python3.12 -m venv .venv
-uv pip install --python .venv/bin/python -e . pytest pytest-asyncio
+.venv/bin/python -m pytest -q
 ```
 
-**Server** (on the host machine):
-```bash
-.venv/bin/python -m lanboard.server --port 5050            # add --dashboard for a live terminal view
-```
-At startup it prints the LAN address that clients should use. It also answers LAN discovery on UDP 5051.
+This runs 318 tests in about a minute and a half. Besides unit tests for the framing, board model,
+undo and server logic, there are integration tests over real sockets, a convergence test where six
+bots edit one board while randomly disconnecting, and end-to-end tests that drive two or three real
+app windows against a real server with mouse and keyboard input.
 
-**Client** (on every participant's machine):
-```bash
-.venv/bin/python -m lanboard.client
-```
-- To **host**, pick *Host new room* and tick *Start a server on this computer* if no server is running yet.
-- To **join**, pick the server under *Nearby servers*, or type its IP and port, then enter the room code.
-- Quick multi-client testing without the dialog: `--user alice --room DEMO --create`.
+## Building standalone executables
 
-**Stress test**: `python -m lanboard.tools.bot --port 5050 --room DEMO --bots 8 --seconds 30`
-
-**Tests**: `.venv/bin/python -m pytest -q` (318 tests, including end-to-end runs of the real server and client).
-
-## Standalone executables
 ```bash
 uv pip install --python .venv/bin/python pyinstaller
 .venv/bin/pyinstaller --noconfirm packaging/lanboard.spec
 ```
-This produces `dist/LANBoard/lanboard-server` and `dist/LANBoard/lanboard-client`, which share one runtime folder (on Windows they end in `.exe`).
 
-On macOS the same command also builds `dist/LANBoard.app`, a double-clickable app that holds both executables. To wrap it in a disk image:
+This gives you `dist/LANBoard/lanboard-server` and `dist/LANBoard/lanboard-client`, which share one
+runtime folder. On Windows they end in `.exe`.
+
+On macOS the same command also builds `dist/LANBoard.app`, a double-clickable app that holds both
+programs. To wrap it in a disk image:
+
 ```bash
 .venv/bin/python packaging/make_icns.py   # only if packaging/LANBoard.icns is missing
 .venv/bin/python packaging/make_dmg.py    # -> dist/LANBoard-<version>-macOS.dmg
 ```
-The app is not notarised, so the first launch needs right-click > Open. GitHub Actions builds all three platforms (and the DMG) on every push; see `.github/workflows/build.yml`.
 
-**Firewall notes:**
-- Windows: allow the server through Defender, and make sure the network profile is *Private*.
-- macOS: allow incoming connections when prompted.
-- Campus Wi-Fi often blocks traffic between clients, so use a hotspot or a switch for demos.
+The app is not notarised, so the first time you open it you need to right-click it and choose
+*Open*. GitHub Actions builds all three platforms (and the DMG) on every push; see
+[`.github/workflows/build.yml`](.github/workflows/build.yml).
 
-## Docs
-| Doc | Contents |
+The submission zip (executables, source, documents) is put together by
+`.venv/bin/python packaging/make_release.py`.
+
+## Documentation
+
+| Document | What is in it |
 |---|---|
-| [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) | the project brief |
-| [`docs/CONCEPT.md`](docs/CONCEPT.md) | concept, scope, demo story |
-| [`docs/FEATURES.md`](docs/FEATURES.md) | feature list incl. signature features |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | architecture, wire protocol, sync & undo semantics |
+| [`report/LANBoard_Contributions_Report.pdf`](report/LANBoard_Contributions_Report.pdf) | short report: who built what, how each part works, problems we fixed |
+| [`docs/LANBoard_Technical_Documentation.pdf`](docs/LANBoard_Technical_Documentation.pdf) | full technical documentation and user guide (source: [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)) |
+| [`docs/LANBoard_Presentation.pptx`](docs/LANBoard_Presentation.pptx) | the presentation deck |
+| [`docs/PRESENTER_GUIDE.md`](docs/PRESENTER_GUIDE.md) | talking points, viva questions and the live demo runbook |
+| [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) | the project brief (original PDF in [`docs/brief/`](docs/brief/)) |
+| [`docs/CONCEPT.md`](docs/CONCEPT.md) | concept, scope and demo story |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | feature list, including the signature features |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | architecture, wire protocol, sync and undo rules |
 | [`docs/CLIENT_API.md`](docs/CLIENT_API.md) | internal contracts between client modules |
-| [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) | code layout, testing, build |
-| [`docs/TODO.md`](docs/TODO.md) | plan, owners, checklist |
+| [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) | code layout, testing and build |
+| [`docs/TODO.md`](docs/TODO.md) | plan, owners and checklist |
 | [`docs/RESEARCH.md`](docs/RESEARCH.md), [`docs/REFERENCES.md`](docs/REFERENCES.md) | prior-art study |
 
-The authoritative message catalogue is the docstring of [`src/lanboard/common/messages.py`](src/lanboard/common/messages.py).
-
 ## Third-party software
+
 - [PySide6 / Qt for Python](https://doc.qt.io/qtforpython-6/), LGPL-3.0
 - [pypdfium2](https://github.com/pypdfium2-team/pypdfium2) (PDF page rendering), Apache-2.0 / BSD-3-Clause
 - [PyInstaller](https://pyinstaller.org/) (build only), GPL-2.0 with bootloader exception
 - [pytest](https://pytest.org/) / pytest-asyncio (tests only), MIT / Apache-2.0
-- [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) fonts (bundled in `src/lanboard/client/assets/fonts`), SIL OFL 1.1
+- [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) fonts
+  (bundled in `src/lanboard/client/assets/fonts`), SIL OFL 1.1
