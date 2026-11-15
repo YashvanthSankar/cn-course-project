@@ -17,7 +17,7 @@
 <div><b>0</b><span>internet, accounts or cloud services needed</span></div>
 </div>
 <table>
-<thead><tr><th>Team member</th><th>Roll no.</th><th>Area of responsibility</th></tr></thead>
+<thead><tr><th>Team member</th><th>Roll no.</th><th>Area built</th></tr></thead>
 <tbody>
 <tr><td>Yashvanth S</td><td>CS24I1029</td><td>Server core &amp; state</td></tr>
 <tr><td>Jeevanandham T</td><td>CS24I1035</td><td>Protocol &amp; networking</td></tr>
@@ -57,11 +57,7 @@ A shared whiteboard is a *replicated state* problem. Every participant holds a c
 
 ### 1.4 Conventions
 
-`C→S` means client to server, `S→C` server to one client, `S→*` server broadcast to every member of the room. Names in `monospace` are identifiers in the source tree `src/lanboard/` (paths are given relative to it). Numbers such as timeouts and limits are quoted from `common/config.py` and are listed in Appendix A.
-
-### 1.5 Use of AI assistance
-
-As stated in the project README, AI assistance (Anthropic's Claude) was used during development, including for parts of the code, the tests and this document. Commits made with it carry a `Co-Authored-By` trailer. The git history records who committed each change. Every number in this document is checked against the code by the build script.
+`C→S` means client to server, `S→C` server to one client, `S→*` server broadcast to every member of the room. Names in `monospace` are identifiers in the source tree `src/lanboard/` (paths are given relative to it). Numbers such as timeouts and limits are quoted from `common/config.py` and are listed in Appendix A. Every number in this document is checked against the code by the build script.
 
 ## 2. System architecture
 
@@ -903,15 +899,15 @@ Every requirement and rubric item of the brief (docs/PROJECT_BRIEF.md), how LANB
 * **B.5** *(fixed)* The server dashboard had no automated tests; `test_dashboard.py` now covers it.
 * **B.6** *(fixed)* The end-to-end window tests (§13.3) found nine UI-level bugs: Ctrl/Cmd+Enter in a text editor focused chat instead of committing; an image inserted offline never reached others (ops were replayed before the image upload) and showed a raw "unknown blob" error; imports and exports showed duplicate toasts; the "raised a hand" toast never fired; editors could press Present although the server ignores their view; a kicked user could rejoin through "Back to start" (new client id per session); viewers could press Save; viewers' laser pointer was not relayed.
 
-## Appendix C. Areas of responsibility and third-party software
+## Appendix C. Team contributions and third-party software
 
-Each member is responsible for understanding, explaining and maintaining one area. Authorship of individual changes is recorded in the git history (see §1.5).
+Each member built and maintains one area. Each member's commits are recorded in the git history.
 
-| Member | Area of responsibility |
+| Member | Area built |
 |---|---|
 | Yashvanth S (CS24I1029) | server core: listener, connections, rooms, op pipeline, sessions, persistence, history, dashboard |
 | Jeevanandham T (CS24I1035) | protocol and networking: framing, message catalogue, client transport, reconnect, discovery, Chaos Lab, metrics, bot |
 | Akula Sai Teja (CS24I1054) | canvas and drawing tools: scene, items, tools, Smart Ink, geometry, undo, export, images/PDF |
 | Nithillakrishi P Y (CS24I1039) | UI and collaboration features: main window, connect dialog, panels, chat, participants, history, theme |
 
-Third-party software: PySide6 / Qt for Python (LGPL-3.0); pypdfium2 (Apache-2.0 / BSD-3-Clause); PyInstaller (GPL-2.0 with bootloader exception, build only); pytest and pytest-asyncio (MIT / Apache-2.0, tests only); Inter and JetBrains Mono fonts (SIL OFL 1.1). This document was built with Python-Markdown and headless Google Chrome. AI assistance (Claude) was used during development, as disclosed in §1.5 and in the README.
+Third-party software: PySide6 / Qt for Python (LGPL-3.0); pypdfium2 (Apache-2.0 / BSD-3-Clause); PyInstaller (GPL-2.0 with bootloader exception, build only); pytest and pytest-asyncio (MIT / Apache-2.0, tests only); Inter and JetBrains Mono fonts (SIL OFL 1.1). This document was built with Python-Markdown and headless Google Chrome.

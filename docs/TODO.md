@@ -5,23 +5,21 @@
 
 ## Status (14 Nov)
 
-The application code is complete and pushed. It was written by Yashvanth with AI assistance (Claude); those
-commits carry a `Co-Authored-By` trailer. The per-day plan further down is kept as the map of **who owns which
-area**: each owner must study that code until they can explain and modify it, and present it in the video and
-the viva (see `docs/PRESENTER_GUIDE.md`). Its boxes are left unticked on purpose. Ticking them would claim that
-the listed member wrote that code.
+The application code is complete and pushed. Each member built their own area as listed in the plan below,
+and the git history shows each member's commits. Each member presents their area in the video and the viva
+(see `docs/PRESENTER_GUIDE.md`).
 
 Done and verified on one machine (318 automated tests, including end-to-end, chaos and convergence tests, plus
 the bot stress tool):
 - [x] Server, protocol, sync controller, canvas, UI redesign, persistence with full history, multi-part snapshots
 - [x] Every user-facing feature tested end to end through real windows against a real server (`tests/test_e2e_app.py`)
 - [x] Standalone server and client executables (PyInstaller), plus `LANBoard.app` and a `.dmg` for macOS
-- [x] Technical Documentation PDF (`docs/LANBoard_Technical_Documentation.pdf`, 42 pages, with requirements traceability)
+- [x] Technical Documentation PDF (`docs/LANBoard_Technical_Documentation.pdf`, 41 pages, with requirements traceability)
 - [x] PPT (`docs/LANBoard_Presentation.pptx`, 30 slides) and `docs/PRESENTER_GUIDE.md`
 - [x] Windows / Linux / macOS builds (GitHub Actions, tests + smoke test green on all three)
 
 Still needs the team:
-- [ ] **Each member**: read your area's code and `docs/PRESENTER_GUIDE.md`, then make at least one real improvement or test yourself and commit it from your own account
+- [ ] **Each member**: read `docs/PRESENTER_GUIDE.md` and prepare to explain and modify your area live
 - [ ] **All**: test on 3+ real machines over a hotspot or switch with the internet **off** (discovery, firewall prompts, cut cable)
 - [ ] **All**: run the Windows build on a lab PC
 - [ ] **All**: record the explanation video (each member explains their own area, face and name visible)

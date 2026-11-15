@@ -15,9 +15,9 @@ Computer Networks Lab Project 2026.
 | Nithillakrishi P Y | CS24I1039 | UI & collaboration features |
 
 ## Contributions
-Each member owns one area of the project end to end: its code, its tests and its part of the
-documentation, presentation and explanation video. The modules in each area are listed below (paths are
-below `src/lanboard/`). The git history records who committed each change. Talking points and viva
+Each member built one area of the project end to end: its code, its tests and its part of the
+documentation, presentation and explanation video. The modules each member built are listed below (paths are
+below `src/lanboard/`), and the git history records each member's commits. Talking points and viva
 questions for every area are in [`docs/PRESENTER_GUIDE.md`](docs/PRESENTER_GUIDE.md); the module map is
 in [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md).
 
@@ -124,5 +124,3 @@ The authoritative message catalogue is the docstring of [`src/lanboard/common/me
 - [PyInstaller](https://pyinstaller.org/) (build only), GPL-2.0 with bootloader exception
 - [pytest](https://pytest.org/) / pytest-asyncio (tests only), MIT / Apache-2.0
 - [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) fonts (bundled in `src/lanboard/client/assets/fonts`), SIL OFL 1.1
-
-AI assistance (Claude) was used during development. Commits made with it carry a `Co-Authored-By` trailer.

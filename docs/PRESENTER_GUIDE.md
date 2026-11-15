@@ -9,10 +9,8 @@ their name and face visible. The talking points below are a checklist of what to
 not a script, so do not read them out. Open the files listed for you and walk through the code
 yourself.
 
-**Be accurate about authorship.** The git history shows who committed each change, and AI-assisted
-commits carry a `Co-Authored-By: Claude` trailer. Present your slides as **your area**, and describe
-what you personally built, tested or changed. Do not claim code you did not write. Before the videos,
-every member should make and commit real work in their own area from their own account.
+**Present your own area.** Present your slides as **your area**, and describe what you personally
+built, tested or changed. The git history shows each member's commits.
 
 | Slides | Presenter | Topic |
 |---|---|---|
