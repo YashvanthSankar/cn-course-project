@@ -25,7 +25,7 @@ Inputs:
   ``LANBoard/`` folder or as the ``LANBoard-<OS>.zip`` produced by
   .github/workflows/build.yml (the downloaded GitHub artifact, a zip that holds
   that zip, works too).
-* Videos are taken from ``--video DIR`` (default ``~/Desktop/LANBoard_scripts``).
+* Videos are taken from ``--video DIR`` (default ``release/video/``).
 * The documents are looked up in ``docs/``, the repository root and
   ``release/docs/``; missing ones only produce a warning.
 
@@ -404,7 +404,7 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "release"), help="output folder (default: release/)")
     ap.add_argument("--dist", default=str(ROOT / "dist" / "LANBoard"), help="this machine's bundle")
     ap.add_argument("--no-local-dist", action="store_true", help="do not include this machine's dist/")
-    ap.add_argument("--video", default=str(Path.home() / "Desktop" / "LANBoard_scripts"),
+    ap.add_argument("--video", default=str(ROOT / "release" / "video"),
                     help="folder with the explanation videos")
     args = ap.parse_args()
 
