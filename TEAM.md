@@ -3,6 +3,9 @@
 Computer Networks Lab Project 2026, IIITDM Kancheepuram.
 Project: LAN-based multi-user collaborative whiteboard.
 
+- GitHub repository: <https://github.com/YashvanthSankar/cn-course-project>
+- Downloads (Windows, macOS, Linux): <https://github.com/YashvanthSankar/cn-course-project/releases>
+
 | # | Name | Roll no. | Area presented |
 |---|---|---|---|
 | 1 | Yashvanth S | CS24I1029 | Server core and state |

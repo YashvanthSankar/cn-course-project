@@ -7,6 +7,9 @@ same board, and nothing ever touches the internet.
 
 Computer Networks Lab Project 2026, IIITDM Kancheepuram.
 
+- Source code: <https://github.com/YashvanthSankar/cn-course-project>
+- Executables for Windows, macOS and Linux: <https://github.com/YashvanthSankar/cn-course-project/releases>
+
 ## What it does
 
 You start a server on one laptop. Everyone else opens the client, picks that server from the

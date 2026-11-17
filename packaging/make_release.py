@@ -263,6 +263,8 @@ def readme_text(platforms: list[str], docs_found: dict[str, bool], commit: str) 
                           for n, desc in DOCS.items())
     return f"""LANBoard - LAN-only real-time collaborative whiteboard
 Computer Networks Lab Project 2026
+GitHub:    https://github.com/YashvanthSankar/cn-course-project
+Downloads: https://github.com/YashvanthSankar/cn-course-project/releases
 ======================================================================
 
 TEAM
