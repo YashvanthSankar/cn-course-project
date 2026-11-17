@@ -7,5 +7,5 @@ try:
     from PySide6.QtWidgets import QApplication
 
     APP = QApplication.instance() or QApplication([])
-except ImportError:            # server-only environments
+except ImportError:
     APP = None

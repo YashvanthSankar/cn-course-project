@@ -62,13 +62,11 @@ def test_non_object_rejected():
         FrameDecoder().feed(struct.pack(">IB", len(body) + 1, 1) + body)
 
 
-# --- multi-part messages -------------------------------------------------------
-
 def test_pack_ranges_respects_budget_and_order():
     from lanboard.common.protocol import pack_ranges
     assert pack_ranges([], 10) == [(0, 0)]
-    assert pack_ranges([3, 3, 3, 3], 8) == [(0, 2), (2, 4)]           # +1 per item for the comma
-    assert pack_ranges([50, 1, 1], 10) == [(0, 1), (1, 3)]            # oversized item alone
+    assert pack_ranges([3, 3, 3, 3], 8) == [(0, 2), (2, 4)]
+    assert pack_ranges([50, 1, 1], 10) == [(0, 1), (1, 3)]
     assert pack_ranges([1] * 5, 100, max_items=2) == [(0, 2), (2, 4), (4, 5)]
 
 
@@ -84,12 +82,12 @@ def test_encode_parts_beyond_max_frame(monkeypatch):
     from lanboard.common import protocol
     from lanboard.common.messages import MsgType
     monkeypatch.setattr(protocol, "MAX_FRAME", 4096)
-    objs = [{"id": f"o{i}", "t": "x" * 100} for i in range(200)]       # ~25 KB > MAX_FRAME
+    objs = [{"id": f"o{i}", "t": "x" * 100} for i in range(200)]
     payload = {"seq": 9, "board": {"seq": 9, "objects": objs}, "hash": "h"}
     frames = protocol.encode_parts(MsgType.SNAPSHOT, payload)
     assert len(frames) > 6 and all(len(f) <= 4096 for f in frames)
     dec, asm, done = FrameDecoder(), protocol.PartAssembler(), []
-    for f in reversed(frames):                                         # any order works
+    for f in reversed(frames):
         for t, p in dec.feed(f):
             out = asm.add(t, p)
             if out is not None:
@@ -102,9 +100,9 @@ def test_part_assembler_ignores_bad_parts_and_bounds_memory():
     from lanboard.common.protocol import PartAssembler
     asm = PartAssembler(max_pending=2)
     assert asm.add(MsgType.SNAPSHOT, {"part": 7, "parts": 2, "xid": 1}) is None
-    assert asm.pending == 0                                            # out-of-range index
+    assert asm.pending == 0
     for xid in range(5):
         asm.add(MsgType.SNAPSHOT, {"part": 0, "parts": 2, "xid": xid, "board": {"objects": []}})
-    assert asm.pending == 2                                            # oldest transfers dropped
+    assert asm.pending == 2
     asm.clear()
     assert asm.pending == 0

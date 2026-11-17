@@ -43,8 +43,8 @@ def test_undo_skips_object_erased_by_someone_else():
     s, alice = Sim(), UndoManager()
     alice.record(s.do(stroke("a1", "alice")))
     alice.record(s.do(stroke("a2", "alice")))
-    s.do({"k": "delete", "ids": ["a2"]})          # bob erases a2
-    op = alice.undo(s.board)                       # skips a2, undoes a1
+    s.do({"k": "delete", "ids": ["a2"]})
+    op = alice.undo(s.board)
     assert op == {"k": "delete", "ids": ["a1"]}
 
 
@@ -54,7 +54,7 @@ def test_undo_update_leaves_others_newer_change():
     alice.record(s.do({"k": "update", "id": "x", "set": {"style.color": "red", "off": [5, 0]},
                        "prev": {"style.color": "#000", "off": [0, 0]}}))
     s.do({"k": "update", "id": "x", "set": {"style.color": "blue"}, "prev": {"style.color": "red"}})
-    op = alice.undo(s.board)                       # only "off" is still alice's
+    op = alice.undo(s.board)
     assert op["set"] == {"off": [0, 0]}
     s.do(op)
     assert s.board.get("x")["style"]["color"] == "blue"

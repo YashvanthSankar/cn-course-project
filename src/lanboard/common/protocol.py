@@ -35,8 +35,8 @@ from . import config as C
 from .config import MAX_FRAME
 from .messages import MsgType
 
-_HEADER = struct.Struct(">IB")    # length (u32) + type (u8)
-HEADER_SIZE = 4                   # length prefix size; the type byte is counted in length
+_HEADER = struct.Struct(">IB")
+HEADER_SIZE = 4
 
 
 class ProtocolError(Exception):
@@ -82,7 +82,7 @@ class FrameDecoder:
                 raise ProtocolError(f"bad frame length {length}")
             end = pos + HEADER_SIZE + length
             if len(buf) < end:
-                break                                   # wait for the rest of this frame
+                break
             msg_type = buf[pos + HEADER_SIZE]
             body = bytes(buf[pos + HEADER_SIZE + 1:end])
             try:
@@ -94,7 +94,7 @@ class FrameDecoder:
             out.append((msg_type, payload))
             pos = end
         if pos:
-            del buf[:pos]                               # drop consumed bytes in one go
+            del buf[:pos]
         self.frames_in += len(out)
         return out
 
@@ -104,13 +104,6 @@ class FrameDecoder:
         return len(self._buf)
 
 
-# ---------------------------------------------------------------------------
-# multi-part messages (see the module docstring and messages.py)
-# ---------------------------------------------------------------------------
-
-# Which lists of each multi-part message type are split across parts. A path is
-# a key sequence into the payload: ("board", "objects") is payload["board"]["objects"].
-# Every other field is the same in all parts and is taken from part 0.
 SPLIT_LISTS: dict[int, tuple[tuple[str, ...], ...]] = {
     MsgType.SNAPSHOT: (("board", "objects"),),
     MsgType.HISTORY: (("base", "objects"), ("ops",)),
@@ -139,7 +132,7 @@ def pack_ranges(sizes: Sequence[int], budget: int, max_items: int | None = None)
     ranges: list[tuple[int, int]] = []
     start, acc = 0, 0
     for i, n in enumerate(sizes):
-        n += 1                                       # the "," between list items
+        n += 1
         full = acc + n > budget or (max_items is not None and i - start >= max_items)
         if i > start and full:
             ranges.append((start, i))
@@ -165,7 +158,7 @@ def _set_path(payload: dict, path: tuple[str, ...], value: Any) -> None:
     target[path[-1]] = value
 
 
-_xids = itertools.count(1)            # transfer ids of multi-part messages (per process)
+_xids = itertools.count(1)
 
 
 def encode_parts(msg_type: int, payload: dict,
@@ -186,7 +179,7 @@ def encode_parts(msg_type: int, payload: dict,
         if len(frame) <= budget:
             return [frame]
     except ProtocolError:
-        pass                                         # too big for one frame: split below
+        pass
     paths = SPLIT_LISTS[msg_type]
     chunks: list[tuple[tuple[str, ...], list]] = []
     for path in paths:
@@ -198,7 +191,7 @@ def encode_parts(msg_type: int, payload: dict,
             if a < b:
                 chunks.append((path, items[a:b]))
     if len(chunks) <= 1:
-        return [encode(msg_type, payload)]           # one huge item: nothing to split
+        return [encode(msg_type, payload)]
     xid, n = next(_xids), len(chunks)
     frames = []
     for i, (path, items) in enumerate(chunks):
@@ -239,14 +232,14 @@ class PartAssembler:
     def add(self, msg_type: int, payload: dict) -> dict | None:
         parts, part = payload.get("parts"), payload.get("part")
         if not isinstance(parts, int) or isinstance(parts, bool) or parts <= 1:
-            return payload                           # ordinary single-frame message
+            return payload
         if not isinstance(part, int) or isinstance(part, bool) or not 0 <= part < parts:
-            return None                              # malformed part: ignore it
+            return None
         key = (int(msg_type), payload.get("xid"))
         got = self._pending.pop(key, None) or {}
         got[part] = payload
         if len(got) < parts:
-            self._pending[key] = got                 # re-insert = most recently used
+            self._pending[key] = got
             while len(self._pending) > self.max_pending:
                 self._pending.pop(next(iter(self._pending)))
             return None

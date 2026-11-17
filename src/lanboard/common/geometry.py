@@ -17,12 +17,8 @@ from __future__ import annotations
 import math
 from typing import Iterable, Sequence
 
-Rect = tuple[float, float, float, float]          # (x0, y0, x1, y1)
+Rect = tuple[float, float, float, float]
 
-
-# ---------------------------------------------------------------------------
-# point helpers
-# ---------------------------------------------------------------------------
 
 def pairs(pts: Sequence[float]) -> list[tuple[float, float]]:
     """Flat list -> list of (x, y) tuples (a trailing odd number is ignored)."""
@@ -48,7 +44,6 @@ def dist_point_segment(px: float, py: float, ax: float, ay: float, bx: float, by
     len2 = dx * dx + dy * dy
     if len2 == 0.0:
         return math.hypot(px - ax, py - ay)
-    # projection parameter of P on AB, clamped to the segment
     t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / len2))
     return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 
@@ -81,10 +76,6 @@ def points_bounds(pts: Sequence[float]) -> Rect:
         return (0.0, 0.0, 0.0, 0.0)
     return (min(xs), min(ys), max(xs), max(ys))
 
-
-# ---------------------------------------------------------------------------
-# simplification and smoothing
-# ---------------------------------------------------------------------------
 
 def rdp(pts: Sequence[float], eps: float) -> list[float]:
     """Ramer-Douglas-Peucker polyline simplification on a flat point list.
@@ -172,7 +163,7 @@ def resample(pts: Sequence[float], count: int, closed: bool = False) -> list[tup
     if total == 0:
         return [p[0]] * count
     step = total / (count if closed else max(1, count - 1))
-    out, i, acc = [], 0, 0.0          # acc = arc length at the start of segment i
+    out, i, acc = [], 0, 0.0
     for k in range(count):
         target = k * step
         while i < len(seg) - 1 and acc + seg[i] < target:
@@ -182,10 +173,6 @@ def resample(pts: Sequence[float], count: int, closed: bool = False) -> list[tup
         out.append((p[i][0] + t * (p[i + 1][0] - p[i][0]), p[i][1] + t * (p[i + 1][1] - p[i][1])))
     return out
 
-
-# ---------------------------------------------------------------------------
-# object bounds
-# ---------------------------------------------------------------------------
 
 def _off(obj: dict) -> tuple[float, float]:
     off = obj.get("off") or (0, 0)
@@ -221,7 +208,7 @@ def bbox(obj: dict, include_width: bool = True) -> Rect:
     elif t == "text":
         w, h = text_size(g.get("text", ""), float(style.get("font_size") or 20))
         x0, y0, x1, y1 = g["x"], g["y"], g["x"] + w, g["y"] + h
-    else:                                     # rect, ellipse, sticky, image
+    else:
         x0, x1 = sorted((g["x"], g["x"] + g["w"]))
         y0, y1 = sorted((g["y"], g["y"] + g["h"]))
     pad = 0.0
@@ -229,7 +216,7 @@ def bbox(obj: dict, include_width: bool = True) -> Rect:
         width = _width(style)
         pad = width / 2
         if t == "arrow":
-            pad += 4 + 3 * width                              # the arrow head sticks out
+            pad += 4 + 3 * width
     return (x0 + dx - pad, y0 + dy - pad, x1 + dx + pad, y1 + dy + pad)
 
 
@@ -245,10 +232,6 @@ def normalise_rect(x0: float, y0: float, x1: float, y1: float) -> Rect:
     return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
 
 
-# ---------------------------------------------------------------------------
-# hit testing
-# ---------------------------------------------------------------------------
-
 def _ellipse_outline_distance(px: float, py: float, cx: float, cy: float, a: float, b: float) -> float:
     """Approximate distance from P to the ellipse outline (first-order |F|/|grad F|)."""
     a, b = max(a, 1e-6), max(b, 1e-6)
@@ -256,7 +239,7 @@ def _ellipse_outline_distance(px: float, py: float, cx: float, cy: float, a: flo
     f = (u * u) / (a * a) + (v * v) / (b * b) - 1.0
     gx, gy = 2 * u / (a * a), 2 * v / (b * b)
     g = math.hypot(gx, gy)
-    if g < 1e-9:                     # at the centre: distance is the smaller semi-axis
+    if g < 1e-9:
         return min(a, b)
     return abs(f) / g
 
@@ -276,11 +259,10 @@ def hit_test(obj: dict, x: float, y: float, radius: float = 4.0) -> bool:
     t = obj.get("type")
     g, style = obj.get("geom", {}), obj.get("style", {}) or {}
     dx, dy = _off(obj)
-    px, py = x - dx, y - dy                      # work in the object's own coordinates
+    px, py = x - dx, y - dy
     half = _width(style) / 2
     if t == "stroke":
         pts = g.get("pts") or []
-        # cheap bounding-box reject before the per-segment loop
         x0, y0, x1, y1 = points_bounds(pts)
         r = radius + half
         if px < x0 - r or px > x1 + r or py < y0 - r or py > y1 + r:
@@ -296,7 +278,6 @@ def hit_test(obj: dict, x: float, y: float, radius: float = 4.0) -> bool:
             inside = x0 <= px <= x1 and y0 <= py <= y1
             if filled and inside:
                 return True
-            # distance to the 4 outline segments
             d = min(dist_point_segment(px, py, x0, y0, x1, y0), dist_point_segment(px, py, x1, y0, x1, y1),
                     dist_point_segment(px, py, x1, y1, x0, y1), dist_point_segment(px, py, x0, y1, x0, y0))
             return d <= radius + half
@@ -333,10 +314,6 @@ def objects_in_rect(objects: Iterable[dict], rect: Rect, contain: bool = False) 
     return out
 
 
-# ---------------------------------------------------------------------------
-# tool constraints (Shift key)
-# ---------------------------------------------------------------------------
-
 def constrain_angle(x1: float, y1: float, x2: float, y2: float, step_deg: float = 45.0) -> tuple[float, float]:
     """Snap the end point so the line angle is a multiple of ``step_deg``."""
     dx, dy = x2 - x1, y2 - y1
@@ -355,11 +332,6 @@ def constrain_square(x1: float, y1: float, x2: float, y2: float) -> tuple[float,
     return x1 + math.copysign(s, dx or 1), y1 + math.copysign(s, dy or 1)
 
 
-# ---------------------------------------------------------------------------
-# resizing a selection from one of its 8 handles
-# ---------------------------------------------------------------------------
-
-#: Handle names, clockwise from the top-left corner (compass directions).
 HANDLES = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
 MIN_FONT, MAX_FONT = 4.0, 400.0
 _EPS = 1e-6
@@ -443,10 +415,6 @@ def scale_changes(obj: dict, src: Rect, dst: Rect, handle: str = "se") -> dict:
             "geom.w": round(float(g["w"]) * sx, 1), "geom.h": round(float(g["h"]) * sy, 1)}
 
 
-# ---------------------------------------------------------------------------
-# Smart Ink: recognise a rough hand-drawn shape
-# ---------------------------------------------------------------------------
-
 def _turn_angle(ax, ay, bx, by, cx, cy) -> float:
     """Absolute turning angle (radians) at B when walking A -> B -> C."""
     v1x, v1y, v2x, v2y = bx - ax, by - ay, cx - bx, cy - by
@@ -471,7 +439,7 @@ def _corner_count(pts: Sequence[float], eps: float, closed: bool, min_turn_deg: 
     """Number of sharp corners after RDP simplification."""
     simp = pairs(rdp(pts, eps))
     if closed and len(simp) > 2 and math.hypot(simp[0][0] - simp[-1][0], simp[0][1] - simp[-1][1]) < eps * 3:
-        simp = simp[:-1]            # first and last point are the same corner
+        simp = simp[:-1]
     n = len(simp)
     if n < 3:
         return 0
@@ -516,18 +484,16 @@ def recognize_shape(pts: Sequence[float]) -> dict | None:
     diag = math.hypot(w, h)
     length = path_length(pts)
     if diag < 12 or length < 16:
-        return None                                  # too small to mean anything
+        return None
     (sx, sy), (ex, ey) = p[0], p[-1]
     chord = math.hypot(ex - sx, ey - sy)
 
-    # ---- straight line ----------------------------------------------------
     if chord / length >= 0.93:
         dev = max(dist_point_segment(x, y, sx, sy, ex, ey) for x, y in p)
         if dev <= max(0.08 * chord, 3.0):
             return {"type": "line", "geom": _rounded({"x1": float(sx), "y1": float(sy),
                                                       "x2": float(ex), "y2": float(ey)})}
 
-    # ---- arrow: shaft + hooked head in one stroke ------------------------------
     simp = pairs(rdp(pts, max(0.04 * diag, 2.0)))
     if len(simp) >= 4:
         (ax, ay), (bx, by) = simp[0], simp[1]
@@ -536,20 +502,16 @@ def recognize_shape(pts: Sequence[float]) -> dict | None:
         if shaft >= 0.55 * length and shaft > 0 and rest > 0.12 * shaft:
             ux, uy = (bx - ax) / shaft, (by - ay) / shaft
             near = all(math.hypot(x - bx, y - by) <= 0.45 * shaft for x, y in simp[1:])
-            # head points lie *behind* the tip (pointing back towards the tail)
             back = [((x - bx) * ux + (y - by) * uy) for x, y in simp[2:]]
             if near and back and min(back) < -0.08 * shaft:
                 return {"type": "arrow", "geom": _rounded({"x1": float(ax), "y1": float(ay),
                                                            "x2": float(bx), "y2": float(by)})}
 
-    # ---- closed shapes -------------------------------------------------------
     closure = chord / length
     if closure > 0.2 or chord > 0.35 * diag:
         return None
     if min(w, h) < 0.08 * max(w, h):
-        return None                                  # a closed but flat squiggle
-    # Two passes of moving-average smoothing remove hand jitter, which would
-    # otherwise inflate the bounding box and make the outline look ragged.
+        return None
     sm = smooth(smooth(pts, 2), 2)
     x0, y0, x1, y1 = points_bounds(sm)
     w, h = max(x1 - x0, 1e-6), max(y1 - y0, 1e-6)
@@ -559,7 +521,6 @@ def recognize_shape(pts: Sequence[float]) -> dict | None:
     radii = [math.sqrt(((x - cx) / a) ** 2 + ((y - cy) / b) ** 2) for x, y in poly]
     mean_r = sum(radii) / len(radii)
     r_std = math.sqrt(sum((r - mean_r) ** 2 for r in radii) / len(radii)) / max(mean_r, 1e-9)
-    # share of points close to one of the four bbox sides (normalised per axis)
     tol = 0.07
     edge = sum(1 for x, y in poly
                if min(x - x0, x1 - x) / w < tol or min(y - y0, y1 - y) / h < tol) / len(poly)

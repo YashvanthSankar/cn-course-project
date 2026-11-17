@@ -48,11 +48,10 @@ def inverse(op: dict) -> dict | None:
         if any(p is None for p in parts):
             return None
         return {"k": "batch", "ops": parts}
-    return None                                     # replace (and a raw, un-normalised clear)
+    return None
 
 
 def _same(a: Any, b: Any) -> bool:
-    # JSON round trips may turn ints into floats; compare numerically where sensible
     if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool):
         return abs(a - b) < 1e-9
     if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
@@ -75,7 +74,6 @@ def applicable(op: dict | None, board: Board) -> dict | None:
         o = board.get(op["id"])
         if o is None or o["deleted"]:
             return None
-        # op["prev"] holds the values *we* set; only revert keys that still hold them
         keep = [key for key in op["set"] if _same(get_key(o, key), op.get("prev", {}).get(key))]
         if not keep:
             return None
@@ -83,7 +81,6 @@ def applicable(op: dict | None, board: Board) -> dict | None:
                 "set": {key: copy.deepcopy(op["set"][key]) for key in keep},
                 "prev": {key: copy.deepcopy(op["prev"][key]) for key in keep}}
     if k == "batch":
-        # filter sequentially on a scratch copy so later parts see earlier ones
         scratch = board.copy()
         parts = []
         for sub in op["ops"]:

@@ -60,8 +60,8 @@ class ClientShell(QObject):
         self.controller = None
         self.window = None
         self.last: ConnectParams | None = None
-        self.servers: list = []           # ServerProcess objects we started (kept alive)
-        self.client_id: str | None = None  # NetClient.client_id reused by every session
+        self.servers: list = []
+        self.client_id: str | None = None
 
     def show_connect(self, error_text: str = "", prefill: ConnectParams | None = None) -> None:
         dlg = ConnectDialog(prefill=prefill, error_text=error_text, settings=self.settings)
@@ -74,7 +74,6 @@ class ClientShell(QObject):
             self.app.quit()
 
     def start_session(self, p: ConnectParams) -> None:
-        # imported here so the dialog appears fast and import errors show up clearly
         from lanboard.client.controller import SessionController
         from lanboard.client.net import NetClient
 
@@ -84,8 +83,6 @@ class ClientShell(QObject):
             self.servers.append(p.server)
         self.last = p
         self.net = NetClient()
-        # One client id for the whole app run (not per session): the server bans a
-        # kicked client id from the room, which must survive "Back to start" + Join.
         if self.client_id:
             self.net.client_id = self.client_id
         self.client_id = self.net.client_id
@@ -100,10 +97,7 @@ class ClientShell(QObject):
         win, ctl, net = self.window, self.controller, self.net
         self.window = self.controller = self.net = None
         if net is not None:
-            net.close()                       # stop timers/sockets before teardown
-        # Keep Python references until Qt has processed deleteLater(). If the
-        # wrappers were freed right here (inside a signal from the window) PySide
-        # would destroy the C++ objects mid-emission, which can segfault.
+            net.close()
         self._retired = [o for o in (win, ctl, net) if o is not None]
         if win is not None:
             win.hide()
@@ -116,7 +110,6 @@ class ClientShell(QObject):
             return
         prefill = None
         if self.last is not None:
-            # the room exists now (we created it), so come back in "join" mode
             prefill = replace(self.last, create=False, start_server=False, server=None, lan_addresses=[])
         QTimer.singleShot(0, lambda: self.show_connect(message if reason == "fatal" else "", prefill))
 
@@ -129,17 +122,16 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationDisplayName("LANBoard")
     app.setOrganizationName("LANBoard")
     app.setOrganizationDomain("lanboard.local")
-    app.setQuitOnLastWindowClosed(False)            # the shell decides when to quit
+    app.setQuitOnLastWindowClosed(False)
     settings = QSettings()
-    theme.load_fonts()                              # bundled Inter / JetBrains Mono (falls back to system fonts)
+    theme.load_fonts()
     theme.apply_theme(app, args.theme or str(settings.value("ui/theme", "light")))
     app.setWindowIcon(theme.app_icon())
     app.aboutToQuit.connect(terminate_all)
 
-    # Ctrl+C in the terminal: quit cleanly (so child servers are terminated too)
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     wake = QTimer()
-    wake.start(250)                                 # let Python run its signal handlers
+    wake.start(250)
     wake.timeout.connect(lambda: None)
 
     shell = ClientShell(app, settings)

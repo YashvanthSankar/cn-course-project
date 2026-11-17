@@ -65,12 +65,10 @@ class DiscoveryBrowser(QObject):
         self._timer.setInterval(interval_ms)
         self._timer.timeout.connect(self._tick)
 
-    # ---------------------------------------------------------------- API
     def start(self) -> None:
         """Bind a UDP socket and probe now, then every ``interval_ms``."""
         if self._sock is None:
             sock = QUdpSocket(self)
-            # Port 0 = any free ephemeral port. Replies come back to it as unicast.
             if not sock.bind(QHostAddress(QHostAddress.SpecialAddress.AnyIPv4), 0):
                 sock.deleteLater()
                 return
@@ -96,11 +94,8 @@ class DiscoveryBrowser(QObject):
             return
         datagram = json.dumps({"magic": DISCOVERY_MAGIC}).encode()
         for addr in self._targets():
-            # Errors such as "network unreachable" on a down interface are
-            # expected and ignored. Other targets still work.
             self._sock.writeDatagram(datagram, QHostAddress(addr), self.port)
 
-    # ---------------------------------------------------------- internals
     @staticmethod
     def _targets() -> list[str]:
         targets = ["255.255.255.255", "127.0.0.1"]
@@ -157,10 +152,10 @@ class DiscoveryBrowser(QObject):
             return None
         sid, port = msg.get("server_id"), msg.get("port")
         if not isinstance(sid, str) or not sid or not isinstance(port, int) or isinstance(port, bool):
-            return None              # a probe (no server_id) or a malformed reply
+            return None
         host = sender.toString()
         if sender.protocol() != QAbstractSocket.NetworkLayerProtocol.IPv4Protocol:
-            v4 = sender.toIPv4Address()        # IPv4-mapped IPv6 (::ffff:a.b.c.d) -> a.b.c.d
+            v4 = sender.toIPv4Address()
             if v4:
                 host = QHostAddress(v4).toString()
         if not host:
@@ -180,8 +175,6 @@ class DiscoveryBrowser(QObject):
         """Insert or refresh a server. Returns True if anything visible changed."""
         old = self._servers.get(entry["server_id"])
         if old is not None and entry["host"].startswith("127.") and not old["host"].startswith("127."):
-            # The same server answered both a broadcast and our loopback
-            # probe. Keep the LAN address, which other machines can reach too.
             entry["host"] = old["host"]
         self._servers[entry["server_id"]] = entry
         if old is None:

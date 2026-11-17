@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXE = ".exe" if os.name == "nt" else ""
-RESERVED_PORTS = {5050, 5051}           # the real app's ports: never use them here
+RESERVED_PORTS = {5050, 5051}
 
 
 def free_port() -> int:
@@ -112,7 +112,6 @@ def main() -> int:
             server = subprocess.Popen([str(server_exe), "--port", str(port), "--data", str(tmp / "data"),
                                        "--no-discovery"], stdout=slog, stderr=subprocess.STDOUT,
                                       stdin=subprocess.DEVNULL)
-        # first launch of a fresh exe can be slow (antivirus scan on Windows)
         up = wait_for(lambda: port_accepts(port) or server.poll() is not None, 60)
         up = up and server.poll() is None
         slines = server_log.read_text("utf-8", "replace")
@@ -141,7 +140,6 @@ def main() -> int:
         check("frozen client survived the op stream", client.poll() is None,
               "" if client.poll() is None else f"exit code {client.returncode}")
 
-        # busy port: a second server must fail (informational, not a hard requirement)
         dup = subprocess.run([str(server_exe), "--port", str(port), "--data", str(tmp / "data2"),
                               "--no-discovery"], capture_output=True, text=True, timeout=60,
                              stdin=subprocess.DEVNULL)

@@ -47,7 +47,6 @@ class _ParticipantDelegate(QStyledItemDelegate):
 
         online = d.get("online", True)
         col = QColor(d.get("color") or "#888")
-        # colour avatar: initial on a filled circle (outlined when offline)
         av = QRectF(r.left() + 8, r.center().y() - 13, 26, 26)
         if online:
             p.setPen(Qt.PenStyle.NoPen)
@@ -62,14 +61,12 @@ class _ParticipantDelegate(QStyledItemDelegate):
         p.setFont(f)
         p.setPen(QColor("white") if online else col)
         p.drawText(av, Qt.AlignmentFlag.AlignCenter, (d.get("username") or "?")[:1].upper())
-        # presence dot on the avatar
         p.setPen(QPen(QColor(t["surface"]), 2))
         p.setBrush(QColor(t["success"] if online else t["muted"]))
         p.drawEllipse(QRectF(av.right() - 8, av.bottom() - 8, 9, 9))
 
         x = av.right() + 10
         right = r.right() - 8
-        # hand indicator (rightmost)
         if d.get("hand"):
             hand_r = QRectF(right - 22, r.center().y() - 11, 22, 22)
             p.setPen(Qt.PenStyle.NoPen)
@@ -85,7 +82,6 @@ class _ParticipantDelegate(QStyledItemDelegate):
             sr = QRectF(right - 18, r.center().y() - 9, 18, 18)
             theme.icon("spotlight", t["accent"], 16).paint(p, sr.toRect())
             right = sr.left() - 4
-        # role badge
         role = d.get("role", "viewer")
         if d.get("presenter"):
             role_text = f"{role} · presenting"
@@ -104,7 +100,6 @@ class _ParticipantDelegate(QStyledItemDelegate):
         p.drawRoundedRect(badge, 9, 9)
         p.setPen(QColor(fg))
         p.drawText(badge, Qt.AlignmentFlag.AlignCenter, role_text.upper())
-        # name + "(you)"
         nf = QFont(option.font)
         nf.setPixelSize(13)
         nf.setWeight(QFont.Weight.DemiBold if d.get("me") else QFont.Weight.Normal)
@@ -129,7 +124,7 @@ class _ParticipantDelegate(QStyledItemDelegate):
 class ParticipantsPanel(QWidget):
     """The participant list with its context menu."""
 
-    unread_hands = Signal(int)   # number of raised hands (for the tab badge)
+    unread_hands = Signal(int)
 
     def __init__(self, controller, canvas, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -171,7 +166,6 @@ class ParticipantsPanel(QWidget):
         theme.on_theme_change(self, lambda: self.list.viewport().update())
         self.refresh()
 
-    # -- data ---------------------------------------------------------------
     def _rows(self) -> list[dict]:
         ctl = self.controller
         me_id = (ctl.me or {}).get("user_id")
@@ -198,7 +192,7 @@ class ParticipantsPanel(QWidget):
             it = QListWidgetItem()
             it.setData(UID_ROLE, d["user_id"])
             it.setData(DATA_ROLE, d)
-            it.setText(d.get("username") or d["user_id"])        # for accessibility / tests
+            it.setText(d.get("username") or d["user_id"])
             it.setToolTip(f"{d.get('username')} — {d.get('role')}"
                           f"{' — raised hand' if d.get('hand') else ''}")
             self.list.addItem(it)
@@ -212,7 +206,6 @@ class ParticipantsPanel(QWidget):
         """The rendered rows (used by tests)."""
         return [self.list.item(i).data(DATA_ROLE) for i in range(self.list.count())]
 
-    # -- actions --------------------------------------------------------------
     def follow(self, uid: str | None) -> None:
         me_id = (self.controller.me or {}).get("user_id")
         if uid == me_id:

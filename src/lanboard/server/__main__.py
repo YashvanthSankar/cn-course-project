@@ -74,7 +74,6 @@ def setup_logging(verbose: bool, dashboard: bool) -> RingLogHandler | None:
     root = logging.getLogger()
     root.setLevel(level)
     if dashboard:
-        # logs go into the dashboard's ring buffer instead of scrolling the terminal
         ring = RingLogHandler(size=10)
         ring.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s", "%H:%M:%S"))
         root.addHandler(ring)
@@ -93,7 +92,6 @@ async def run(args: argparse.Namespace) -> None:
     try:
         await server.start()
     except OSError as exc:
-        # Most often: another server (maybe another LANBoard) already owns the port.
         print(f"Cannot listen on {args.host}:{args.port}: {exc.strerror or exc}.\n"
               f"Is another LANBoard server already running? "
               f"Try a different port, e.g.  lanboard-server --port {args.port + 10}",
@@ -116,7 +114,7 @@ async def run(args: argparse.Namespace) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(sig, stop.set)
-        except (NotImplementedError, RuntimeError):     # Windows: KeyboardInterrupt instead
+        except (NotImplementedError, RuntimeError):
             pass
     dash_task = asyncio.create_task(Dashboard(server, ring).run()) if args.dashboard else None
     try:

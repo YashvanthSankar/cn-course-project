@@ -61,7 +61,6 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp) / "LANBoard"
         stage.mkdir()
-        # symlinks=True keeps the .app's internal Frameworks/Resources links
         shutil.copytree(APP, stage / "LANBoard.app", symlinks=True)
         (stage / "Applications").symlink_to("/Applications")
         (stage / "Read Me First.txt").write_text(FIRST_RUN, encoding="utf-8")

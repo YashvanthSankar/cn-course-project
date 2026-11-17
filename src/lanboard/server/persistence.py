@@ -114,7 +114,7 @@ def dumps_line(rec: Any) -> bytes:
     return json.dumps(rec, separators=(",", ":"), ensure_ascii=False).encode("utf-8") + b"\n"
 
 
-_REPLACE_RETRIES = 6           # Windows only: about 1 s in total, see replace_file()
+_REPLACE_RETRIES = 6
 
 
 def replace_file(src: Path, dst: Path) -> None:
@@ -139,7 +139,7 @@ def replace_file(src: Path, dst: Path) -> None:
 def _fsync_dir(directory: Path) -> None:
     """Make a rename durable on POSIX (the directory entry lives in the directory)."""
     if os.name == "nt":
-        return                                  # not possible (or needed) on Windows
+        return
     try:
         fd = os.open(directory, os.O_RDONLY)
     except OSError:
@@ -162,7 +162,7 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
             os.fsync(fh.fileno())
         replace_file(tmp, path)
     except BaseException:
-        try:                                    # never leave stray temp files behind
+        try:
             os.unlink(tmp)
         except OSError:
             pass
@@ -233,8 +233,6 @@ class _AppendLog:
         if self._fh is None:
             fh = open(self.path, "ab")
             try:
-                # A crash may have left a torn last line without its newline. Terminate
-                # it, otherwise our first record would be glued onto it and lost too.
                 if fh.tell() > 0:
                     with open(self.path, "rb") as rd:
                         rd.seek(-1, os.SEEK_END)
@@ -250,7 +248,7 @@ class _AppendLog:
         line = raw + b"\n" if raw is not None else dumps_line(rec)
         fh = self._open()
         fh.write(line)
-        fh.flush()                          # hand the bytes to the OS (survives a process kill)
+        fh.flush()
         return len(line)
 
     def append_many(self, recs: Iterable[dict], durable: bool = False) -> None:
@@ -266,7 +264,7 @@ class _AppendLog:
 
     def rewrite(self, recs: Iterable[dict]) -> None:
         """Atomically replace the whole file with ``recs`` (used for truncation)."""
-        self.close()                        # Windows cannot replace a file that is open
+        self.close()
         atomic_write_bytes(self.path, b"".join(dumps_line(r) for r in recs))
 
     def close(self) -> None:
@@ -309,7 +307,6 @@ class RoomStore:
         self.saves_dir.mkdir(exist_ok=True)
         self.blobs_dir.mkdir(exist_ok=True)
 
-    # -- meta -------------------------------------------------------------------
     def load_meta(self) -> dict | None:
         meta = read_json(self.meta_path)
         return meta if isinstance(meta, dict) else None
@@ -317,7 +314,6 @@ class RoomStore:
     def save_meta(self, meta: dict) -> None:
         atomic_write_json(self.meta_path, meta)
 
-    # -- board: snapshot + op log --------------------------------------------------
     def load_snapshot(self) -> dict | None:
         snap = read_json(self.snapshot_path)
         return snap if isinstance(snap, dict) else None
@@ -336,7 +332,6 @@ class RoomStore:
     def load_ops_sized(self) -> list[tuple[dict, int]]:
         return read_jsonl_sized(self.ops_path)
 
-    # -- durable history (time-lapse) ----------------------------------------------
     def load_history(self) -> tuple[dict | None, list[tuple[dict, int]]]:
         """``(history_base or None if never written, archived ops with line sizes)``."""
         base = read_json(self.history_base_path)
@@ -362,7 +357,6 @@ class RoomStore:
         """Truncate the log to ``tail`` (the ops newer than the last snapshot)."""
         self._ops.rewrite(tail)
 
-    # -- chat -------------------------------------------------------------------
     def append_chat(self, msg: dict) -> None:
         self._chat.append(msg)
 
@@ -374,7 +368,6 @@ class RoomStore:
             self._chat.rewrite(msgs)
         return msgs[-keep:]
 
-    # -- named saves --------------------------------------------------------------
     def _index_path(self) -> Path:
         return self.saves_dir / "_index.json"
 
@@ -382,7 +375,6 @@ class RoomStore:
         idx = read_json(self._index_path())
         if isinstance(idx, dict):
             return idx
-        # index missing or corrupt: rebuild it by scanning the save files
         idx = {}
         for p in self.saves_dir.glob("*.json"):
             if p.name.startswith("_"):
@@ -416,9 +408,8 @@ class RoomStore:
             return None
         return data
 
-    # -- blobs ------------------------------------------------------------------
     def _blob_path(self, sha: str) -> Path:
-        if not _HEX64.match(sha):                       # never let a hash escape the directory
+        if not _HEX64.match(sha):
             raise ValueError("bad blob hash")
         return self.blobs_dir / sha
 

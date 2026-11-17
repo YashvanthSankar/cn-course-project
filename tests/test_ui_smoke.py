@@ -24,7 +24,6 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QWidget  # noqa: E402
 from lanboard.common.messages import MsgType  # noqa: E402
 
 
-# --------------------------------------------------------------------------- fakes
 class FakeNet(QObject):
     state_changed = Signal(str)
     joined = Signal(dict)
@@ -95,7 +94,6 @@ class FakeController(QObject):
     def can_clear(self): return self.is_owner()
 
     def __getattr__(self, name):
-        # every other controller method (undo, send_chat, submit, set_role...) just records its call
         if name.startswith("_"):
             raise AttributeError(name)
 
@@ -142,7 +140,6 @@ class FakeDiscovery(QObject):
     def probe(self): self.probes += 1
 
 
-# --------------------------------------------------------------------------- fixtures
 @pytest.fixture(scope="session")
 def qapp():
     app = QApplication.instance() or QApplication([])
@@ -174,13 +171,12 @@ def env(qapp, settings):
     qapp.processEvents()
 
 
-# --------------------------------------------------------------------------- tests
 def test_main_window_builds(env):
     w = env.win
     assert w.windowTitle() == "LANBoard — CN Lab (K7Q-2MX)"
     assert w.tabs.count() == 4
     assert w.topbar.room_code.text() == "K7Q-2MX"
-    assert w.act_lock.isEnabled() and w.act_settings.isEnabled()      # owner
+    assert w.act_lock.isEnabled() and w.act_settings.isEnabled()
     env.ctl.undo_state.emit(True, False)
     assert w.act_undo.isEnabled() and not w.act_redo.isEnabled()
     env.ctl.connection_state.emit("reconnecting")
@@ -209,7 +205,7 @@ def test_tool_buttons_call_canvas(env):
     for name in ("rect", "eraser", "laser", "select"):
         rail.tool_buttons[name].click()
         assert env.canvas.last("set_tool") == (name,)
-    env.canvas.tool_changed.emit("text")                 # canvas switched by itself
+    env.canvas.tool_changed.emit("text")
     assert rail.tool_buttons["text"].isChecked()
     bar.swatches[2].click()
     assert env.canvas.last("set_color") == (bar.swatches[2].hex,)
@@ -232,10 +228,9 @@ def test_style_bar_is_contextual(env):
     rail.tool_buttons["eraser"].click()
     env.canvas.tool_changed.emit("eraser")
     assert bar.color_group.isHidden() and not bar.width_group.isHidden()
-    rail.tool_buttons["pan"].click()                       # nothing to style: the bar hides
+    rail.tool_buttons["pan"].click()
     env.canvas.tool_changed.emit("pan")
     assert not bar.isVisible()
-    # floating controls stay inside the stage
     stage = env.win.stage.rect()
     for w in (rail, env.win.zoom_controls):
         assert stage.contains(w.geometry().center())
@@ -243,12 +238,12 @@ def test_style_bar_is_contextual(env):
 
 def test_chat_message_appears(env):
     w = env.win
-    w.tabs.setCurrentIndex(w.TAB_PEOPLE)                 # chat hidden -> unread badge
+    w.tabs.setCurrentIndex(w.TAB_PEOPLE)
     ts = time.time()
     env.ctl.chat_added.emit({"id": "c1", "user_id": "u2", "username": "bob", "color": "#3cb44b",
                              "ts": ts, "text": "hello <b>world</b>", "kind": "user"})
     env.ctl.chat_added.emit({"id": "c1", "user_id": "u2", "username": "bob", "color": "#3cb44b",
-                             "ts": ts, "text": "hello <b>world</b>", "kind": "user"})   # duplicate
+                             "ts": ts, "text": "hello <b>world</b>", "kind": "user"})
     env.ctl.chat_added.emit({"id": "c2", "user_id": "", "username": "", "ts": ts,
                              "text": "carol joined", "kind": "system"})
     text = w.chat.plain_text()
@@ -258,7 +253,7 @@ def test_chat_message_appears(env):
     w.tabs.setCurrentIndex(w.TAB_CHAT)
     env.app.processEvents()
     assert w.tabs.badge(w.TAB_CHAT) == 0
-    w.chat.view.viewport().repaint()                      # bubbles paint without error
+    w.chat.view.viewport().repaint()
     w.chat.input.setText("  hi all ")
     w.chat.send()
     assert ("send_chat", ("hi all",), {}) in env.ctl.calls
@@ -279,22 +274,22 @@ def test_participants_render(env):
     assert [r["username"] for r in rows] == ["alice", "bob", "carol"]
     assert rows[0]["me"] and rows[1]["hand"] and not rows[2]["online"]
     assert env.win.tabs.badge(env.win.TAB_PEOPLE) == 1
-    assert [p["username"] for p in env.win.topbar.avatars.people] == ["alice", "bob"]   # online only
+    assert [p["username"] for p in env.win.topbar.avatars.people] == ["alice", "bob"]
     env.win.participants.follow("u2")
     assert env.canvas.last("set_follow") == ("u2",)
     env.win.participants.set_spotlight("u3")
     assert env.canvas.last("set_spotlight") == ("u3",)
-    env.win.participants.list.viewport().repaint()        # delegate paints without error
+    env.win.participants.list.viewport().repaint()
 
 
 def test_sync_badge_changes(env):
     badge = env.win.topbar.badge
     env.ctl.sync_status.emit({"state": "synced", "seq": 42, "hash": "abcd1234ef", "pending": 0})
     assert badge.text() == "In sync · seq 42" and badge.property("state") == "synced"
-    assert badge._pulse.state() != badge._pulse.State.Running          # calm when in sync
+    assert badge._pulse.state() != badge._pulse.State.Running
     env.ctl.sync_status.emit({"state": "pending", "seq": 42, "pending": 3})
     assert badge.text() == "Syncing · 3 pending"
-    assert badge._pulse.state() == badge._pulse.State.Running          # pulses while not in sync
+    assert badge._pulse.state() == badge._pulse.State.Running
     env.ctl.sync_status.emit({"state": "mismatch", "seq": 43, "pending": 0})
     assert badge.text() == "Mismatch · healing" and badge.property("state") == "mismatch"
     env.ctl.connection_state.emit("joined")
@@ -330,7 +325,6 @@ def test_sync_badge_before_first_join(env):
     assert badge.text() == "Signing in…" and "queued" not in badge.text()
     env.ctl.connection_state.emit("closed")
     assert badge.text() == "Offline"
-    # pending edits only count as queued once the client has been joined
     assert sync_text({"state": "offline", "pending": 3, "conn": "connecting"})[1] == "Connecting…"
     assert sync_text({"state": "offline", "pending": 1, "joined_once": True})[1] == "Offline · 1 edit queued"
 
@@ -347,15 +341,14 @@ def test_inspector_ring_buffer_is_fast(qapp):
                                "name": t.name, "size": 40 + i % 50, "payload": {"seq": i},
                                "chaos": "dup" if i % 97 == 0 else None})
         if i % 700 == 0:
-            panel.flush()                                  # timer-driven batches
+            panel.flush()
     panel.flush()
     elapsed = time.perf_counter() - t0
     assert panel.model.rowCount() == 2000
     assert panel.model.frame(1999)["payload"]["seq"] == 4999
     assert panel.model.frame(0)["payload"]["seq"] == 3000
     assert elapsed < 2.0, elapsed
-    # filters
-    panel.hide_switch.setChecked(True)                     # hides CURSOR frames
+    panel.hide_switch.setChecked(True)
     assert all(panel.model.frame(r)["type"] == int(MsgType.OP) for r in range(panel.model.rowCount()))
     panel.type_combo.setCurrentIndex(panel.type_combo.findData(int(MsgType.CURSOR)))
     assert panel.model.rowCount() == 0
@@ -426,14 +419,12 @@ def test_history_builds_preview_boards(env, monkeypatch):
     end = tl.board_at(450)
     assert len(end) == 1 + 449 - 2 and end.seq == 550
     assert {200, 400} <= set(tl.checkpoints)
-    # random access (backwards, across checkpoints) matches a straight replay
     ref = Board.from_snapshot({"seq": 100, "objects": payload["base"]["objects"]})
     for e in payload["ops"][:310]:
         ref.apply(e["op"], e["seq"])
     assert tl.board_at(310).hash() == ref.hash()
     assert tl.board_at(17).seq == 117
 
-    # the panel drives the canvas preview
     panel = env.win.history
     panel.request()
     assert ("request_history", (), {}) in env.ctl.calls
@@ -468,7 +459,7 @@ def test_connect_dialog_builds_and_validates(qapp, settings):
                                            "protected": True, "locked": False}]}])
     top = dlg.tree.topLevelItem(0)
     assert top.text(0) == "Lab PC" and top.childCount() == 1
-    dlg.tree.viewport().repaint()                         # server cards paint without error
+    dlg.tree.viewport().repaint()
     dlg._on_tree_click(top.child(0))
     assert dlg.host.text() == "192.168.1.20" and dlg.port.value() == 5055 and dlg.room.text() == "ABC-123"
 
@@ -483,9 +474,8 @@ def test_connect_dialog_builds_and_validates(qapp, settings):
     p = dlg.collect()
     assert (p.host, p.port, p.username, p.room, p.create) == ("192.168.1.20", 5055, "alice", "ABC-123", False)
 
-    dlg.mode.set_index(1)                                # host mode
+    dlg.mode.set_index(1)
     assert dlg.ok_btn.text() == "Create room" and not dlg.gen_btn.isHidden()
-    # hosting never inherits the discovered server's port / room code
     from lanboard.common import config as C
     assert dlg.port.value() == C.TCP_PORT and dlg.room.text() != "ABC-123"
     dlg.room.clear()
@@ -496,12 +486,11 @@ def test_connect_dialog_builds_and_validates(qapp, settings):
     assert dlg.collect().create and dlg.collect().start_server
     assert generate_room_code()[3] == "-"
     dlg.start_server.setChecked(False)
-    dlg._on_ok()                                          # valid, no server -> accepted
+    dlg._on_ok()
     assert dlg.params() is not None and dlg.params().create
     assert settings.value("connect/username") == "alice"
     dlg.deleteLater()
 
-    # the next dialog remembers the server/room as a "recent" chip
     dlg2 = ConnectDialog(discovery=FakeDiscovery(), settings=settings)
     assert dlg2.recents()[0]["room"] == dlg.params().room
     rec = dlg2.recents()[0]
@@ -509,10 +498,10 @@ def test_connect_dialog_builds_and_validates(qapp, settings):
     dlg2.recent_chips[0].click()
     assert dlg2.room.text() == rec["room"] and dlg2.mode.index() == 0
     assert dlg2.username.completer() is not None
-    dlg2.hero.repaint()                                   # animated brand panel paints
+    dlg2.hero.repaint()
     dlg2.hero._tick()
     dlg2.close()
-    assert not dlg2.hero._timer.isActive()                # animation stops when hidden
+    assert not dlg2.hero._timer.isActive()
     dlg2.deleteLater()
 
 
@@ -530,12 +519,11 @@ def test_connect_dialog_host_mode_resets_unless_typed(qapp, settings):
     assert (dlg.port.value(), dlg.room.text()) == (62197, "CN-2026")
     dlg.mode.set_index(1)
     assert dlg.port.value() == C.TCP_PORT and dlg.room.text() not in ("", "CN-2026")
-    # values typed by hand in host mode survive a round trip through join mode
     dlg.port.clear()
     QTest.keyClicks(dlg.port, "6001")
     dlg.room.clear()
     QTest.keyClicks(dlg.room, "MY-ROOM")
-    dlg._on_tree_click(dlg.tree.topLevelItem(0).child(0))   # back to join with the other server
+    dlg._on_tree_click(dlg.tree.topLevelItem(0).child(0))
     assert dlg.mode.index() == 0 and dlg.port.value() == 62197
     dlg.mode.set_index(1)
     assert (dlg.port.value(), dlg.room.text()) == (6001, "MY-ROOM")
@@ -550,14 +538,14 @@ def test_theme_icons_and_dark_mode(qapp):
     assert theme.manager().dark and theme.DARK["bg"] in qapp.styleSheet()
     theme.apply_theme(qapp, "light")
     assert not theme.manager().dark and theme.LIGHT["bg"] in qapp.styleSheet()
-    assert theme.load_fonts()["ui"] and theme.UI_FAMILY == "Inter"     # bundled fonts load
+    assert theme.load_fonts()["ui"] and theme.UI_FAMILY == "Inter"
 
 
 def test_window_theme_switch_both_ways(env):
     from lanboard.client.ui import theme
     env.win.toggle_theme()
     assert theme.manager().dark and env.canvas.last("set_board_theme") == (True,)
-    env.win.grab()                                          # every widget paints in dark
+    env.win.grab()
     env.win.tabs.setCurrentIndex(env.win.TAB_NET)
     env.win.grab()
     env.win.toggle_theme()
@@ -569,18 +557,18 @@ def test_toasts_stack_top_centre_and_group(env):
     w = env.win
     w.toasts.show("one", "info")
     w.toasts.show("two", "success")
-    w.toasts.show("two", "success")                         # duplicate is ignored
-    assert w.toasts.texts() == ["two", "one"]               # newest first
+    w.toasts.show("two", "success")
+    assert w.toasts.texts() == ["two", "one"]
     w.toasts.show_grouped("joined", "bob", "joined", window_ms=10)
     w.toasts.show_grouped("joined", "carol", "joined", window_ms=10)
     w.toasts.show_grouped("joined", "dan", "joined", window_ms=10)
-    for _ in range(200):                                    # burst window closes after 10 ms
+    for _ in range(200):
         if "bob, carol and 1 other joined" in w.toasts.texts():
             break
         QTest.qWait(10)
     assert "bob, carol and 1 other joined" in w.toasts.texts()
     toast = w.toasts._toasts[0]
-    QTest.qWait(300)                                        # glide animation done
+    QTest.qWait(300)
     centre = toast.geometry().center().x()
     assert abs(centre - w.stage.width() // 2) <= 2 and toast.y() < 40
 
@@ -588,7 +576,7 @@ def test_toasts_stack_top_centre_and_group(env):
 def test_join_leave_and_role_toasts(env):
     ctl, w = env.ctl, env.win
     env.ctl.connection_state.emit("joined")
-    ctl.participants_changed.emit()                         # initial roster: no toast
+    ctl.participants_changed.emit()
     ctl.participants["u2"] = {"user_id": "u2", "username": "bob", "color": "#3cb44b", "role": "editor",
                               "online": True, "hand": False}
     ctl.participants_changed.emit()
@@ -611,8 +599,8 @@ def test_side_panel_collapses_and_restores(env):
     assert not w.side.isVisible() and w.settings.value("ui/side_open") == "false"
     env.ctl.chat_added.emit({"id": "z1", "user_id": "u2", "username": "bob", "ts": time.time(), "text": "hi",
                              "kind": "user"})
-    assert w.chat.unread == 1                               # hidden panel counts unread
-    w.focus_chat()                                          # Ctrl+Enter re-opens it on Chat
+    assert w.chat.unread == 1
+    w.focus_chat()
     QTest.qWait(400)
     assert w.side.isVisible() and w.tabs.currentIndex() == w.TAB_CHAT and w.side.width() >= 300
 
@@ -636,7 +624,7 @@ def test_invite_popover_and_shortcuts(env):
 def test_follow_changed_updates_people(env):
     env.win.participants.follow("u2")
     assert env.win.participants.following == "u2"
-    env.canvas.follow_changed.emit(None)                    # user panned away
+    env.canvas.follow_changed.emit(None)
     assert env.win.participants.following is None
     assert any("Stopped following" in t for t in env.win.toasts.texts())
 
@@ -683,9 +671,9 @@ def test_deleted_window_ignores_theme_switch(qapp, settings, monkeypatch):
 
 def test_lan_addresses_prefer_private_ranges():
     from lanboard.client.ui.server_launcher import address_rank, prefer_lan
-    assert address_rank("100.102.57.102") == 4                     # CGNAT / Tailscale: kept, ranked last
-    assert address_rank("172.40.0.1") == 4                         # outside 172.16/12: not private
+    assert address_rank("100.102.57.102") == 4
+    assert address_rank("172.40.0.1") == 4
     assert address_rank("192.168.1.9", virtual=True) == 5
     addrs = ["100.102.57.102", "10.1.2.3", "192.168.1.9", "192.168.56.1"]
     assert prefer_lan(addrs, virtual={"10.1.2.3"}) == ["192.168.1.9"]
-    assert prefer_lan(["100.102.57.102", "192.168.56.1"]) == ["100.102.57.102", "192.168.56.1"]   # fallback
+    assert prefer_lan(["100.102.57.102", "192.168.56.1"]) == ["100.102.57.102", "192.168.56.1"]

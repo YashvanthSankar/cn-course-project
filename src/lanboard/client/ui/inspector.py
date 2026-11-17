@@ -40,7 +40,6 @@ from .widgets import ElidedLabel, ToggleSwitch
 RING_SIZE = 2000
 FLUSH_MS = 100
 COLUMNS = ("Time", "", "Type", "Size", "Seq", "Chaos")
-#: Frames hidden by "hide cursor/live frames": high-rate presence traffic.
 NOISY_TYPES = frozenset(int(t) for t in EPHEMERAL if t != MsgType.SIGNAL) | {int(MsgType.PING), int(MsgType.PONG)}
 
 
@@ -95,15 +94,14 @@ class FrameModel(QAbstractTableModel):
     def __init__(self, capacity: int = RING_SIZE, parent=None) -> None:
         super().__init__(parent)
         self.capacity = capacity
-        self.frames: deque[tuple[int, dict]] = deque(maxlen=capacity)   # (serial, frame)
-        self.rows: deque[tuple[int, dict]] = deque()                    # filtered view
+        self.frames: deque[tuple[int, dict]] = deque(maxlen=capacity)
+        self.rows: deque[tuple[int, dict]] = deque()
         self._serial = 0
         self.type_filter: int | None = None
         self.hide_noisy = False
         self._t0: float | None = None
         self._mono = theme.mono_font(10)
 
-    # -- filtering -----------------------------------------------------------------
     def accepts(self, f: dict) -> bool:
         t = f.get("type")
         if self.type_filter is not None and t != self.type_filter:
@@ -120,7 +118,6 @@ class FrameModel(QAbstractTableModel):
         self.rows = deque(item for item in self.frames if self.accepts(item[1]))
         self.endResetModel()
 
-    # -- mutation --------------------------------------------------------------------
     def add_frames(self, batch: list[dict]) -> None:
         """Append a batch (oldest first). Evicts from the front of the ring."""
         if not batch:
@@ -133,9 +130,8 @@ class FrameModel(QAbstractTableModel):
         for f in batch:
             self._serial += 1
             new_items.append((self._serial, f))
-        self.frames.extend(new_items)            # the deque evicts the oldest itself
+        self.frames.extend(new_items)
         first_kept = self.frames[0][0]
-        # rows whose frame fell off the ring are always at the front of ``rows``
         drop = 0
         for serial, _f in self.rows:
             if serial >= first_kept:
@@ -163,7 +159,6 @@ class FrameModel(QAbstractTableModel):
     def frame(self, row: int) -> dict | None:
         return self.rows[row][1] if 0 <= row < len(self.rows) else None
 
-    # -- Qt model API --------------------------------------------------------------------
     def rowCount(self, parent=QModelIndex()) -> int:  # noqa: N802
         return 0 if parent.isValid() else len(self.rows)
 
@@ -180,9 +175,9 @@ class FrameModel(QAbstractTableModel):
             t = float(t)
         except (TypeError, ValueError):
             return ""
-        if t > 1e9:                                   # wall clock
+        if t > 1e9:
             return time.strftime("%H:%M:%S", time.localtime(t)) + f".{int((t % 1) * 1000):03d}"
-        return f"{t - (self._t0 or 0):9.3f}"           # monotonic: seconds since capture start
+        return f"{t - (self._t0 or 0):9.3f}"
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
@@ -241,7 +236,7 @@ class TypeChipDelegate(QStyledItemDelegate):
         name = opt.text
         opt.text = ""
         style = opt.widget.style() if opt.widget else None
-        if style is not None:                       # row background / selection as usual
+        if style is not None:
             style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, p, opt.widget)
         t = theme.tokens()
         c = QColor(t.get(theme.MSG_FAMILY.get(name, "muted"), t["muted"]))
@@ -266,12 +261,11 @@ class TypeChipDelegate(QStyledItemDelegate):
 class JsonHighlighter(QSyntaxHighlighter):
     """Colours keys, strings, numbers and literals in the pretty-printed payload."""
 
-    # applied in order, later rules win: digits inside strings end up string-coloured
     RULES = (
-        (re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?"), "chart_out"),   # numbers
-        (re.compile(r"\b(?:true|false|null)\b"), "accent2"),                       # literals
-        (re.compile(r'"(?:[^"\\]|\\.)*"'), "success"),                              # strings
-        (re.compile(r'"(?:[^"\\]|\\.)*"(?=\s*:)'), "accent"),                     # keys
+        (re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?"), "chart_out"),
+        (re.compile(r"\b(?:true|false|null)\b"), "accent2"),
+        (re.compile(r'"(?:[^"\\]|\\.)*"'), "success"),
+        (re.compile(r'"(?:[^"\\]|\\.)*"(?=\s*:)'), "accent"),
     )
 
     def __init__(self, doc) -> None:
@@ -293,7 +287,7 @@ class JsonHighlighter(QSyntaxHighlighter):
         self.rehighlight()
 
     def highlightBlock(self, text: str) -> None:  # noqa: N802
-        if self.currentBlock().blockNumber() == 0:           # the summary line
+        if self.currentBlock().blockNumber() == 0:
             self.setFormat(0, len(text), self._formats["head"])
             return
         for rx, tok in self.RULES:
@@ -340,7 +334,7 @@ class InspectorPanel(QWidget):
         self.hide_switch.setChecked(True)
         self.hide_switch.toggled.connect(self._apply_filter)
         srow.addWidget(self.hide_switch)
-        self.count_label = ElidedLabel("0 frames")      # elides instead of clipping at 360-400 px
+        self.count_label = ElidedLabel("0 frames")
         self.count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.count_label.setProperty("role", "mono")
         self.count_label.setStyleSheet("font-size: 11px;")
@@ -364,9 +358,6 @@ class InspectorPanel(QWidget):
         self.table.setAlternatingRowColors(True)
         hh = self.table.horizontalHeader()
         hh.setHighlightSections(False)
-        # Time / direction / Size / Seq are fixed (mono, sized for typical values);
-        # Type and Chaos share the rest, so nothing runs past the right edge at
-        # 360-400 px. Long cells elide; the full text is in the tooltip.
         mono = QFontMetrics(theme.mono_font(11))
         fixed = {0: mono.horizontalAdvance("00:00:00.000") + 12, 1: 18,
                  3: mono.horizontalAdvance("00,000") + 12, 4: mono.horizontalAdvance("0000") + 12}
@@ -414,14 +405,13 @@ class InspectorPanel(QWidget):
         self.pause_btn.setIcon(theme.icon("play" if self.paused else "pause", t["text2"], 16))
         self.clear_btn.setIcon(theme.icon("trash", t["text2"], 16))
 
-    # -- capture --------------------------------------------------------------------
     def on_frame(self, frame: dict) -> None:
         """Slot for ``net.frame_logged``: O(1), real work happens in :meth:`flush`."""
         if self.paused:
             return
         self.pending.append(frame)
         self.total_seen += 1
-        if len(self.pending) > RING_SIZE * 2:        # UI stalled: keep only what fits
+        if len(self.pending) > RING_SIZE * 2:
             del self.pending[:-RING_SIZE]
 
     def flush(self) -> None:

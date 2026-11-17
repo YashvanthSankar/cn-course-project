@@ -111,7 +111,6 @@ from enum import IntEnum
 
 
 class MsgType(IntEnum):
-    # control
     HELLO = 0x01
     CHALLENGE = 0x02
     JOIN = 0x03
@@ -126,7 +125,6 @@ class MsgType(IntEnum):
     HASH = 0x0C
     LIST_ROOMS = 0x0D
     ROOMS = 0x0E
-    # presence / ephemeral
     USER_JOINED = 0x10
     USER_LEFT = 0x11
     USER_UPDATE = 0x12
@@ -136,26 +134,21 @@ class MsgType(IntEnum):
     LASER = 0x16
     VIEWPORT = 0x17
     SIGNAL = 0x18
-    # board ops
     OP_SUBMIT = 0x20
     OP = 0x21
     OP_REJECT = 0x22
-    # chat
     CHAT_SEND = 0x30
     CHAT = 0x31
-    # admin
     SET_ROLE = 0x40
     KICK = 0x41
     ROOM_SETTINGS = 0x42
     ROOM_UPDATE = 0x43
-    # saves / history
     SAVE = 0x50
     LIST_SAVES = 0x51
     SAVES = 0x52
     LOAD = 0x53
     HISTORY_REQ = 0x54
     HISTORY = 0x55
-    # blobs
     BLOB_PUT = 0x60
     BLOB_GET = 0x61
     BLOB_DATA = 0x62
@@ -182,8 +175,8 @@ class Err:
     NOT_JOINED = "NOT_JOINED"
     ROOM_NOT_FOUND = "ROOM_NOT_FOUND"
     ROOM_EXISTS = "ROOM_EXISTS"
-    AUTH_REQUIRED = "AUTH_REQUIRED"     # carries salt + fresh nonce
-    BAD_PASSWORD = "BAD_PASSWORD"       # carries salt + fresh nonce
+    AUTH_REQUIRED = "AUTH_REQUIRED"
+    BAD_PASSWORD = "BAD_PASSWORD"
     FORBIDDEN = "FORBIDDEN"
     LOCKED = "LOCKED"
     INVALID_OP = "INVALID_OP"
@@ -201,4 +194,4 @@ class Reason:
     DISCONNECTED = "disconnected"
     KICKED = "kicked"
     LAGGING = "lagging"
-    EXPIRED = "expired"            # resumable session expired; user is gone for good
+    EXPIRED = "expired"

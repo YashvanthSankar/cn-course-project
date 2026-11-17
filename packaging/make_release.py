@@ -55,7 +55,7 @@ DOCS = {
     "LANBoard_Presentation.pptx": "Presentation (PPT)",
     "LANBoard_Contributions_Report.pdf": "Team contributions report (PDF)",
 }
-WIN_PATH_WARN = 150      # longest in-zip path; Windows Explorer fails beyond ~260 incl. the target folder
+WIN_PATH_WARN = 150
 
 warnings: list[str] = []
 
@@ -74,7 +74,6 @@ def platform_tag() -> str:
     return f"{osname}-{arch}"
 
 
-# --------------------------------------------------------------------------- zip writer
 class Packer:
     """Zip writer that keeps Unix modes and symlinks and tallies bytes per section."""
 
@@ -99,7 +98,7 @@ class Packer:
     def add_bytes(self, arcname: str, data: bytes, mode: int = 0o644,
                   date_time: tuple | None = None, compress: bool = True) -> None:
         zi = zipfile.ZipInfo(arcname, date_time or time.localtime()[:6])
-        zi.create_system = 3                                  # Unix: honour external_attr modes
+        zi.create_system = 3
         zi.external_attr = (stat.S_IFREG | (mode & 0o7777)) << 16
         zi.compress_type = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
         self.zf.writestr(zi, data)
@@ -163,7 +162,6 @@ class Packer:
         self.zf.close()
 
 
-# --------------------------------------------------------------------------- inputs
 def bundle_ok(folder: Path) -> bool:
     names = {p.name for p in folder.iterdir()} if folder.is_dir() else set()
     return bool({"lanboard-server", "lanboard-server.exe"} & names) and \
@@ -193,7 +191,7 @@ def add_extra_platform(packer: Packer, folder: Path) -> bool:
     for z in sorted(folder.glob("*.zip")):
         with zipfile.ZipFile(z) as zf:
             prefix = find_lanboard_prefix(zf)
-            if prefix is None:                       # GitHub artifact: a zip that holds LANBoard-<OS>.zip
+            if prefix is None:
                 inner = [n for n in zf.namelist() if n.lower().endswith(".zip")]
                 if len(inner) == 1:
                     with zipfile.ZipFile(io.BytesIO(zf.read(inner[0]))) as zin:
@@ -240,7 +238,6 @@ def find_doc(name: str, out_dir: Path) -> Path | None:
     return None
 
 
-# --------------------------------------------------------------------------- texts
 def team_rows() -> list[tuple[str, str, str]]:
     """The team table from README.md (``| Name | Roll no. | Area |``)."""
     rows = []
@@ -391,7 +388,6 @@ source code, with name and face clearly visible (see docs/PROJECT_BRIEF.md,
 """
 
 
-# --------------------------------------------------------------------------- main
 def human(n: float) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
@@ -474,7 +470,6 @@ def main() -> int:
         tmp_path.unlink(missing_ok=True)
         raise
 
-    # ------------------------------------------------------------ summary
     print("\nSize summary (uncompressed):")
     for section in sorted(packer.sizes):
         print(f"  {section:<40} {human(packer.sizes[section]):>10}  {packer.counts[section]:>5} files")

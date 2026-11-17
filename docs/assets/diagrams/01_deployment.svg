@@ -52,7 +52,7 @@
     <rect x="30" y="274" width="170" height="70" rx="10" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.4"/>
     <text x="72" y="296" class="b">Client 1 · alice</text>
     <text x="72" y="312" class="s">PySide6 desktop app</text>
-    <text x="72" y="327" class="s">QTcpSocket, QUdpSocket</text>
+    <text x="72" y="327" class="s">Qt TCP + UDP sockets</text>
   </g>
   <g>
     <rect x="262" y="274" width="176" height="70" rx="10" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.4"/>

@@ -25,7 +25,6 @@ from PySide6.QtGui import QGuiApplication, QImage, QPainter  # noqa: E402
 from lanboard.client.ui.theme import paint_logo  # noqa: E402
 
 OUT = ROOT / "packaging" / "LANBoard.icns"
-# (file name, pixel size) pairs that iconutil expects in an .iconset
 SIZES = [(f"icon_{s}x{s}{suffix}.png", s * k)
          for s in (16, 32, 128, 256, 512)
          for suffix, k in (("", 1), ("@2x", 2))]
@@ -35,8 +34,6 @@ def render(px: int) -> QImage:
     img = QImage(px, px, QImage.Format.Format_ARGB32_Premultiplied)
     img.fill(Qt.GlobalColor.transparent)
     p = QPainter(img)
-    # Apple's icon grid: the tile is ~80% of the canvas, centred, so the icon
-    # sits at the same visual size as other apps in the Dock and Finder.
     inset = px * 0.1
     paint_logo(p, QRectF(inset, inset, px - 2 * inset, px - 2 * inset))
     p.end()

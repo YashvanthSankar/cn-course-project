@@ -34,15 +34,14 @@ from lanboard.common.model import Board
 from .items import (BoardItem, CursorItem, LaserItem, LiveStrokeItem, PingItem, SelectionOverlay,
                     make_item)
 
-SCENE_EXTENT = 50_000.0            # scene rect is +-50000 in both axes
-GRID_STEP = 24.0                   # dot grid spacing in scene units at 100 %
+SCENE_EXTENT = 50_000.0
+GRID_STEP = 24.0
 GRID_STYLES = ("dots", "lines", "none")
-# board paper and grid colours: (light, dark)
 BG_COLORS = (QColor("#fbfbfd"), QColor("#15171d"))
 DOT_COLORS = (QColor("#d3d7df"), QColor("#2f343f"))
 LINE_COLORS = (QColor(27, 33, 48, 20), QColor(255, 255, 255, 14))
-BG_COLOR, DOT_COLOR = BG_COLORS[0], DOT_COLORS[0]     # (kept for older imports)
-LIVE_END_GRACE_S = 0.8             # keep an ended remote live stroke until its commit arrives
+BG_COLOR, DOT_COLOR = BG_COLORS[0], DOT_COLORS[0]
+LIVE_END_GRACE_S = 0.8
 LIVE_FADE_S = 0.3
 
 
@@ -57,7 +56,7 @@ class CanvasScene(QGraphicsScene):
     """Board renderer + presence overlays. See the module docstring."""
 
     selection_changed = Signal()
-    content_changed = Signal()          # board items were created / updated / removed
+    content_changed = Signal()
 
     def __init__(self, controller, parent=None) -> None:
         super().__init__(parent)
@@ -66,29 +65,28 @@ class CanvasScene(QGraphicsScene):
         self.setItemIndexMethod(QGraphicsScene.ItemIndexMethod.BspTreeIndex)
 
         self.items_by_id: dict[str, BoardItem] = {}
-        self.view_scale = 1.0                       # kept up to date by CanvasView
-        self.spotlight: str | None = None           # authorship lens (S11)
+        self.view_scale = 1.0
+        self.spotlight: str | None = None
         self.exporting = False
-        self.board_dark = False                     # dark paper + display-only ink remap
+        self.board_dark = False
         self.grid_style = "dots"
-        self._preview: Board | None = None          # time-lapse board (read only)
-        self._live_dirty = False                    # live view changed while previewing
+        self._preview: Board | None = None
+        self._live_dirty = False
 
-        self._pixmaps: dict[str, QPixmap] = {}      # blob hash -> decoded image
-        self._waiting: dict[str, set[str]] = defaultdict(set)   # blob hash -> object ids
+        self._pixmaps: dict[str, QPixmap] = {}
+        self._waiting: dict[str, set[str]] = defaultdict(set)
 
-        self._hidden: set[str] = set()              # hidden locally (eraser in progress)
+        self._hidden: set[str] = set()
         self._selected: list[str] = []
         self.selection = SelectionOverlay(self)
         self.selection.setVisible(False)
         self.addItem(self.selection)
 
-        # presence layer
         self.cursors: dict[str, CursorItem] = {}
         self.live: dict[tuple[str, str], LiveStrokeItem] = {}
         self.lasers: dict[str, LaserItem] = {}
         self.pings: list[PingItem] = []
-        self.animated: set = set()                  # extra items with tick(now) (Smart Ink pulse…)
+        self.animated: set = set()
         self._anim = QTimer(self)
         self._anim.setInterval(16)
         self._anim.setTimerType(Qt.TimerType.PreciseTimer)
@@ -108,9 +106,6 @@ class CanvasScene(QGraphicsScene):
         c.me_changed.connect(lambda *_: self._refresh_stickies())
         self.rebuild()
 
-    # =========================================================================
-    # identity helpers
-    # =========================================================================
     def my_id(self) -> str | None:
         uid = getattr(self.ctrl, "user_id", None)
         if isinstance(uid, str) and uid:
@@ -132,9 +127,6 @@ class CanvasScene(QGraphicsScene):
         """Items paint with the dark-board colour remap (never while exporting)."""
         return self.board_dark and not self.exporting
 
-    # =========================================================================
-    # board look: paper colour and grid
-    # =========================================================================
     def set_board_theme(self, dark: bool) -> None:
         dark = bool(dark)
         if dark == self.board_dark:
@@ -142,7 +134,7 @@ class CanvasScene(QGraphicsScene):
         self.board_dark = dark
         for it in self.items_by_id.values():
             if it.cacheMode() != QGraphicsItem.CacheMode.NoCache:
-                it.update()                          # drop cached pixmaps (sticky notes)
+                it.update()
         self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.AllLayers)
         self.update()
 
@@ -152,9 +144,6 @@ class CanvasScene(QGraphicsScene):
             self.grid_style = style
             self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.BackgroundLayer)
 
-    # =========================================================================
-    # board -> items
-    # =========================================================================
     def rebuild(self) -> None:
         """Throw every board item away and rebuild from the source board."""
         for it in self.items_by_id.values():
@@ -178,7 +167,7 @@ class CanvasScene(QGraphicsScene):
                     self.removeItem(it)
                     del self.items_by_id[oid]
                 continue
-            self._drop_live_for(oid)                  # the committed object replaces the preview
+            self._drop_live_for(oid)
             if it is None or it.obj.get("type") != obj.get("type"):
                 if it is not None:
                     self.removeItem(it)
@@ -236,7 +225,6 @@ class CanvasScene(QGraphicsScene):
             return f"Drawn by {name} · {time.strftime('%H:%M', time.localtime(ts))}"
         return f"Drawn by {name}"
 
-    # -- controller signal handlers ----------------------------------------------
     def _on_reset(self) -> None:
         if self.is_preview:
             self._live_dirty = True
@@ -249,21 +237,18 @@ class CanvasScene(QGraphicsScene):
             return
         self.sync(ids)
 
-    # =========================================================================
-    # preview board (time-lapse), spotlight, hidden items
-    # =========================================================================
     def set_preview(self, board: Board | None) -> None:
         was = self._preview
         self._preview = board
         self.set_selection([])
         if board is None:
             if was is not None:
-                self.rebuild()                 # back to the live view
+                self.rebuild()
                 self._live_dirty = False
         elif was is None:
             self.rebuild()
         else:
-            self.sync_all()                    # scrubbing: only changed objects are touched
+            self.sync_all()
 
     def set_spotlight(self, uid: str | None) -> None:
         self.spotlight = uid or None
@@ -284,9 +269,6 @@ class CanvasScene(QGraphicsScene):
             if it is not None:
                 it.setVisible(True)
 
-    # =========================================================================
-    # selection (state lives here so removals can prune it)
-    # =========================================================================
     @property
     def selected_ids(self) -> list[str]:
         return list(self._selected)
@@ -304,9 +286,6 @@ class CanvasScene(QGraphicsScene):
     def _prune_selection(self) -> None:
         self.set_selection(self._selected)
 
-    # =========================================================================
-    # queries used by the tools
-    # =========================================================================
     def object_item_at(self, pos: QPointF, radius: float = 4.0) -> BoardItem | None:
         """Topmost visible board item under ``pos`` (precise hit test)."""
         r = QRectF(pos.x() - radius, pos.y() - radius, 2 * radius, 2 * radius)
@@ -334,9 +313,6 @@ class CanvasScene(QGraphicsScene):
                 r = r.united(it.sceneBoundingRect())
         return r
 
-    # =========================================================================
-    # images
-    # =========================================================================
     def cache_pixmap(self, h: str, pix: QPixmap) -> None:
         """Seed the decode cache (we already have the image we just uploaded)."""
         if h and not pix.isNull():
@@ -351,7 +327,7 @@ class CanvasScene(QGraphicsScene):
         data = self.ctrl.blob_bytes(h)
         if data is None:
             if oid:
-                self._waiting[h].add(oid)            # repaint when blob_ready(h) fires
+                self._waiting[h].add(oid)
             return None
         pix = QPixmap()
         if not pix.loadFromData(bytes(data)):
@@ -371,9 +347,6 @@ class CanvasScene(QGraphicsScene):
             if it.obj.get("type") == "sticky":
                 it.update()
 
-    # =========================================================================
-    # presence: cursors, live strokes, laser, pings
-    # =========================================================================
     def _is_me(self, uid: str) -> bool:
         me = self.my_id()
         return bool(uid) and uid == me
@@ -403,7 +376,7 @@ class CanvasScene(QGraphicsScene):
             return
         sid = str(payload.get("id", ""))
         if not sid or self.ctrl.view.is_live(sid):
-            return                                    # late packet: already committed
+            return
         key = (uid, sid)
         item = self.live.get(key)
         if item is None:
@@ -467,7 +440,6 @@ class CanvasScene(QGraphicsScene):
         if item.scene() is self:
             self.removeItem(item)
 
-    # -- the shared animation clock ------------------------------------------------
     def _kick(self) -> None:
         if not self._anim.isActive():
             self._last_tick = time.monotonic()
@@ -511,13 +483,10 @@ class CanvasScene(QGraphicsScene):
         if not busy:
             self._anim.stop()
 
-    # =========================================================================
-    # painting
-    # =========================================================================
     def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
         """Paper colour plus a subtle grid (dots or lines) that thins out when zoomed out."""
         if self.exporting:
-            painter.fillRect(rect, QColor("#ffffff"))   # exports are always light
+            painter.fillRect(rect, QColor("#ffffff"))
             return
         k = 1 if self.board_dark else 0
         painter.fillRect(rect, BG_COLORS[k])
@@ -525,7 +494,7 @@ class CanvasScene(QGraphicsScene):
             return
         scale = abs(painter.worldTransform().m11()) or 1.0
         step = GRID_STEP
-        while step * scale < 16:                       # keep grid >= 16 px apart on screen
+        while step * scale < 16:
             step *= 2
         x0 = math.floor(rect.left() / step) * step
         y0 = math.floor(rect.top() / step) * step

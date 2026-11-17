@@ -60,7 +60,6 @@ def sync_text(status: dict) -> tuple[str, str]:
         return "mismatch", "Mismatch · healing"
     conn = str(status.get("conn", "") or "")
     if pending and status.get("joined_once"):
-        # only edits made while joined can be queued for replay
         return "offline", f"Offline · {pending} edit{'s' if pending != 1 else ''} queued"
     if conn == "connecting":
         return "connecting", "Connecting…"
@@ -94,7 +93,7 @@ class SyncPill(QWidget):
 
     def _on_phase(self, v) -> None:
         self._phase = float(v)
-        self.update(0, 0, 30, self.height())           # only the dot area repaints
+        self.update(0, 0, 30, self.height())
 
     def text(self) -> str:
         return self._text
@@ -104,7 +103,6 @@ class SyncPill(QWidget):
         self.setProperty("state", state)
         self.updateGeometry()
         self.adjustSize()
-        # pulse only while not confirmed in sync, and only when visible on screen
         if state == "synced":
             self._pulse.stop()
             self._phase = 0.0
@@ -248,10 +246,10 @@ class TopBar(QWidget):
         self.room_code.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.room_code.setIconSize(QSize(13, 13))
         self.room_code.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.room_code.setLayoutDirection(Qt.LayoutDirection.RightToLeft)     # icon after the code
+        self.room_code.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.room_code.clicked.connect(self.copy_code)
         hl.addWidget(self.room_code)
-        self.copy_btn = self.room_code                  # old name kept for callers
+        self.copy_btn = self.room_code
         self.lock_badge = QLabel()
         self.lock_badge.setToolTip("Board is locked: only the owner can draw")
         self.lock_badge.hide()
@@ -280,7 +278,6 @@ class TopBar(QWidget):
         self.retheme()
         theme.on_theme_change(self, self.retheme)
 
-    # -- action buttons ------------------------------------------------------------
     def add_action(self, act, text_beside: bool = False) -> QToolButton:
         b = QToolButton()
         b.setDefaultAction(act)
@@ -342,7 +339,7 @@ class TopBar(QWidget):
                 if b.property("canShowText"):
                     b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly if compact
                                          else Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-                    b.setProperty("textBeside", not compact)      # QSS padding for the text form
+                    b.setProperty("textBeside", not compact)
                     theme.repolish(b)
                     if compact:
                         b.setFixedWidth(34)
@@ -351,11 +348,9 @@ class TopBar(QWidget):
                         b.setMaximumWidth(16777215)
         self.room_name.setMaximumWidth(160 if compact else 260)
 
-    # -- people -------------------------------------------------------------------
     def set_people(self, people: list[dict]) -> None:
         self.avatars.set_people(people)
 
-    # -- room ---------------------------------------------------------------------
     def set_room(self, room: dict | None, host: str = "", port: int = 0, lan: list[str] | None = None) -> None:
         room = room or {}
         code = room.get("code", "")
@@ -378,7 +373,6 @@ class TopBar(QWidget):
             QGuiApplication.clipboard().setText(self.share_text)
             self.copied.emit(self.share_text)
 
-    # -- sync badge -------------------------------------------------------------------
     def set_sync(self, status: dict) -> None:
         state, text = sync_text(status)
         self.badge.set_state(state, text)

@@ -154,7 +154,7 @@ def test_rate_limit(room, monkeypatch):
 def test_token_bucket_refills():
     tb = TokenBucket(rate=10, burst=2)
     assert tb.take() and tb.take() and not tb.take()
-    tb.stamp -= 0.5                              # pretend half a second passed
+    tb.stamp -= 0.5
     assert tb.take()
 
 
@@ -188,7 +188,7 @@ def test_catch_up_tail_or_snapshot(room, monkeypatch):
     assert [o["seq"] for o in c.of(MsgType.OP_BATCH)[0]["ops"]] == [8, 9, 10]
     room.send_catch_up(a, 10)
     assert c.of(MsgType.OP_BATCH)[-1]["ops"] == []
-    room.send_catch_up(a, 99)                    # from the future (e.g. other server): snapshot
+    room.send_catch_up(a, 99)
     room.send_catch_up(a, None)
     assert len(c.of(MsgType.SNAPSHOT)) == 2
 
@@ -206,7 +206,7 @@ def test_history_trim_keeps_base_consistent(room, monkeypatch):
     assert replay.hash() == room.board.hash()
     c = FakeConn()
     a.conn = c
-    room.send_catch_up(a, 5)                     # trimmed away: must fall back to SNAPSHOT
+    room.send_catch_up(a, 5)
     assert c.of(MsgType.SNAPSHOT) and not c.of(MsgType.OP_BATCH)
     h = room.history_payload()
     assert h["base_seq"] == room.base_seq and len(h["ops"]) == len(room.history)
@@ -217,7 +217,7 @@ def test_owner_promotion_prefers_earliest_online_editor(room):
     viewer, _ = join(room, "v", "viewer")
     ed1, _ = join(room, "e1")
     ed2, c2 = join(room, "e2")
-    room.detach(ed1, Reason.DISCONNECTED)        # offline editors are not eligible
+    room.detach(ed1, Reason.DISCONNECTED)
     room.remove_session(owner, Reason.EXPIRED)
     assert room.owner_id == ed2.user_id and ed2.role == "owner"
     assert c2.of(MsgType.ROOM_UPDATE)[-1]["room"]["owner_id"] == ed2.user_id
@@ -279,14 +279,14 @@ async def test_room_settings_validated_before_applying(room):
     o, co = join(room, "owner", "owner")
     await room.handle(o, MsgType.ROOM_SETTINGS, {"locked": True, "name": "New", "presenter": "nobody"})
     assert co.of(MsgType.ERROR)[-1]["code"] == Err.NOT_FOUND
-    assert room.locked is False and room.name != "New"        # nothing half-applied
+    assert room.locked is False and room.name != "New"
 
 
 async def test_room_settings_and_presenter_viewport(room):
     o, co = join(room, "own", "owner")
     e, ce = join(room, "ed")
     await room.handle(e, MsgType.VIEWPORT, {"x": 0, "y": 0, "w": 10, "h": 10})
-    assert not co.of(MsgType.VIEWPORT)            # not presenter yet
+    assert not co.of(MsgType.VIEWPORT)
     await room.handle(o, MsgType.ROOM_SETTINGS, {"presenter": e.user_id, "name": "Lab 3",
                                                  "password": {"salt": "ab" * 16, "verifier": "cd" * 32}})
     assert room.presenter == e.user_id and room.name == "Lab 3" and room.protected
@@ -305,11 +305,11 @@ async def test_ephemeral_relay_rules(room):
     await room.handle(v, MsgType.STROKE_LIVE, live)
     await room.handle(v, MsgType.LASER, {"pts": [1, 2]})
     assert co.of(MsgType.CURSOR) == [{"x": 1, "y": 2, "user_id": v.user_id}]
-    assert not co.of(MsgType.STROKE_LIVE)              # a viewer's live strokes are not relayed...
-    assert co.of(MsgType.LASER) == [{"pts": [1, 2], "user_id": v.user_id}]   # ...but pointing is allowed
+    assert not co.of(MsgType.STROKE_LIVE)
+    assert co.of(MsgType.LASER) == [{"pts": [1, 2], "user_id": v.user_id}]
     await room.handle(o, MsgType.STROKE_LIVE, live)
     assert cv.of(MsgType.STROKE_LIVE)[0]["user_id"] == o.user_id
-    assert not co.of(MsgType.STROKE_LIVE)         # never echoed to the sender
+    assert not co.of(MsgType.STROKE_LIVE)
     await room.handle(v, MsgType.SIGNAL, {"kind": "hand_up"})
     assert v.hand and co.of(MsgType.USER_UPDATE)[-1]["participant"]["hand"] is True
 
@@ -333,12 +333,12 @@ def test_room_reload_from_disk(tmp_path):
         room.submit(a, f"a:{i}", stroke(f"x{i}"))
     store.save_meta(room.to_meta())
     with open(store.ops_path, "a") as fh:
-        fh.write('{"seq": 6, "user_id": "u1", "op_id"')     # torn write from a crash
+        fh.write('{"seq": 6, "user_id": "u1", "op_id"')
     store.close()
     again = Room.load(RoomStore(tmp_path / "r"))
     assert again.seq == 5 and again.board.hash() == room.board.hash()
     assert again.sessions[a.user_id].resume_token == a.resume_token
-    assert "a:3" in again.sessions[a.user_id].accepted          # dedupe survives a restart
+    assert "a:3" in again.sessions[a.user_id].accepted
     assert again.owner_id == a.user_id
 
 
@@ -369,10 +369,6 @@ def test_storage_lists_rooms(tmp_path):
     assert [r.dir for r in st.iter_room_stores()] == [rs.dir]
 
 
-# ---------------------------------------------------------------------------
-# durable history, multi-part transfers, oversized ops
-# ---------------------------------------------------------------------------
-
 def _replay(base_seq: int, base_objects: list, ops: list) -> Board:
     b = Board.from_snapshot({"seq": base_seq, "objects": base_objects})
     for m in ops:
@@ -388,24 +384,23 @@ async def test_history_survives_restart(tmp_path, final_flush):
     a, _ = join(room, "alice", "owner")
     for i in range(30):
         room.submit(a, f"a:{i}", stroke(f"x{i}"))
-    await room.write_snapshot()                  # compaction 1: ops 1..30 leave ops.jsonl
+    await room.write_snapshot()
     for i in range(30, 45):
         room.submit(a, f"a:{i}", stroke(f"x{i}"))
-    await room.write_snapshot()                  # compaction 2: ops 31..45 appended to the archive
+    await room.write_snapshot()
     for i in range(45, 52):
         room.submit(a, f"a:{i}", stroke(f"x{i}"))
-    assert len(store.load_ops()) == 7            # only the tail is in the write-ahead log
+    assert len(store.load_ops()) == 7
     store.save_meta(room.to_meta())
     if final_flush:
         await room.close()
     else:
-        store.close()                            # killed: ops 46..52 only in ops.jsonl
+        store.close()
     again = Room.load(RoomStore(tmp_path / "r"))
     assert again.seq == 52 and again.board.hash() == room.board.hash()
     h = again.history_payload()
     assert h["base_seq"] == 0 and [m["seq"] for m in h["ops"]] == list(range(1, 53))
     assert _replay(0, h["base"]["objects"], h["ops"]).hash() == room.board.hash()
-    # and the restarted room keeps archiving where it left off
     b = again.sessions[a.user_id]
     again.submit(b, "a:99", stroke("x99"))
     await again.close()
@@ -428,7 +423,7 @@ async def test_history_cap_trims_files(tmp_path, monkeypatch):
     await room.close()
     assert len(store.load_ops()) == 0 and len(RoomStore(tmp_path / "r").load_history()[1]) <= 20
     again = Room.load(RoomStore(tmp_path / "r"))
-    assert again.base_seq > 0 and len(again.history) <= 20       # "history starts at base_seq"
+    assert again.base_seq > 0 and len(again.history) <= 20
     assert again.history[0]["seq"] == again.base_seq + 1
     assert again.board.hash() == room.board.hash()
     h = again.history_payload()
@@ -477,10 +472,10 @@ def test_append_after_torn_line_does_not_glue_records(tmp_path):
     store.save_meta(room.to_meta())
     store.close()
     with open(store.ops_path, "a") as fh:
-        fh.write('{"seq": 4, "user_id": "u1", "op_id"')     # torn write from a crash
+        fh.write('{"seq": 4, "user_id": "u1", "op_id"')
     again = Room.load(RoomStore(tmp_path / "r"))
     s = again.sessions[a.user_id]
-    again.submit(s, "a:7", stroke("y"))                      # appended after the torn line
+    again.submit(s, "a:7", stroke("y"))
     again.store.close()
     third = Room.load(RoomStore(tmp_path / "r"))
     assert third.seq == 4 and third.board.is_live("y")
@@ -543,4 +538,4 @@ def test_oversized_op_rejected_without_side_effects(room, monkeypatch):
     assert "too large" in rej[-1]["msg"]
     assert room.seq == 0 and not room.history and not cb.of(MsgType.OP)
     assert room.store.ops_path.exists() is False or room.store.ops_path.read_text() == ""
-    assert room.submit(a, "a:2", stroke("ok")) is not None and room.seq == 1   # still usable
+    assert room.submit(a, "a:2", stroke("ok")) is not None and room.seq == 1

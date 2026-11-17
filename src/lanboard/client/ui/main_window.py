@@ -40,7 +40,6 @@ from .toolbar import StyleBar, ToolPalette
 from .topbar import TopBar
 from .widgets import Banner, FloatingCard, ToastHost
 
-#: ERROR codes that end the session (mirrors NetClient's fatal set, plus connect failures)
 FATAL_CODES = frozenset({"KICKED", "ROOM_NOT_FOUND", "ROOM_EXISTS", "PROTO_MISMATCH", "CONNECT_FAILED",
                          "SERVER_FULL", "EXPIRED"})
 FATAL_TITLES = {
@@ -59,7 +58,7 @@ STATE_TOKENS = {"joined": "success", "reconnecting": "warn", "connecting": "info
 ROLE_TEXT = {"owner": "the owner", "editor": "an editor", "viewer": "a viewer (read-only)"}
 GRID_STYLES = (("dots", "Dots"), ("lines", "Lines"), ("none", "None"))
 SIDE_MIN, SIDE_DEFAULT = 340, 400
-EDGE = 16                                     # gap between floating controls and the canvas edge
+EDGE = 16
 
 
 def _safe(fn, default=False):
@@ -73,7 +72,7 @@ def _safe(fn, default=False):
 class MainWindow(QMainWindow):
     """Top-level window for one session (one room on one server)."""
 
-    session_ended = Signal(str, str)        # (reason: "leave"|"fatal"|"quit", message)
+    session_ended = Signal(str, str)
 
     def __init__(self, controller, canvas=None, settings: QSettings | None = None,
                  lan_addresses: list[str] | None = None, parent: QWidget | None = None) -> None:
@@ -83,17 +82,17 @@ class MainWindow(QMainWindow):
         self.settings = settings or QSettings()
         self.lan_addresses = list(lan_addresses or [])
         self._conn_state = "idle"
-        self._joined_once = False                  # sync badge: "edits queued" only after a join
+        self._joined_once = False
         self._last_sync: dict | None = None
         self._was_reconnecting = False
         self._ending = False
         self._hosting_announced = False
         self._can_undo = self._can_redo = False
-        self._known_people: dict[str, bool] | None = None     # uid -> online, for join/leave toasts
-        self._known_hands: dict[str, bool] = {}               # uid -> hand up, for "raised a hand" toasts
-        self._names: dict[str, str] = {}                      # uid -> last known username
+        self._known_people: dict[str, bool] | None = None
+        self._known_hands: dict[str, bool] = {}
+        self._names: dict[str, str] = {}
         self._my_role: str | None = None
-        self._pending_save: str | None = None                 # Ctrl+S save waiting for the server
+        self._pending_save: str | None = None
         self._icon_actions: list[tuple[QAction, str, str | None]] = []
         self.setWindowIcon(theme.app_icon())
         self.setWindowTitle("LANBoard")
@@ -101,7 +100,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1024, 640)
 
         if canvas is None:
-            from lanboard.client.canvas.view import CanvasView      # imported late: heavy module
+            from lanboard.client.canvas.view import CanvasView
             canvas = CanvasView(controller)
         self.canvas = canvas
 
@@ -112,7 +111,6 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._restore_settings()
 
-        # initial state (the controller may already hold a room when the window is built late)
         if getattr(controller, "room", None):
             self.on_room_changed(controller.room)
         if getattr(controller, "me", None):
@@ -122,7 +120,6 @@ class MainWindow(QMainWindow):
         self.retheme()
         theme.on_theme_change(self, self.retheme)
 
-    # ------------------------------------------------------------------ building
     def _act(self, text: str, icon_name: str | None, slot, shortcut=None, checkable: bool = False,
              tip: str | None = None, on_color: str | None = None) -> QAction:
         act = QAction(text, self)
@@ -134,12 +131,12 @@ class MainWindow(QMainWindow):
         keys = ", ".join(s.toString(QKeySequence.SequenceFormat.NativeText) for s in act.shortcuts())
         act.setToolTip(f"<b>{tip or text}</b>" + (f"&nbsp;&nbsp;<span>{keys}</span>" if keys else ""))
         if checkable:
-            act.triggered.connect(slot)             # user clicks only; programmatic setChecked is silent
+            act.triggered.connect(slot)
         else:
             act.triggered.connect(lambda _=False: slot())
         if icon_name:
             self._icon_actions.append((act, icon_name, on_color))
-        self.addAction(act)                         # window-wide shortcut
+        self.addAction(act)
         return act
 
     def _build_actions(self) -> None:
@@ -175,11 +172,9 @@ class MainWindow(QMainWindow):
         self.act_fullscreen = self._act("Full screen", None, self.toggle_fullscreen, "F11")
         self.act_fit = self._act("Fit board", "fit", lambda: c.zoom_fit(), "Ctrl+1")
         self.act_zoom_reset = self._act("Reset zoom", None, lambda: c.zoom_reset(), "Ctrl+0")
-        # shortcut-only actions
         self._act("Delete selection", None, lambda: c.delete_selection(), ["Delete", "Backspace"])
         self._act("Select all", None, lambda: c.select_all(), "Ctrl+A")
         self._act("Focus chat", None, self.focus_chat, ["Ctrl+Return", "Ctrl+Enter"])
-        # grid style (radio group)
         self.grid_group = QActionGroup(self)
         self.grid_actions: dict[str, QAction] = {}
         for key, text in GRID_STYLES:
@@ -200,7 +195,7 @@ class MainWindow(QMainWindow):
         self.body.setObjectName("BodySplit")
         self.body.setHandleWidth(1)
         self.body.setChildrenCollapsible(False)
-        self.stage = QWidget()                      # canvas + floating overlays
+        self.stage = QWidget()
         self.stage.setObjectName("Stage")
         self.stage.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         sl = QVBoxLayout(self.stage)
@@ -256,7 +251,7 @@ class MainWindow(QMainWindow):
                 raise TypeError("not a real CanvasView")
             self.minimap = Minimap(self.canvas, st)
             self.zoom_controls = ZoomControls(self.canvas, st)
-        except Exception:                          # canvas without minimap support (or a test fake)
+        except Exception:
             self.minimap = None
             self.zoom_controls = ZoomPill(self.canvas, st)
         self.banner = Banner(st)
@@ -280,7 +275,7 @@ class MainWindow(QMainWindow):
         tb.add_separator()
         tb.add_action(self.act_present, text_beside=True)
         hand_btn = tb.add_action(self.act_hand)
-        hand_btn.setProperty("warnOn", True)          # amber when the hand is up
+        hand_btn.setProperty("warnOn", True)
         tb.add_action(self.act_lock)
         tb.add_separator()
         self.insert_menu = QMenu(self)
@@ -387,9 +382,8 @@ class MainWindow(QMainWindow):
         self._set_status_state(self._conn_state)
         fn = getattr(self.canvas, "set_board_theme", None)
         if callable(fn):
-            fn(dark)                                # dark board + adaptive ink
+            fn(dark)
 
-    # ------------------------------------------------------------------ overlays
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802
         if obj is self.stage and ev.type() in (QEvent.Type.Resize, QEvent.Type.Show):
             self._place_overlays()
@@ -421,8 +415,7 @@ class MainWindow(QMainWindow):
         if zc is not None:
             zc.adjustSize()
             zw, zh = zc.width() - 2 * zpad[0], zc.height() - 2 * zpad[1]
-        left_edge = self.rail.x() + self.rail.width() - s + 8          # first free x right of the palette
-        # style bar: full size if it fits next to the palette, compact otherwise
+        left_edge = self.rail.x() + self.rail.width() - s + 8
         bar.set_compact(False)
         bar.adjustSize()
         if bar.width() - 2 * s > w - left_edge - EDGE:
@@ -430,7 +423,7 @@ class MainWindow(QMainWindow):
             bar.adjustSize()
         bw = bar.width() - 2 * s
         x = (w - bw) // 2
-        x = min(x, w - EDGE - zw - 8 - bw)                               # keep clear of the zoom pill
+        x = min(x, w - EDGE - zw - 8 - bw)
         x = max(x, left_edge)
         bar_top = h - EDGE - (bar.height() - 2 * s - 4)
         bar.move(x - s, bar_top - s + 2)
@@ -442,7 +435,7 @@ class MainWindow(QMainWindow):
         if mm is not None:
             my = zy - 10 - mm.height()
             if not collide and bar_visible and x + bw + 8 > w - EDGE - mm.width():
-                my = min(my, bar_top - 10 - mm.height())                 # lift it above the style bar
+                my = min(my, bar_top - 10 - mm.height())
             mm.move(w - EDGE - mm.width(), my)
         self._update_safe_margins(bar_visible, bar_top)
         self.toasts.relayout()
@@ -517,7 +510,6 @@ class MainWindow(QMainWindow):
     def show_shortcuts(self) -> None:
         self.shortcuts.open()
 
-    # ------------------------------------------------------------------ side panel
     def show_tab(self, idx: int) -> None:
         if not self.side.isVisible():
             self.toggle_side_panel(True)
@@ -560,7 +552,6 @@ class MainWindow(QMainWindow):
         self._side_anim = anim
         anim.start()
 
-    # ------------------------------------------------------------------ controller slots
     def on_room_changed(self, room: dict) -> None:
         room = room or {}
         name, code = room.get("name") or room.get("code", ""), room.get("code", "")
@@ -620,7 +611,6 @@ class MainWindow(QMainWindow):
                 if uid != me_id and self._known_people[uid]:
                     self.toasts.show_grouped("left", self._names.get(uid, "Someone"), "left the room", "info")
             for uid, p in parts.items():
-                # the server turns SIGNAL hand_up into a USER_UPDATE, so a raised hand shows up here
                 if uid != me_id and p.get("hand") and not self._known_hands.get(uid, False):
                     self.toasts.show(f"✋ {p.get('username') or uid} raised a hand", "warn")
         self._names.update({uid: p.get("username") or uid for uid, p in parts.items()})
@@ -672,7 +662,7 @@ class MainWindow(QMainWindow):
         host = f"{getattr(self.net, 'host', '')}:{getattr(self.net, 'port', '')}"
         if state in ("connecting", "authenticating"):
             if prev == "reconnecting":
-                return                          # keep the reconnect banner while retrying
+                return
             self._show_banner(f"Connecting to {host}…", "info", "Cancel", self.leave)
         elif state == "reconnecting":
             self._was_reconnecting = True
@@ -704,14 +694,13 @@ class MainWindow(QMainWindow):
         else:
             self.status_labels["server"].setText(f"TCP {host}:{port}" if host else "")
 
-    # ------------------------------------------------------------------ net slots
     def on_rtt(self, ms: float) -> None:
         t = theme.tokens()
         tok = "success" if ms < 40 else ("warn" if ms < 200 else "danger")
         self.status_labels["rtt"].setText(f"RTT <span style='color:{t[tok]}'>{ms:.0f} ms</span>")
 
     def on_zoom(self, z: float) -> None:
-        pct = z * 100 if z <= 50 else z           # accept a factor (1.0) or a percentage
+        pct = z * 100 if z <= 50 else z
         self.status_labels["zoom"].setText(f"{pct:.0f}%")
 
     def on_joined(self, payload: dict) -> None:
@@ -723,20 +712,15 @@ class MainWindow(QMainWindow):
                              "success", 9000)
 
     def on_net_error(self, code: str, msg: str) -> None:
-        # NetClient switches to "closed" right after emitting a fatal error, so decide on the
-        # next event-loop turn; known fatal codes are handled even if no state change follows.
         QTimer.singleShot(0, lambda: self._handle_error(code, msg))
 
     def _handle_error(self, code: str, msg: str) -> None:
         if self._ending:
             return
-        # Non-fatal errors (RATE_LIMITED, FORBIDDEN...) are already surfaced by the
-        # controller as a ``notice`` toast, so only fatal ones are handled here.
         if code in FATAL_CODES or self._conn_state == "closed":
             self._fatal(code, msg)
 
     def _fatal(self, code: str, msg: str) -> None:
-        # a real decision (back to the start screen or quit), so this stays a dialog
         self._ending = True
         self.banner.hide()
         box = QMessageBox(self)
@@ -757,7 +741,6 @@ class MainWindow(QMainWindow):
         else:
             self.net.provide_password(pw)
 
-    # ------------------------------------------------------------------ permissions
     def _update_permissions(self, *_args) -> None:
         ctl = self.controller
         can_edit = bool(_safe(ctl.can_edit))
@@ -772,17 +755,15 @@ class MainWindow(QMainWindow):
         self.act_image.setEnabled(can_edit)
         self.act_pdf.setEnabled(can_edit)
         role = (getattr(ctl, "me", None) or {}).get("role")
-        self.act_save.setEnabled(role in ("owner", "editor"))      # the server refuses viewers' saves
-        # the server relays VIEWPORT only from the owner or the presenter the owner picked
+        self.act_save.setEnabled(role in ("owner", "editor"))
         me_id = (getattr(ctl, "me", None) or {}).get("user_id")
         may_present = owner or bool(me_id and (getattr(ctl, "room", None) or {}).get("presenter") == me_id)
         self.act_present.setEnabled(may_present)
         if not may_present and self.act_present.isChecked():
-            self.act_present.setChecked(False)          # programmatic: does not re-trigger
+            self.act_present.setChecked(False)
             self._on_present(False)
         self._update_style_context()
 
-    # ------------------------------------------------------------------ action handlers
     def confirm_clear(self) -> None:
         if not _safe(self.controller.can_clear):
             return
@@ -811,20 +792,20 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Insert image", "",
                                               "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp)")
         if path:
-            self.canvas.insert_image_file(path)     # the canvas reports success / failure itself
+            self.canvas.insert_image_file(path)
 
     def import_pdf(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Import PDF", "", "PDF documents (*.pdf)")
         if path:
-            self.canvas.import_pdf(path)            # progress and errors come as canvas notices
+            self.canvas.import_pdf(path)
 
     def export(self) -> None:
         code = (self.controller.room or {}).get("code", "board")
         path = export_dialog(self, f"lanboard-{code}")
         if path:
             try:
-                self.canvas.export(path)              # reports "Exported to ..." / why not itself
-            except Exception as exc:              # disk full, permissions...
+                self.canvas.export(path)
+            except Exception as exc:
                 self.toasts.show(f"Export failed: {exc}", "error")
 
     def quick_save(self) -> None:
@@ -873,7 +854,6 @@ class MainWindow(QMainWindow):
             return
         self._end("leave", "")
 
-    # ------------------------------------------------------------------ tab badges, preview
     def _on_unread(self, n: int) -> None:
         self.tabs.set_badge(self.TAB_CHAT, n, "accent")
 
@@ -888,7 +868,6 @@ class MainWindow(QMainWindow):
             self.preview_banner.hide()
         self.toasts.relayout()
 
-    # ------------------------------------------------------------------ shutdown
     def _save_settings(self) -> None:
         self.settings.setValue("main/geometry", self.saveGeometry())
         if self.side.isVisible() and self.side.width() >= SIDE_MIN:

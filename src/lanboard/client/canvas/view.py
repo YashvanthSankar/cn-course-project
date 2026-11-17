@@ -39,16 +39,12 @@ from .scene import CanvasScene
 from .tools import Tool, build_tools
 
 MIN_ZOOM, MAX_ZOOM = 0.1, 8.0
-ZOOM_STEP = 1.25                   # zoom_in / zoom_out factor (buttons, Ctrl +/-)
+ZOOM_STEP = 1.25
 MAX_IMAGE_SIDE = 2048
 EXPORT_MARGIN = 40.0
-PDF_RENDER_SCALE = 1.5             # PDF pages are rasterised at 1.5x (108 dpi) for sharpness
+PDF_RENDER_SCALE = 1.5
 DEFAULT_COLOR = "#1e1e1e"
 
-
-# ---------------------------------------------------------------------------
-# image encoding helper (images and PDF pages become content-addressed blobs)
-# ---------------------------------------------------------------------------
 
 def encode_image(img: QImage, max_side: int = MAX_IMAGE_SIDE, limit: int = C.MAX_BLOB) -> tuple[bytes, str, QImage]:
     """Scale ``img`` to at most ``max_side`` px and encode it under ``limit`` bytes.
@@ -73,7 +69,7 @@ def encode_image(img: QImage, max_side: int = MAX_IMAGE_SIDE, limit: int = C.MAX
     if len(png) <= min(limit, 1_500_000):
         return png, "image/png", img
     flat = img
-    if img.hasAlphaChannel():                       # JPEG has no alpha: flatten on white
+    if img.hasAlphaChannel():
         flat = QImage(img.size(), QImage.Format.Format_RGB32)
         flat.fill(QColor("#ffffff"))
         p = QPainter(flat)
@@ -120,10 +116,6 @@ def pdfium_page_to_qimage(page, scale: float) -> QImage | None:
             pass
 
 
-# ---------------------------------------------------------------------------
-# inline text editor
-# ---------------------------------------------------------------------------
-
 class InlineEditor(QGraphicsTextItem):
     """Editable text placed exactly over a text object or inside a sticky note.
 
@@ -159,13 +151,9 @@ class InlineEditor(QGraphicsTextItem):
 
     def focusOutEvent(self, ev) -> None:
         super().focusOutEvent(ev)
-        # Defer: a focus-out can happen in the middle of our own event handling
         QTimer.singleShot(0, lambda: self.view.commit_editor(self))
 
     def sceneEvent(self, ev) -> bool:  # noqa: N802
-        # While typing, keys that are also window shortcuts must reach the editor:
-        # plain letters (tool keys V/P/T...), Backspace/Delete ("Delete selection")
-        # and Ctrl/Cmd+Enter (commit here, "Focus chat" in the window).
         if ev.type() == QEvent.Type.ShortcutOverride:
             mods = ev.modifiers() & ~(Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.KeypadModifier)
             if ev.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape) or (
@@ -186,7 +174,6 @@ class InlineEditor(QGraphicsTextItem):
         super().keyPressEvent(ev)
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
-        # our own subtle frame instead of Qt's dotted focus rectangle
         if self.kind == "text":
             r = self.boundingRect().adjusted(-6, -4, 6, 4)
             s = max(self.view.scale_factor(), 1e-3)
@@ -207,19 +194,15 @@ class InlineEditor(QGraphicsTextItem):
         super().paint(painter, option, widget)
 
 
-# ---------------------------------------------------------------------------
-# the view
-# ---------------------------------------------------------------------------
-
 class CanvasView(QGraphicsView):
     """Interactive canvas widget. Public API documented in docs/CLIENT_API.md."""
 
     tool_changed = Signal(str)
     zoom_changed = Signal(float)
     hover_info = Signal(str)
-    follow_changed = Signal(object)          # user_id being followed, or None when follow stops
-    board_theme_changed = Signal(bool)       # True = dark board
-    view_rect_changed = Signal()             # the visible scene rect moved or zoomed (minimap)
+    follow_changed = Signal(object)
+    board_theme_changed = Signal(bool)
+    view_rect_changed = Signal()
 
     def __init__(self, controller, parent=None) -> None:
         super().__init__(parent)
@@ -227,7 +210,6 @@ class CanvasView(QGraphicsView):
         self.canvas = CanvasScene(controller, self)
         self.setScene(self.canvas)
 
-        # rendering quality and performance
         self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
                             | QPainter.RenderHint.TextAntialiasing)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.SmartViewportUpdate)
@@ -241,9 +223,8 @@ class CanvasView(QGraphicsView):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.viewport().setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
 
-        # drawing settings
         self.color = DEFAULT_COLOR
-        self.pen_width = 3                         # (not `width`: that is QWidget.width())
+        self.pen_width = 3
         self.fill: str | None = None
         self.smart_ink = True
         self.font_size = 20
@@ -251,8 +232,7 @@ class CanvasView(QGraphicsView):
         self.tools: dict[str, Tool] = build_tools(self)
         self.tool: Tool = self.tools["pen"]
 
-        # interaction state
-        self._dragging = False                    # a tool gesture is in progress
+        self._dragging = False
         self._panning = False
         self._pan_last = QPointF()
         self._space = False
@@ -260,21 +240,17 @@ class CanvasView(QGraphicsView):
         self._editor_press = False
         self._last_hover = ""
 
-        # presentation mode
         self._presenting = False
         self._follow: str | None = None
         self._viewports: dict[str, dict] = {}
         self._vp_timer = QTimer(self)
         self._vp_timer.setSingleShot(True)
-        self._vp_timer.setInterval(100)           # 10 Hz
+        self._vp_timer.setInterval(100)
         self._vp_timer.timeout.connect(self._send_viewport)
         self._anim: QVariantAnimation | None = None
         self._last_zoom = 1.0
-        # viewport pixels hidden by floating overlays (tool palette, style bar,
-        # zoom/minimap); set by the main window, used when framing content
-        self._safe = (0, 0, 0, 0)                  # left, top, right, bottom
+        self._safe = (0, 0, 0, 0)
 
-        # floating status badge ("Preview — seq N", "Following Alice")
         self._badge = QLabel(self)
         self._badge.hide()
         self._preview_seq: int | None = None
@@ -284,8 +260,6 @@ class CanvasView(QGraphicsView):
         controller.room_changed.connect(lambda *_: self._permissions_changed())
         controller.participants_changed.connect(self._on_participants)
         self.canvas.selection_changed.connect(self.viewport().update)
-        # the scrollbars are hidden, but arrow / Page keys still drive them; actionTriggered
-        # fires only for such user actions (never for setValue), so it marks a user pan
         self.horizontalScrollBar().actionTriggered.connect(lambda *_: self._user_navigated())
         self.verticalScrollBar().actionTriggered.connect(lambda *_: self._user_navigated())
 
@@ -294,9 +268,6 @@ class CanvasView(QGraphicsView):
         self.centerOn(0, 0)
         self._refresh_cursor()
 
-    # =========================================================================
-    # small helpers
-    # =========================================================================
     def scale_factor(self) -> float:
         return abs(self.transform().m11()) or 1.0
 
@@ -317,9 +288,6 @@ class CanvasView(QGraphicsView):
         except Exception:                           # pragma: no cover
             pass
 
-    # =========================================================================
-    # public settings API
-    # =========================================================================
     def set_tool(self, name: str) -> None:
         if name not in self.tools or self.tools[name] is self.tool:
             return
@@ -372,7 +340,6 @@ class CanvasView(QGraphicsView):
     def set_spotlight(self, user_id: str | None) -> None:
         self.canvas.set_spotlight(user_id)
 
-    # -- board look ----------------------------------------------------------
     @staticmethod
     def _initial_dark() -> bool:
         """Start in the app's current theme (imported lazily: ui depends on canvas)."""
@@ -427,9 +394,6 @@ class CanvasView(QGraphicsView):
         if changes:
             self.ctrl.update_many(changes)
 
-    # =========================================================================
-    # selection commands
-    # =========================================================================
     def select_all(self) -> None:
         if self.tool.name != "select":
             self.set_tool("select")
@@ -469,9 +433,6 @@ class CanvasView(QGraphicsView):
         votes = [v for v in votes if v != me] if me in votes else votes + [me]
         self.ctrl.update_object(oid, {"votes": votes})
 
-    # =========================================================================
-    # inline editors (text / sticky)
-    # =========================================================================
     def editor_open(self) -> bool:
         return self._editor is not None
 
@@ -532,7 +493,7 @@ class CanvasView(QGraphicsView):
             obj = self.ctrl.view.get(ed.oid)
             if obj is not None and not obj.get("deleted"):
                 if obj["type"] == "text" and not text.strip():
-                    self.ctrl.delete_objects([ed.oid])         # emptied text = delete it
+                    self.ctrl.delete_objects([ed.oid])
                 elif text != obj.get("geom", {}).get("text"):
                     self.ctrl.update_object(ed.oid, {"geom.text": text})
         elif text.strip():
@@ -547,9 +508,6 @@ class CanvasView(QGraphicsView):
         self._close_editor()
         self.setFocus()
 
-    # =========================================================================
-    # permissions and cursors
-    # =========================================================================
     def _permissions_changed(self) -> None:
         if not self.can_edit():
             if self.tool.edits:
@@ -570,9 +528,6 @@ class CanvasView(QGraphicsView):
         else:
             vp.setCursor(self.tool.cursor())
 
-    # =========================================================================
-    # mouse input
-    # =========================================================================
     def _editor_hit(self, view_pos: QPointF) -> bool:
         if self._editor is None:
             return False
@@ -586,11 +541,11 @@ class CanvasView(QGraphicsView):
         if self._editor is not None:
             if self._editor_hit(vpos):
                 self._editor_press = True
-                super().mousePressEvent(ev)              # caret placement / selection
+                super().mousePressEvent(ev)
                 return
             self.commit_editor()
             if self.tool.name in ("text", "sticky"):
-                return                                   # this click just closes the editor
+                return
         btn = ev.button()
         preview_pan = self.canvas.is_preview and self.tool.name != "select"
         if btn == Qt.MouseButton.MiddleButton or (btn == Qt.MouseButton.LeftButton and (
@@ -608,7 +563,7 @@ class CanvasView(QGraphicsView):
         if self.tool.edits and not self.can_edit():
             return
         if self.canvas.is_preview and self.tool.name == "select":
-            return                                       # read-only preview: no selection
+            return
         self._dragging = True
         self.tool.press(pos, ev)
 
@@ -654,7 +609,7 @@ class CanvasView(QGraphicsView):
             super().mouseDoubleClickEvent(ev)
             return
         if self.tool.name not in ("select", "text", "sticky"):
-            self.mousePressEvent(ev)                     # drawing tools: treat as a normal press
+            self.mousePressEvent(ev)
             return
         if ev.button() == Qt.MouseButton.LeftButton and not self.canvas.is_preview:
             self.tool.double_click(self._map_to_scene(ev.position()), ev)
@@ -683,12 +638,9 @@ class CanvasView(QGraphicsView):
                              self.ctrl.color_of(me) if me else ACCENT)
         self.ctrl.send_signal(f"ping:{pos.x():.0f},{pos.y():.0f}")
 
-    # =========================================================================
-    # keyboard
-    # =========================================================================
     def keyPressEvent(self, ev) -> None:
         if self._editor is not None:
-            super().keyPressEvent(ev)                    # the inline editor gets the keys
+            super().keyPressEvent(ev)
             return
         key, mods = ev.key(), ev.modifiers()
         ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
@@ -727,9 +679,6 @@ class CanvasView(QGraphicsView):
             return
         super().keyReleaseEvent(ev)
 
-    # =========================================================================
-    # zoom & pan
-    # =========================================================================
     def wheelEvent(self, ev) -> None:
         pd, ad = ev.pixelDelta(), ev.angleDelta()
         if ev.modifiers() & Qt.KeyboardModifier.ControlModifier or pd.isNull():
@@ -738,11 +687,11 @@ class CanvasView(QGraphicsView):
                 self.zoom_at(1.0015 ** dy, ev.position())
         else:
             self._user_navigated()
-            self._pan_pixels(-pd.x(), -pd.y())          # trackpad two-finger scroll pans
+            self._pan_pixels(-pd.x(), -pd.y())
         ev.accept()
 
     def viewportEvent(self, ev) -> bool:
-        if ev.type() == QEvent.Type.NativeGesture:      # trackpad pinch (macOS)
+        if ev.type() == QEvent.Type.NativeGesture:
             try:
                 if ev.gestureType() == Qt.NativeGestureType.ZoomNativeGesture:
                     self.zoom_at(1.0 + ev.value(), ev.position())
@@ -842,9 +791,8 @@ class CanvasView(QGraphicsView):
         left, top, right, bottom = self._safe
         sw, sh = vp.width() - left - right, vp.height() - top - bottom
         if sw < 80 or sh < 80 or r.width() <= 0 or r.height() <= 0:
-            return r                                     # overlays cover (nearly) everything: plain fit
+            return r
         s = max(MIN_ZOOM, min(MAX_ZOOM, min(sw / r.width(), sh / r.height())))
-        # shift the centre so r's centre lands on the safe area's centre, not the viewport's
         c = r.center() - QPointF((left - right) / 2 / s, (top - bottom) / 2 / s)
         w, h = vp.width() / s, vp.height() / s
         return QRectF(c.x() - w / 2, c.y() - h / 2, w, h)
@@ -884,9 +832,6 @@ class CanvasView(QGraphicsView):
         self._schedule_viewport()
         self.view_rect_changed.emit()
 
-    # =========================================================================
-    # presentation mode (S10)
-    # =========================================================================
     def set_presenting(self, on: bool) -> None:
         self._presenting = bool(on)
         if self._presenting:
@@ -906,7 +851,7 @@ class CanvasView(QGraphicsView):
         """Follow ``user_id``'s viewport (presentation mode), or stop with ``None``."""
         uid = user_id or None
         if uid is not None and uid == self.canvas.my_id():
-            uid = None                                   # following myself makes no sense
+            uid = None
         changed = uid != self._follow
         self._follow = uid
         if uid is None:
@@ -956,9 +901,6 @@ class CanvasView(QGraphicsView):
             return
         self.animate_to(r, ms)
 
-    # =========================================================================
-    # time-lapse preview (S6)
-    # =========================================================================
     def show_preview_board(self, board) -> None:
         """Render ``board`` read-only (time-lapse). ``None`` returns to the live board."""
         if board is not None:
@@ -997,9 +939,6 @@ class CanvasView(QGraphicsView):
     def _place_badge(self) -> None:
         self._badge.move(max(8, (self.width() - self._badge.width()) // 2), 12)
 
-    # =========================================================================
-    # images and PDFs (S9)
-    # =========================================================================
     def _image_object(self, h: str, x: float, y: float, w: float, hgt: float, z: int | None = None) -> dict:
         obj = {"id": self.ctrl.new_id(), "type": "image", "off": [0, 0], "style": {},
                "ts": round(time.time(), 1),
@@ -1024,7 +963,6 @@ class CanvasView(QGraphicsView):
         h = self.ctrl.put_blob(data, mime)
         self.canvas.cache_pixmap(h, QPixmap.fromImage(img))
         vis = self.visible_rect()
-        # fit into ~60 % of the visible area, never upscale beyond 1:1
         k = min(1.0, vis.width() * 0.6 / img.width(), vis.height() * 0.6 / img.height())
         w, hh = img.width() * k, img.height() * k
         c = vis.center()
@@ -1062,7 +1000,7 @@ class CanvasView(QGraphicsView):
                 self._notice("info", f"Importing PDF… page {i + 1}/{n}")
                 page = pdf[i]
                 try:
-                    w, hh = page.get_size()                  # PDF points (1/72 inch)
+                    w, hh = page.get_size()
                     if w <= 0 or hh <= 0:
                         continue
                     img = pdfium_page_to_qimage(page, PDF_RENDER_SCALE)
@@ -1079,7 +1017,7 @@ class CanvasView(QGraphicsView):
                 first = first or QRectF(obj["geom"]["x"], y, w, hh)
                 y += hh + gap
                 QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
-        except Exception as e:                           # damaged file, password protected…
+        except Exception as e:
             self._notice("error", f"PDF import failed: {e}")
             return False
         finally:
@@ -1087,7 +1025,6 @@ class CanvasView(QGraphicsView):
         if not ops:
             self._notice("error", "The PDF has no renderable pages.")
             return False
-        # one batch per MAX_BATCH_OPS pages => importing a deck is a single undo step
         for k in range(0, len(ops), C.MAX_BATCH_OPS):
             chunk = ops[k:k + C.MAX_BATCH_OPS]
             self.ctrl.submit(chunk[0] if len(chunk) == 1 else {"k": "batch", "ops": chunk})
@@ -1096,9 +1033,6 @@ class CanvasView(QGraphicsView):
             self.animate_to(self._safe_frame(first.adjusted(-40, -40, 40, 40)))
         return True
 
-    # =========================================================================
-    # export
-    # =========================================================================
     def export(self, path: str) -> bool:
         """Export the board (objects only) to .png (2x), .svg or .pdf."""
         self.commit_editor()
@@ -1137,7 +1071,7 @@ class CanvasView(QGraphicsView):
                     path += ".png"
                 scale = 2.0
                 while max(src.width(), src.height()) * scale > 16000 and scale > 0.25:
-                    scale /= 2                            # keep the bitmap a sane size
+                    scale /= 2
                 img = QImage(int(src.width() * scale), int(src.height() * scale),
                              QImage.Format.Format_ARGB32_Premultiplied)
                 img.fill(QColor("#ffffff"))

@@ -29,7 +29,7 @@ def test_add_update_delete_restore():
 def test_noops():
     b = Board()
     b.apply(add("a"), 1)
-    assert b.apply(add("a"), 2) == set()                       # duplicate add
+    assert b.apply(add("a"), 2) == set()
     b.apply({"k": "delete", "ids": ["a"]}, 3)
     assert b.apply({"k": "update", "id": "a", "set": {"z": 5}, "prev": {}}, 4) == set()
     assert b.apply({"k": "delete", "ids": ["a", "ghost"]}, 5) == set()
@@ -100,7 +100,6 @@ def test_determinism(seed):
     a, b = Board(), Board()
     for seq, op in enumerate(ops, 1):
         a.apply(op, seq)
-    # b receives a mid-stream snapshot then the tail (a late joiner)
     mid = 150
     for seq, op in enumerate(ops[:mid], 1):
         b.apply(op, seq)

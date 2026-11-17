@@ -47,7 +47,6 @@ from . import config as C
 OBJECT_TYPES = frozenset({"stroke", "line", "arrow", "rect", "ellipse", "text", "sticky", "image"})
 OP_KINDS = frozenset({"add", "update", "delete", "restore", "clear", "replace", "batch"})
 
-# geometry keys each type must carry
 GEOM_KEYS: dict[str, tuple[str, ...]] = {
     "stroke": ("pts",),
     "line": ("x1", "y1", "x2", "y2"),
@@ -58,7 +57,7 @@ GEOM_KEYS: dict[str, tuple[str, ...]] = {
     "sticky": ("x", "y", "w", "h", "text"),
     "image": ("x", "y", "w", "h", "blob"),
 }
-TEXT_GEOM = frozenset({"text", "blob"})          # string-valued geom fields
+TEXT_GEOM = frozenset({"text", "blob"})
 
 _UPDATE_KEY = re.compile(r"^(off|z|votes|(style|geom)\.[a-z_][a-z0-9_]{0,23})$")
 _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
@@ -67,10 +66,6 @@ _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 class InvalidOp(ValueError):
     """The op is structurally invalid (server rejects it; never applied)."""
 
-
-# ---------------------------------------------------------------------------
-# validation (server side, before an op is accepted into the log)
-# ---------------------------------------------------------------------------
 
 def _num(v: Any, what: str) -> None:
     if isinstance(v, bool) or not isinstance(v, (int, float)) or abs(v) > C.MAX_COORD:
@@ -179,10 +174,6 @@ def op_object_ids(op: dict) -> set[str]:
     return set()
 
 
-# ---------------------------------------------------------------------------
-# helpers for dotted keys ("style.color", "geom.text", "off", "z")
-# ---------------------------------------------------------------------------
-
 def get_key(obj: dict, key: str) -> Any:
     if "." in key:
         group, name = key.split(".", 1)
@@ -211,10 +202,6 @@ def normalise_object(obj: dict, owner: str | None = None, rev: int = 0) -> dict:
     return o
 
 
-# ---------------------------------------------------------------------------
-# the board
-# ---------------------------------------------------------------------------
-
 class Board:
     """An ordered set of whiteboard objects plus the seq of the last applied op."""
 
@@ -223,7 +210,6 @@ class Board:
         self.seq = 0
         self._hash_cache: tuple[int, str] | None = None
 
-    # -- queries -------------------------------------------------------------
     def get(self, oid: str) -> dict | None:
         return self.objects.get(oid)
 
@@ -245,7 +231,6 @@ class Board:
     def __len__(self) -> int:
         return sum(1 for o in self.objects.values() if not o["deleted"])
 
-    # -- normalisation (server, before assigning seq) ------------------------
     def normalise(self, op: dict, user_id: str) -> dict:
         """Return the op that will actually be logged.
 
@@ -263,7 +248,6 @@ class Board:
             return {"k": "batch", "ops": [self.normalise(s, user_id) for s in op["ops"]]}
         return op
 
-    # -- mutation --------------------------------------------------------------
     def apply(self, op: dict, seq: int | None = None) -> set[str]:
         """Apply one op. Returns ids whose rendering changed (empty set = no-op).
 
@@ -283,13 +267,13 @@ class Board:
         if k == "add":
             obj = op["obj"]
             if obj["id"] in self.objects:
-                return set()                                 # duplicate add -> no-op
+                return set()
             self.objects[obj["id"]] = normalise_object(obj, rev=rev)
             return {obj["id"]}
         if k == "update":
             o = self.objects.get(op["id"])
             if o is None or o["deleted"]:
-                return set()                                 # erased meanwhile -> no-op
+                return set()
             for key, value in op["set"].items():
                 set_key(o, key, value)
             o["rev"] = rev
@@ -326,7 +310,6 @@ class Board:
             return changed
         return set()
 
-    # -- (de)serialisation -----------------------------------------------------
     def snapshot(self) -> dict:
         return {"seq": self.seq, "objects": copy.deepcopy(list(self.objects.values()))}
 
@@ -341,7 +324,6 @@ class Board:
     def copy(self) -> "Board":
         return Board.from_snapshot(self.snapshot())
 
-    # -- consistency -----------------------------------------------------------
     def hash(self) -> str:
         """Order-independent content hash, identical on every converged replica."""
         if self._hash_cache and self._hash_cache[0] == self.seq:

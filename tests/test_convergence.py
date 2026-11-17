@@ -22,8 +22,8 @@ from lanboard.server import Server
 from lanboard.tools.bot import BotClient, random_op
 
 N_BOTS = 6
-DURATION = 3.0          # seconds of concurrent editing
-RATE = 40               # ops/s per bot (well under OPS_PER_SEC_LIMIT)
+DURATION = 3.0
+RATE = 40
 
 
 @pytest.mark.parametrize("history", [C.HISTORY_MAX_OPS, 8], ids=["log-resume", "tiny-history"])
@@ -46,7 +46,6 @@ async def test_random_concurrent_edits_converge(tmp_path, monkeypatch, history):
             nonlocal drops
             while loop.time() < stop_at:
                 if rng.random() < 0.02:
-                    # connection loss: keep editing offline for a moment, then resume
                     drops += 1
                     bot.drop()
                     for _ in range(rng.randint(0, 3)):
@@ -70,9 +69,9 @@ async def test_random_concurrent_edits_converge(tmp_path, monkeypatch, history):
             assert b.board.hash() == server_hash, f"{b.username} diverged"
             assert b.hash_mismatches == 0
             assert not [r for r in b.rejects if r["code"] == Err.INVALID_OP]
-        assert sum(b.hash_checks for b in bots) > 0          # HASH checkpoints were verified
+        assert sum(b.hash_checks for b in bots) > 0
         if history == 8:
-            assert sum(b.snapshots for b in bots) > N_BOTS   # resumes healed via SNAPSHOT
+            assert sum(b.snapshots for b in bots) > N_BOTS
     finally:
         for b in bots:
             await b.close()

@@ -56,15 +56,13 @@ def wait_until(cond, timeout=5.0):
     return cond()
 
 
-_LIVE: list = []      # clients created by the current test
+_LIVE: list = []
 
 
 @pytest.fixture
 def srv(tmp_path):
     s = ServerThread(tmp_path / "data")
     yield s
-    # Tear Qt objects down deterministically. Leaving them to Python's cyclic GC
-    # lets it destroy a QObject in the middle of a later test's Qt callback (segfault).
     for net, ctl in _LIVE:
         net.close()
         ctl.deleteLater()
@@ -98,7 +96,6 @@ def test_two_clients_sync_and_converge(srv):
     assert wait_until(lambda: len(a.board) == 20 and len(b.board) == 20 and not a.pending and not b.pending)
     server_hash = srv.room_board("E2E").hash()
     assert a.board.hash() == b.board.hash() == server_hash
-    # chat round trip with server timestamp
     b.send_chat("hello from bob")
     assert wait_until(lambda: any(m.get("text") == "hello from bob" for m in a.chat))
     na.close(); nb.close()
@@ -109,10 +106,10 @@ def test_late_joiner_and_undo_isolation(srv):
     a.add_object(stroke(1))
     assert wait_until(lambda: len(a.board) == 1 and not a.pending)
     nb, b = client(srv, "bob")
-    assert wait_until(lambda: len(b.board) == 1)          # late joiner got the snapshot
+    assert wait_until(lambda: len(b.board) == 1)
     b.add_object(stroke(2))
     assert wait_until(lambda: len(a.board) == 2)
-    a.undo()                                              # removes only alice's stroke
+    a.undo()
     assert wait_until(lambda: len(b.board) == 1)
     assert all(o["owner"] == b.user_id for o in b.board.live())
     na.close(); nb.close()
@@ -121,8 +118,8 @@ def test_late_joiner_and_undo_isolation(srv):
 def test_offline_edits_survive_cut_cable(srv):
     na, a = client(srv, "alice", create=True)
     nb, b = client(srv, "bob")
-    na.cut_link()                                         # simulate pulling the cable
-    a.add_object(stroke(5))                               # drawn while offline
+    na.cut_link()
+    a.add_object(stroke(5))
     b.add_object(stroke(6))
     assert wait_until(lambda: na.is_joined(), timeout=10)
     assert wait_until(lambda: len(a.board) == 2 and len(b.board) == 2 and not a.pending, timeout=10)
@@ -142,7 +139,7 @@ def test_chaos_drop_and_duplicate_still_converge(srv):
         a.add_object(stroke(i))
         QTest.qWait(5)
     nb.chaos.enabled = False
-    a.add_object(stroke(999))                             # a clean op exposes any trailing gap
+    a.add_object(stroke(999))
     assert wait_until(lambda: len(b.board) == 41, timeout=10)
     assert b.board.hash() == srv.room_board("E2E").hash()
     na.close(); nb.close()
@@ -154,7 +151,7 @@ def test_password_and_viewer_permissions(srv):
     assert wait_until(lambda: b.user_id in a.participants)
     a.set_role(b.user_id, "viewer")
     assert wait_until(lambda: not b.can_edit())
-    b.add_object(stroke(1))                               # blocked locally
+    b.add_object(stroke(1))
     a.set_room(locked=True)
     assert wait_until(lambda: bool(b.room and b.room.get("locked")))
     assert len(srv.room_board("LOCKED")) == 0

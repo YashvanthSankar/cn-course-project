@@ -76,12 +76,10 @@ class FaultInjector(QObject):
         self.dup_pct: float = 0.0
         self.rng = rng or random.Random()
         self._cut_link = cut_link
-        # Totals since construction, read by the Chaos Lab panel.
         self.dropped = 0
         self.duplicated = 0
         self.delayed = 0
 
-    # ------------------------------------------------------------------ API
     def process(self, t: int, payload: dict, deliver: Deliver) -> str | None:
         """Pass one inbound frame through the fault model.
 
@@ -109,8 +107,6 @@ class FaultInjector(QObject):
             if i == 0:
                 first_delay = delay
             if delay > 0:
-                # The default argument binds this frame's values at definition
-                # time, so a later loop iteration cannot overwrite them.
                 QTimer.singleShot(delay, lambda t=t, p=payload: deliver(t, p))
             else:
                 deliver(t, payload)
@@ -132,7 +128,6 @@ class FaultInjector(QObject):
     def reset_counters(self) -> None:
         self.dropped = self.duplicated = self.delayed = 0
 
-    # ------------------------------------------------------------ internals
     def _draw_delay(self) -> int:
         """Base latency plus uniform jitter, in whole milliseconds (>= 0)."""
         delay = max(0.0, float(self.latency_ms))

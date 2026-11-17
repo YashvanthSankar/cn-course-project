@@ -19,10 +19,6 @@ from PySide6.QtWidgets import (QHBoxLayout, QLabel, QPushButton, QToolButton, QV
 from . import theme
 from .widgets import FloatingCard, Popover
 
-# ---------------------------------------------------------------------------
-# invite popover
-# ---------------------------------------------------------------------------
-
 
 class _BigValue(QWidget):
     """A large monospace value (address or code) on a tinted panel, painted once per change."""
@@ -135,7 +131,6 @@ class InvitePopover(Popover):
     def set_info(self, host: str, port: int, code: str, lan: list[str] | None = None) -> None:
         lan = list(lan or [])
         main = lan[0] if lan else host
-        # a loopback address is useless to others: say so instead of showing 127.0.0.1 big
         if main in ("127.0.0.1", "localhost", "::1") and not lan:
             self.addr_caption.setText("SERVER ADDRESS (this computer — share its LAN IP)")
         else:
@@ -153,10 +148,6 @@ class InvitePopover(Popover):
             self.copied.emit(self.share_text)
         self.close_popover()
 
-
-# ---------------------------------------------------------------------------
-# keyboard shortcuts overlay
-# ---------------------------------------------------------------------------
 
 def _keys(seq: str) -> str:
     """Show Ctrl as ⌘ on macOS, like Qt's native text for shortcuts."""
@@ -195,7 +186,6 @@ class ShortcutsOverlay(QWidget):
         self.setFocus()
 
     def event(self, ev) -> bool:
-        # claim every key while open, so e.g. "A" closes the sheet instead of picking the Arrow tool
         if ev.type() == QEvent.Type.ShortcutOverride:
             ev.accept()
             return True
@@ -212,7 +202,6 @@ class ShortcutsOverlay(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(), QColor(5, 8, 18, 140))
-        # three columns: Tools | Edit | View + Session
         columns = [[SHORTCUTS[0]], [SHORTCUTS[1]], [SHORTCUTS[2], SHORTCUTS[3]]]
         col_w, row_h = 250, 27
         rows = max(sum(len(s[1]) + 2 for s in col) for col in columns)
@@ -249,16 +238,12 @@ class ShortcutsOverlay(QWidget):
                     p.drawText(kr, Qt.AlignmentFlag.AlignCenter, txt)
                     p.setFont(theme.ui_font(12))
                     p.setPen(QColor(t["text2"]))
-                    dx = 74 if col is columns[0] else 104          # descriptions line up per column
+                    dx = 74 if col is columns[0] else 104
                     p.drawText(QRectF(x + max(kw + 10, dx), y, col_w - dx, row_h), Qt.AlignmentFlag.AlignVCenter, desc)
                     y += row_h
                 y += row_h * 0.6
         p.end()
 
-
-# ---------------------------------------------------------------------------
-# network strip (status bar)
-# ---------------------------------------------------------------------------
 
 class NetStrip(QWidget):
     """The slim bottom strip. ``labels`` maps keys to the QLabel showing them."""
@@ -295,10 +280,6 @@ class NetStrip(QWidget):
         lay.addWidget(lab)
         self.labels[key] = lab
 
-
-# ---------------------------------------------------------------------------
-# fallback zoom pill
-# ---------------------------------------------------------------------------
 
 class ZoomPill(FloatingCard):
     """− 100% + [fit]. Only used when ``canvas.minimap.ZoomControls`` is unavailable."""

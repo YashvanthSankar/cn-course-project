@@ -13,7 +13,6 @@ from lanboard.common.messages import MsgType
 from lanboard.common.model import Board
 
 
-
 class FakeNet(QObject):
     state_changed = Signal(str)
     joined = Signal(dict)
@@ -121,7 +120,7 @@ def test_gap_triggers_resync(env):
     net, ctl, srv, statuses = env
     msgs = [srv.accept({"k": "add", "obj": stroke(f"s{i}")}, user="u2") for i in range(3)]
     net.message.emit(int(MsgType.OP), msgs[0])
-    net.message.emit(int(MsgType.OP), msgs[2])           # seq 2 "lost"
+    net.message.emit(int(MsgType.OP), msgs[2])
     assert statuses[-1]["state"] == "healing"
     QTest.qWait(GAP_TIMEOUT_MS + 150)
     assert net.of(MsgType.RESYNC) == [{"last_seq": 1}]
@@ -154,13 +153,13 @@ def test_ack_after_snapshot_healed_resume_settles_pending(env):
     net, ctl, srv, statuses = env
     ctl.add_object(stroke("a"))
     sub = net.of(MsgType.OP_SUBMIT)[0]
-    echo = srv.accept(sub["op"], op_id=sub["op_id"])     # server applied it as seq 1 ...
-    net.drop()                                            # ... but the echo never arrived
+    echo = srv.accept(sub["op"], op_id=sub["op_id"])
+    net.drop()
     net.sent.clear()
-    net.join()                                            # pending op is resent on rejoin
+    net.join()
     assert [p["op_id"] for p in net.of(MsgType.OP_SUBMIT)] == [sub["op_id"]]
     net.message.emit(int(MsgType.SNAPSHOT), {"seq": 1, "board": srv.board.snapshot(), "hash": srv.board.hash()})
-    net.message.emit(int(MsgType.OP), echo)               # server de-duplicates and re-echoes seq 1
+    net.message.emit(int(MsgType.OP), echo)
     assert not ctl.pending and ctl.view.is_live("a")
     assert statuses[-1]["state"] == "synced"
 
@@ -194,7 +193,7 @@ def test_clear_sent_as_clear_but_undoable(env):
     ctl.add_object(stroke("a"))
     ack_all(net, ctl, srv)
     ctl.clear_board()
-    assert net.of(MsgType.OP_SUBMIT)[0]["op"] == {"k": "clear"}       # server checks clear permission
+    assert net.of(MsgType.OP_SUBMIT)[0]["op"] == {"k": "clear"}
     ack_all(net, ctl, srv)
     assert len(ctl.board) == 0
     ctl.undo()
@@ -215,7 +214,7 @@ def test_live_strokes_batched(env):
     for i in range(20):
         ctl.send_live("s1", "#000", 3, [i, i])
     assert not net.of(MsgType.STROKE_LIVE)
-    deadline = time.monotonic() + 3                       # one 33 ms flush; CI runners can be slow
+    deadline = time.monotonic() + 3
     while not net.of(MsgType.STROKE_LIVE) and time.monotonic() < deadline:
         QTest.qWait(10)
     live = net.of(MsgType.STROKE_LIVE)
@@ -269,7 +268,6 @@ def test_multipart_snapshot_applied_atomically(env, monkeypatch):
     assert len(parts) > 3 and all(p["parts"] == len(parts) for p in parts)
     resets = []
     ctl.reset.connect(lambda: resets.append(len(ctl.board)))
-    # out of order, with a duplicate: nothing is applied until the last part arrives
     order = parts[1:] + parts[:1]
     for p in [order[0]] + order[:-1]:
         net.message.emit(int(MsgType.SNAPSHOT), p)

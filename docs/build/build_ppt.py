@@ -51,7 +51,6 @@ def rgb(h: str) -> RGBColor:
     return RGBColor.from_string(h)
 
 
-# ----------------------------------------------------------------------------- primitives
 def text(slide, x, y, w, h, runs, size=16, color=INK, bold=False, align=PP_ALIGN.LEFT,
          anchor=MSO_ANCHOR.TOP, font=FONT, spacing=None, name=None):
     """runs: str, or list of paragraphs; a paragraph is str or list of (text, opts) runs."""
@@ -161,7 +160,7 @@ def picture(slide, name, x, y, w=None, h=None, crop=None, border=True, shadow=Tr
         h = w / aspect
     elif h is not None and w is None:
         w = h * aspect
-    elif w is not None and h is not None:           # fit inside w x h, centred
+    elif w is not None and h is not None:
         if w / h > aspect:
             nw = h * aspect; x += (w - nw) / 2; w = nw
         else:
@@ -254,12 +253,10 @@ def msg(slide, x1, x2, y, label, color=INDIGO, size=11, above=True, dash=False):
          align=PP_ALIGN.CENTER, font=MONO)
 
 
-# ============================================================================= slides
-# 1. title --------------------------------------------------------------------
 s = prs.slides.add_slide(BLANK)
 SLIDE_NO[0] += 1
 bg = box(s, 0, 0, SW, SH, fill=INDIGO, shape=MSO_SHAPE.RECTANGLE, name="Background")
-bg.fill.solid(); bg.fill.fore_color.rgb = rgb("13274A")   # flat deep navy
+bg.fill.solid(); bg.fill.fore_color.rgb = rgb("13274A")
 logo = box(s, 0.8, 0.8, 0.9, 0.9, fill=INDIGO, radius=0.22, label="~", size=40, bold=True, color="FFFFFF")
 text(s, 0.8, 1.95, 11, 1.2, "LANBoard", size=66, bold=True, color="FFFFFF")
 text(s, 0.8, 3.1, 11, 0.6, "A LAN-only, real-time collaborative whiteboard over our own TCP protocol",
@@ -283,7 +280,6 @@ networking), Sai Teja (canvas and drawing tools), Nithillakrishi (UI and collabo
 Each of us presents our own section; the coloured chip in the top-right corner of every slide shows who presents it.
 """)
 
-# 2. problem & goals ----------------------------------------------------------
 s = content_slide("Problem & goals", "Y", "Collaborate on one canvas in a lab with no internet")
 goals = [
     ("Real time", "Every stroke reaches everyone with minimal delay", INDIGO),
@@ -312,7 +308,6 @@ and access control. The constraints matter for the design: the demo runs with th
 so nothing may be downloaded at run time, and the brief requires standalone executables, which we build with PyInstaller.
 """)
 
-# 3. requirements coverage ----------------------------------------------------
 s = content_slide("Requirements coverage at a glance", "Y")
 rows = [
     ("1  Multi-user drawing", "Pen, highlighter, eraser, colours; server validates every op; permissioned clear; save / load"),
@@ -337,7 +332,6 @@ PDF annotation, presentation mode, roles, version history (time-lapse), offline 
 auto-discovery. The rest of the deck explains how each of these works.
 """)
 
-# 4. architecture -------------------------------------------------------------
 s = content_slide("Architecture: one server, one LAN", "Y")
 lan = box(s, 0.6, 1.35, 12.13, 5.45, fill="FFFFFF", line="C7CBE0", radius=0.2, name="LAN boundary")
 lan.line.dash_style = 4
@@ -371,7 +365,6 @@ Inside the server: one ClientConnection per socket, one Room object per room hol
 the op log and chat, and a persistence layer that writes the log before broadcasting. No internet is needed anywhere.
 """)
 
-# 5. layers -------------------------------------------------------------------
 s = content_slide("Client and server layers", "Y", "Same model code on both sides: common/model.py applies every op deterministically")
 cols = [
     ("Client (Qt event loop, one thread)", INDIGO, [
@@ -409,7 +402,6 @@ which we check with hashes. Both processes are single-threaded event loops: Qt o
 That means no locks: all room state is mutated on one thread, so there are no data races by construction.
 """)
 
-# 6. Yashvanth contribution ----------------------------------------------------
 def contribution(who, files, decisions, shot=None, crop=None, shot_caption=None, note=""):
     name, roll, area, col = TEAM[who]
     s = content_slide(f"My area: {area}", who, f"{name} · {roll}")
@@ -447,7 +439,6 @@ and per user the role, RTT, bytes in and out, and outbound queue depth. Queue de
 client about to be dropped as lagging. I will show Room.submit and Board.apply in the code.
 """)
 
-# 7. ordering -----------------------------------------------------------------
 s = content_slide("Ordering: the server's seq decides", "Y",
                   "Concurrent edits to the same sticky note: last writer by server order wins, everywhere")
 xa, xs, xb = 1.6, 5.4, 9.2
@@ -480,7 +471,6 @@ receive A first, so A gets 41 and B gets 42. Everyone applies 41 then 42, so blu
 No vector clocks or OT needed, because a single server totally orders the log.
 """)
 
-# 8. security -----------------------------------------------------------------
 s = content_slide("Security & access control", "Y", "The client mirrors permissions; the server enforces them")
 box(s, 0.6, 1.65, 5.9, 2.35, fill=CARD, radius=0.14)
 text(s, 0.85, 1.8, 5.5, 0.35, "Password rooms without sending the password", size=15, bold=True, color=INDIGO)
@@ -509,7 +499,6 @@ and a captured proof cannot be replayed. Roles: owner, editor, viewer; a locked 
 Inputs are validated: frame size cap, op schema and coordinate bounds, and a per-client token bucket of 120 ops per second.
 """)
 
-# 9. persistence ----------------------------------------------------------------
 s = content_slide("Persistence & durable history", "Y", "Crash-safe: an accepted op is on disk before anyone sees it")
 steps = [("OP accepted", "seq assigned", VIOLET), ("append", "ops.jsonl", INDIGO), ("broadcast", "OP to room", CYAN),
          ("every 50 ops / 10 s", "compaction", GREEN)]
@@ -539,7 +528,6 @@ are skipped. Because the full history survives, the History tab can replay the s
 restore any earlier version as a new op.
 """)
 
-# 10. Jeevanandham contribution ------------------------------------------------
 contribution("J", [
     "common/protocol.py    FrameDecoder, PartAssembler",
     "common/messages.py    MsgType catalogue",
@@ -563,7 +551,6 @@ Network Inspector catching a real recovery: an OP was dropped by the Chaos Lab, 
 sent RESYNC and received the missing ops as one OP_BATCH.
 """)
 
-# 11. why TCP -------------------------------------------------------------------
 s = content_slide("Why TCP (and UDP only for discovery)", "J")
 tbl = [("Need", "TCP", "UDP"), ("Every op delivered", "✓ retransmits", "✗ we'd rebuild ARQ"),
        ("In-order op log", "✓ byte order", "✗ reorders"), ("Flow control / slow clients", "✓ window, drain()", "✗"),
@@ -591,7 +578,6 @@ either side treats 12 seconds of silence as a dead link, which catches a pulled 
 UDP is used for one job only: discovery, because only UDP can broadcast. The screenshot is a real discovery result.
 """)
 
-# 12. frame format --------------------------------------------------------------
 s = content_slide("Frame format & message catalogue", "J", "[ length u32 big-endian | type u8 | UTF-8 JSON ]  ·  length = 1 + len(payload)  ·  max 8 MiB")
 fx = 0.6
 for w, lab, sub, col in [(2.6, "length", "4 bytes, u32 BE", INDIGO), (1.6, "type", "1 byte", VIOLET),
@@ -624,7 +610,6 @@ Ephemeral messages such as cursors and live strokes carry no seq and are never l
 Payloads above 1 MiB, like a big SNAPSHOT, are split into parts with an xid and reassembled before use.
 """)
 
-# 13. join sequence ---------------------------------------------------------------
 s = content_slide("Join and late join", "J", "A newcomer gets the whole board before any live op")
 xc, xsv, xo = 1.8, 6.4, 11.0
 lifeline(s, xc, 1.6, 6.75, "New client", CYAN)
@@ -647,7 +632,6 @@ state: a fresh joiner gets a SNAPSHOT of the board at seq n, a resuming client g
 The server queues all parts of a SNAPSHOT at once, so no OP is interleaved, and live ops continue from n+1.
 """)
 
-# 14. reliability -------------------------------------------------------------------
 s = content_slide("Reliability: duplicates, gaps, divergence", "J", "SessionController._on_op applies OPs strictly in seq order")
 cards = [("Duplicate", "seq ≤ board.seq", "drop it (idempotent). Server also dedupes OP_SUBMIT by op_id, so resends are safe.", AMBER),
          ("Gap / delay", "seq > board.seq + 1", "buffer it; if not filled in 400 ms send RESYNC{last_seq}; server replays the tail.", CYAN),
@@ -671,7 +655,6 @@ ops. Delayed frames simply wait in the buffer. Divergence: every 25 ops the serv
 differs we discard the replica and fetch a snapshot. The green badge is backed by that evidence.
 """)
 
-# 15. reconnect + offline -------------------------------------------------------------
 s = content_slide("Reconnect and offline editing", "J", "Cut the cable, keep drawing, plug back in: nothing is lost")
 _p, (px, py, pw, ph) = picture(s, "offline.png", 0.6, 1.55, w=6.0, h=4.3, crop=(0, 0, 0.3, 0.0))
 caption(s, px, py + ph + 0.06, 6.0, "Link cut: \"Offline · edits queued (3)\", banner, 3 pending")
@@ -687,7 +670,6 @@ the same user id and role, and last_seq, so the server sends only what we missed
 order. If the server had already accepted one before the drop, its op_id dedupe acknowledges it without applying it twice.
 """)
 
-# 16. performance ----------------------------------------------------------------------
 s = content_slide("Performance: less traffic, lower delay", "J", "Measured with our real codec and the bot stress tool on one laptop (loopback)")
 cd = CategoryChartData()
 cd.categories = ["Live preview\n(1 s stroke)", "Committed stroke\n(RDP)", "Cursor\n(per second)"]
@@ -740,7 +722,6 @@ updates are capped at 20 Hz. The bot stress test with 8 bots at 20 ops per secon
 which the HUD shows live.
 """)
 
-# 17. chaos lab ------------------------------------------------------------------------
 s = content_slide("Chaos Lab: break the network on purpose", "J", "Fault injection on frames this client receives, then watch sync recover")
 picture(s, "chaos_lab.png", 0.6, 1.6, h=5.3, crop=(0.65, 0.07, 0.0, 0.0))
 knobs = [("Latency", "delays every inbound frame → RTT rises in the HUD"),
@@ -762,7 +743,6 @@ and offline editing. In the screenshot, with 120 ms latency, 20 percent drops an
 still reports in sync.
 """)
 
-# 18. Sai Teja contribution ------------------------------------------------------------
 contribution("S", [
     "canvas/view.py    CanvasView: zoom, PDF, export",
     "canvas/scene.py   CanvasScene: one item per id",
@@ -784,7 +764,6 @@ A key decision: while you draw, points go out as ephemeral STROKE_LIVE previews;
 committed as one add op, which is also one undo step.
 """)
 
-# 19. drawing tools ---------------------------------------------------------------------
 s = content_slide("Drawing tools", "S", "Every tool produces ops; the canvas never edits the board directly")
 picture(s, "light.png", 0.6, 1.6, h=5.2, crop=(0.0, 0.12, 0.62, 0.0))
 tools = [("V Select / move / resize", "rubber band, handles; drag = one update batch"),
@@ -806,7 +785,6 @@ geometry.hit_test and deletes everything it touched in one op. Smart Ink runs re
 hold the pen still, and replaces a rough circle, rectangle, line or arrow with a clean shape.
 """)
 
-# 20. shapes, sticky, images, pdf ---------------------------------------------------------
 s = content_slide("Shapes, stickies, images & PDF", "S")
 _p, (px, py, pw, ph) = picture(s, "canvas_dark_selection.png", 0.6, 1.45, w=7.2, crop=(0.0, 0.18, 0.28, 0.25))
 caption(s, 0.6, py + ph + 0.08, 7.2, "Dark board: two sticky notes selected; PDF page annotated by another user")
@@ -826,7 +804,6 @@ submits all pages as one batch, which is a single undo step. In the screenshot a
 on an imported slide.
 """)
 
-# 21. undo/redo --------------------------------------------------------------------------
 s = content_slide("Undo / redo with several people editing", "S", "Per-user stacks; undo submits the inverse as a brand-new op")
 rules = [("add X", "delete X", "skipped if someone already erased X"),
          ("delete X", "restore X", "skipped if X is live again"),
@@ -861,7 +838,6 @@ erased the object I added, there is nothing to undo and we skip to the next entr
 that still hold our value, so we never overwrite another user's later change. This is UndoManager and applicable() in undo.py.
 """)
 
-# 22. Nithillakrishi contribution ---------------------------------------------------------
 contribution("N", [
     "ui/main_window.py    window, actions",
     "ui/chat.py           ChatPanel",
@@ -884,7 +860,6 @@ bundled and icons are painted in code, so the UI works with no internet. The UI 
 but the server is what enforces it.
 """)
 
-# 23. collaboration -----------------------------------------------------------------------
 s = content_slide("Chat, people & classroom kit", "N")
 picture(s, "chat.png", 0.6, 1.35, h=5.4, crop=(0.715, 0.05, 0.0, 0.0))
 _p, (px, py, pw, ph) = picture(s, "people_roles.png", 4.55, 1.35, w=3.6)
@@ -904,7 +879,6 @@ can change roles or kick from the context menu. The classroom kit adds a laser p
 VIEWPORT messages, raised hands and a look-here ping; these are ephemeral, so they are never logged.
 """)
 
-# 24. time-lapse -----------------------------------------------------------------------------
 s = content_slide("Time-lapse history & version restore", "N", "Replays the server's op log; the live board keeps syncing underneath")
 picture(s, "history.png", 0.6, 1.6, w=8.2)
 bullets(s, 9.1, 1.7, 3.65, [
@@ -921,7 +895,6 @@ The canvas shows a read-only preview badge. Restore to here sends a replace op, 
 so everyone converges on the restored version, and it stays in the history too.
 """)
 
-# 25. network inspector ------------------------------------------------------------------------
 s = content_slide("Network Inspector & live HUD", "N", "Every frame this client sends or receives, decoded")
 picture(s, "network_dark.png", 0.6, 1.55, h=5.35, crop=(0.0, 0.0, 0.0, 0.0))
 notes(s, """
@@ -937,7 +910,6 @@ for i, (h, d) in enumerate([("Header", "TCP endpoint, msg/s, B/s"), ("Live HUD",
     box(s, 9.45, y, 3.28, 0.9, fill=CARD, radius=0.1, align=PP_ALIGN.LEFT,
         label=[[(h, {"bold": True, "size": 14, "color": "059669"})], [(d, {"size": 12, "color": TEXT2})]])
 
-# 26. badge, toasts, dark mode ------------------------------------------------------------------
 s = content_slide("Consistency badge, toasts & dark mode", "N")
 picture(s, "dark.png", 0.6, 1.35, w=7.6)
 _p, (px, py, pw, ph) = picture(s, "toast.png", 8.5, 1.35, w=4.23, crop=(0.17, 0.045, 0.5, 0.8))
@@ -956,7 +928,6 @@ gap or mismatch; red means offline with edits queued. Notifications such as join
 so they never block drawing. Dark mode is a full theme: Qt stylesheet, painted icons and the board ink are remapped.
 """)
 
-# 27. testing -----------------------------------------------------------------------------------
 s = content_slide("Testing", None, "pytest + pytest-asyncio, real server and real client in the loop")
 stat(s, 0.6, 1.6, 2.9, "318", "tests, all passing (≈90 s)", big_size=40)
 stat(s, 3.7, 1.6, 2.9, "16", "test modules: protocol → UI", big_size=40, color=VIOLET)
@@ -981,7 +952,6 @@ The convergence test runs six bots editing at random while randomly disconnectin
 replica hashes to the server's board. The stress tool prints ALL REPLICAS CONVERGED at the end of each run.
 """)
 
-# 28. challenges -----------------------------------------------------------------------------------
 s = content_slide("Challenges & lessons")
 ch_rows = [("Half-open TCP", "A pulled cable sends no FIN: added PING + 12 s idle timeout on both sides."),
            ("Nagle + delayed ACK", "Small frames stalled up to ~200 ms: TCP_NODELAY on both ends."),
@@ -1003,7 +973,6 @@ was undo with several people, and keeping Qt single-threaded. For the demo, camp
 traffic, so we bring a hotspot.
 """)
 
-# 29. demo plan -------------------------------------------------------------------------------------
 s = content_slide("Live demo plan (internet off)")
 steps = [("1", "Network", "Phone hotspot or switch; Wi-Fi internet off; note the server laptop's IP"),
          ("2", "Server", "lanboard-server --dashboard (allow the firewall prompt; Windows: Private network)"),
@@ -1027,11 +996,10 @@ by typing the address. We show drawing and collaboration features, then break th
 Chaos Lab and the cut-the-cable button, then show recovery, the time-lapse, and a server restart with the board intact.
 """)
 
-# 30. thank you -------------------------------------------------------------------------------------
 s = prs.slides.add_slide(BLANK)
 SLIDE_NO[0] += 1
 bg = box(s, 0, 0, SW, SH, fill=INDIGO, shape=MSO_SHAPE.RECTANGLE, name="Background")
-bg.fill.solid(); bg.fill.fore_color.rgb = rgb("13274A")   # flat deep navy
+bg.fill.solid(); bg.fill.fore_color.rgb = rgb("13274A")
 text(s, 0.8, 2.2, 11.7, 1.2, "Thank you", size=60, bold=True, color="FFFFFF")
 text(s, 0.8, 3.35, 11.7, 0.6, "Questions?", size=28, color="C9D8F3")
 text(s, 0.8, 4.3, 11.7, 0.5, "One server-ordered op log  ·  framed TCP  ·  recovery you can watch", size=16, color="8FB0E6")
@@ -1046,7 +1014,6 @@ Close and take questions. Each member answers questions on their own area; the l
 answers are in docs/PRESENTER_GUIDE.md.
 """)
 
-# ----------------------------------------------------------------------------- theme fonts + save
 def set_theme_fonts(prs, latin=FONT):
     """Point the theme's major/minor fonts at Inter (PowerPoint falls back to its default if missing)."""
     master = prs.slide_masters[0]

@@ -47,7 +47,7 @@ from .server_launcher import ServerProcess, lan_ipv4_addresses
 from .topbar import readable_on
 from .widgets import PortEdit, Segmented, ToggleSwitch
 
-CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # no 0/O, 1/I lookalikes
+CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 ROOM_CODE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,%d}$" % C.MAX_ROOM_CODE)
 HOST_RE = re.compile(r"^[A-Za-z0-9.\-:_\[\]%]+$")
 RECENT_MAX = 4
@@ -73,15 +73,10 @@ class ConnectParams:
     password: str | None = None
     room_name: str | None = None
     start_server: bool = False
-    server: object | None = field(default=None, repr=False)   # ServerProcess when we started one
+    server: object | None = field(default=None, repr=False)
     lan_addresses: list[str] = field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# animated brand panel
-# ---------------------------------------------------------------------------
-
-#: client nodes of the illustration: (x, y) as fractions of the panel, name, colour
 HERO_NODES = [(0.16, 0.58, "Asha", "#ffd166"), (0.80, 0.54, "Ravi", "#06d6a0"),
               (0.12, 0.80, "", "#ff7aa8"), (0.87, 0.78, "Meera", "#7cc4ff"),
               (0.33, 0.90, "", "#ffb37a"), (0.66, 0.91, "Lee", "#c3a6ff")]
@@ -91,7 +86,7 @@ HERO_SERVER = (0.50, 0.71)
 class NetworkHero(QWidget):
     """Gradient brand panel with packets flowing between client nodes and a server."""
 
-    FPS_MS = 33                     # ~30 fps cap
+    FPS_MS = 33
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -103,15 +98,14 @@ class NetworkHero(QWidget):
         self._timer.timeout.connect(self._tick)
         self._clock = QElapsedTimer()
         self._rng = random.Random(7)
-        self.packets: list[dict] = []    # {node, up, t, speed}
-        self.pings: list[list] = []      # [x, y, age, colour]
+        self.packets: list[dict] = []
+        self.pings: list[list] = []
         self.seq = 1040
         self._spawn_in = 0.0
-        for i in range(5):               # start mid-flow so the first frame already looks alive
+        for i in range(5):
             self._spawn(t=self._rng.random())
         theme.manager().changed.connect(self._invalidate)
 
-    # -- lifecycle: animate only while visible ------------------------------------
     def showEvent(self, ev) -> None:  # noqa: N802
         super().showEvent(ev)
         self._clock.restart()
@@ -129,7 +123,6 @@ class NetworkHero(QWidget):
         self._bg = None
         self.update()
 
-    # -- simulation ------------------------------------------------------------------
     def _spawn(self, t: float = 0.0) -> None:
         node = self._rng.randrange(len(HERO_NODES))
         self.packets.append({"node": node, "up": True, "t": t, "speed": 0.55 + self._rng.random() * 0.35})
@@ -150,7 +143,6 @@ class NetworkHero(QWidget):
                 alive.append(pk)
                 continue
             if pk["up"]:
-                # the server orders the op and broadcasts it to two other clients
                 self.seq += 1
                 self.pings.append([*HERO_SERVER, 0.0, "#ffffff"])
                 others = [i for i in range(len(HERO_NODES)) if i != pk["node"]]
@@ -165,7 +157,6 @@ class NetworkHero(QWidget):
         self.pings = [pg for pg in self.pings if pg[2] < 0.6]
         self.update()
 
-    # -- painting ---------------------------------------------------------------------
     def _paint_background(self) -> QPixmap:
         dpr = self.devicePixelRatioF()
         pm = QPixmap(int(self.width() * dpr), int(self.height() * dpr))
@@ -174,24 +165,21 @@ class NetworkHero(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = QRectF(self.rect())
         w, h = r.width(), r.height()
-        p.fillRect(r, QColor("#13274a"))            # deep navy panel, flat
+        p.fillRect(r, QColor("#13274a"))
         glow = QRadialGradient(QPointF(w * HERO_SERVER[0], h * HERO_SERVER[1]), w * 0.75)
         glow.setColorAt(0.0, QColor(255, 255, 255, 22))
         glow.setColorAt(1.0, QColor(255, 255, 255, 0))
         p.fillRect(r, glow)
-        # dot grid: the "whiteboard" texture
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 26))
         step = 22
         for gx in range(step // 2, int(w), step):
             for gy in range(int(h * 0.42), int(h), step):
                 p.drawEllipse(QPointF(gx, gy), 1.1, 1.1)
-        # edges client <-> server
         sp = self._pt(HERO_SERVER)
         p.setPen(QPen(QColor(255, 255, 255, 55), 1.4, Qt.PenStyle.DashLine))
         for x, y, _n, _c in HERO_NODES:
             p.drawLine(self._pt((x, y)), sp)
-        # logo + text
         theme.paint_logo(p, QRectF(40, 42, 52, 52))
         p.setPen(QColor("white"))
         p.setFont(theme.ui_font(32, QFont.Weight.Bold))
@@ -223,7 +211,6 @@ class NetworkHero(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.drawPixmap(0, 0, self._bg)
         sp = self._pt(HERO_SERVER)
-        # pings (expanding rings where a packet arrived)
         for x, y, age, col in self.pings:
             c = QColor(col)
             c.setAlphaF(max(0.0, 0.7 * (1 - age / 0.6)))
@@ -231,7 +218,6 @@ class NetworkHero(QWidget):
             p.setBrush(Qt.BrushStyle.NoBrush)
             rad = 10 + age * 40
             p.drawEllipse(self._pt((x, y)), rad, rad)
-        # packets with a short comet tail
         p.setPen(Qt.PenStyle.NoPen)
         for pk in self.packets:
             x, y, _n, col = HERO_NODES[pk["node"]]
@@ -242,7 +228,6 @@ class NetworkHero(QWidget):
                 c.setAlpha(al)
                 p.setBrush(c)
                 p.drawEllipse(a + (b - a) * tt, rad, rad)
-        # client nodes with name tags
         f = theme.ui_font(11, QFont.Weight.Bold)
         p.setFont(f)
         for x, y, name, col in HERO_NODES:
@@ -259,7 +244,6 @@ class NetworkHero(QWidget):
                 p.drawRoundedRect(tag, 9.5, 9.5)
                 p.setPen(readable_on(QColor(col)))
                 p.drawText(tag, Qt.AlignmentFlag.AlignCenter, name)
-        # the server: a glowing tile with the live seq counter
         tile = QRectF(sp.x() - 34, sp.y() - 26, 68, 52)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 40))
@@ -278,13 +262,8 @@ class NetworkHero(QWidget):
         p.end()
 
 
-# Kept for code that imported the old name.
 HeroPanel = NetworkHero
 
-
-# ---------------------------------------------------------------------------
-# nearby-server cards
-# ---------------------------------------------------------------------------
 
 class ServerCardDelegate(QStyledItemDelegate):
     """Paints discovery results: server rows as cards, rooms as rows inside them."""
@@ -325,7 +304,6 @@ class ServerCardDelegate(QStyledItemDelegate):
             p.setPen(QColor(t["muted"]))
             p.drawText(QRectF(x, r.top() + 31, r.width() - x, 18), Qt.AlignmentFlag.AlignVCenter,
                        f"{s.get('host')}:{s.get('port')}")
-            # right-hand chips: latency (if the entry has one) and room / people counts
             rooms = s.get("rooms") or []
             people = sum(int(rm.get("users", 0) or 0) for rm in rooms)
             chips = [(f"{len(rooms)} room{'s' if len(rooms) != 1 else ''} · {people} online", "accent")]
@@ -373,17 +351,13 @@ class ServerCardDelegate(QStyledItemDelegate):
             p.drawRoundedRect(cr, 6, 6)
             p.setPen(QColor(t["text2"]))
             p.drawText(cr, Qt.AlignmentFlag.AlignCenter, code)
-        else:                                       # placeholder rows ("no servers yet")
+        else:
             p.setFont(theme.ui_font(12))
             p.setPen(QColor(t["muted"]))
             p.drawText(r.adjusted(18 if d.get("child") else 8, 0, 0, 0), Qt.AlignmentFlag.AlignVCenter,
                        index.data(Qt.ItemDataRole.DisplayRole) or "")
         p.restore()
 
-
-# ---------------------------------------------------------------------------
-# the dialog
-# ---------------------------------------------------------------------------
 
 class ConnectDialog(QDialog):
     """The first screen. ``exec()`` then ``params()``."""
@@ -399,7 +373,7 @@ class ConnectDialog(QDialog):
         self.discovery = None
         self.server_process: ServerProcess | None = None
         self._result: ConnectParams | None = None
-        self.lan_addresses = lan_ipv4_addresses(lan_only=True)   # VPN/CGNAT only if nothing better
+        self.lan_addresses = lan_ipv4_addresses(lan_only=True)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -434,7 +408,6 @@ class ConnectDialog(QDialog):
         lay.addLayout(head)
         lay.addSpacing(8)
 
-        # username + mode
         top = QGridLayout()
         top.setHorizontalSpacing(12)
         top.setVerticalSpacing(5)
@@ -451,7 +424,6 @@ class ConnectDialog(QDialog):
         top.setColumnStretch(1, 1)
         lay.addLayout(top)
 
-        # ---- join: nearby servers + recents ---------------------------------------
         self.join_box = QWidget()
         jl = QVBoxLayout(self.join_box)
         jl.setContentsMargins(0, 8, 0, 0)
@@ -491,7 +463,6 @@ class ConnectDialog(QDialog):
         jl.addLayout(self.recent_row)
         lay.addWidget(self.join_box, 1)
 
-        # ---- host: start a local server ------------------------------------------
         self.host_box = QFrame()
         self.host_box.setObjectName("Card")
         hb = QVBoxLayout(self.host_box)
@@ -527,7 +498,6 @@ class ConnectDialog(QDialog):
         hwl.addWidget(self.host_box)
         lay.addWidget(self.host_wrap)
 
-        # ---- shared fields ---------------------------------------------------------
         hp = QGridLayout()
         hp.setHorizontalSpacing(12)
         hp.setVerticalSpacing(5)
@@ -583,7 +553,6 @@ class ConnectDialog(QDialog):
         self.error.setProperty("role", "error")
         self.error.setWordWrap(True)
         lay.addWidget(self.error)
-        # in host mode there is no server list, so this spacer keeps the buttons at the bottom
         self.host_spacer = QWidget()
         self.host_spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         lay.addWidget(self.host_spacer, 1)
@@ -610,27 +579,24 @@ class ConnectDialog(QDialog):
         if self.lan_addresses:
             self.lan_hint.setText(f"This computer: {self.lan_addresses[0]}")
 
-        # port / room code the user typed by hand while in host mode; switching to
-        # Host restores these (or the defaults), never a discovered server's values
         self._host_typed: dict = {"port": None, "code": None}
         self._mode_ready = False
         self._load_settings(prefill)
         self._build_recents()
         self._on_mode(self.mode.index())
-        if self.is_host_mode():                     # values saved from a previous host session
+        if self.is_host_mode():
             self._host_typed = {"port": self.port.value() or None, "code": self.room.text().strip() or None}
         self._mode_ready = True
         self.error.setText(error_text)
         self._retheme_icons()
         theme.manager().changed.connect(self._retheme_icons)
 
-        # discovery
         self.discovery = discovery
-        if self.discovery is None:  # real LAN browser unless a test injected a fake
+        if self.discovery is None:
             try:
                 from lanboard.client.discovery import DiscoveryBrowser
                 self.discovery = DiscoveryBrowser(self)
-            except Exception:                     # module missing / socket error
+            except Exception:
                 self.discovery = None
         if self.discovery is not None:
             self.discovery.servers_changed.connect(self.set_servers)
@@ -641,7 +607,6 @@ class ConnectDialog(QDialog):
         self.set_servers([])
         self.finished.connect(self._stop_discovery)
 
-    # -- small helpers ------------------------------------------------------------------
     @staticmethod
     def _caption(text: str) -> QLabel:
         lab = QLabel(text.upper())
@@ -674,7 +639,6 @@ class ConnectDialog(QDialog):
             self.scan_label.setText("scanning…")
             self.discovery.probe()
 
-    # -- settings --------------------------------------------------------------------------
     def _load_settings(self, prefill: ConnectParams | None) -> None:
         s = self.settings
         names = self._recent_names()
@@ -765,7 +729,6 @@ class ConnectDialog(QDialog):
         rec = [entry] + [r for r in self.recents() if (r["host"], r["port"], r["room"]) != (host, p.port, p.room)]
         s.setValue("connect/recent", json.dumps(rec[:RECENT_MAX]))
 
-    # -- mode ------------------------------------------------------------------------------
     def is_host_mode(self) -> bool:
         return self.mode.index() == 1
 
@@ -777,13 +740,12 @@ class ConnectDialog(QDialog):
         self.ok_btn.setText("Create room" if host else "Join room")
         for w in (self.gen_btn, self.room_name, self.name_caption):
             w.setVisible(host)
-        self._room_grid.setColumnStretch(1, 1 if host else 0)     # no empty gap in join mode
+        self._room_grid.setColumnStretch(1, 1 if host else 0)
         self.join_box.setVisible(not host)
         self.host_wrap.setVisible(host)
         self.host_spacer.setVisible(host)
         self.password.setPlaceholderText("Optional" if host else "Only if protected")
         if host and self._mode_ready:
-            # a discovered server's port and room code belong to that server: host fresh
             self.port.setValue(self._host_typed["port"] or C.TCP_PORT)
             self.room.setText(self._host_typed["code"] or generate_room_code())
         elif host and not self.room.text().strip():
@@ -818,7 +780,6 @@ class ConnectDialog(QDialog):
             self.share.setText("No LAN address found. Connect this computer to the network (Wi-Fi or "
                                "Ethernet) so others can reach it.")
 
-    # -- discovery list ------------------------------------------------------------------------
     def set_servers(self, servers: list) -> None:
         """Slot for ``servers_changed``: rebuild the nearby-servers list."""
         self.servers = list(servers or [])
@@ -875,7 +836,6 @@ class ConnectDialog(QDialog):
             if not d["room"].get("protected"):
                 self._on_ok()
 
-    # -- validation + accept ---------------------------------------------------------------------
     def collect(self) -> ConnectParams:
         host_mode = self.is_host_mode()
         local = host_mode and self.start_server.isChecked()
@@ -965,5 +925,4 @@ class ConnectDialog(QDialog):
     def params(self) -> ConnectParams | None:
         """The accepted parameters (None if the dialog was cancelled)."""
         return self._result
-
 

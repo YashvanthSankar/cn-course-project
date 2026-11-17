@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (QButtonGroup, QColorDialog, QGridLayout, QHBoxLay
 from . import theme
 from .widgets import FloatingCard
 
-#: (tool name passed to canvas.set_tool, label, shortcut key, icon name, needs edit rights)
 TOOLS: list[tuple[str, str, str, str, bool]] = [
     ("select", "Select", "V", "select", False),
     ("pan", "Pan", "H", "hand", False),
@@ -39,12 +38,10 @@ TOOLS: list[tuple[str, str, str, str, bool]] = [
     ("sticky", "Sticky note", "N", "sticky", True),
     ("laser", "Laser pointer (not saved)", "K", "laser", False),
 ]
-#: a thin divider is drawn after these tools
 GROUP_ENDS = {"pan", "eraser", "ellipse", "sticky"}
 
 WIDTH_MIN, WIDTH_MAX, WIDTH_DEFAULT = 1, 40, 4
 
-#: Which style-bar sections each tool uses: colour, width, fill, smart ink.
 TOOL_SECTIONS: dict[str, set[str]] = {
     "pen": {"color", "width", "smart"},
     "highlighter": {"color", "width"},
@@ -56,7 +53,6 @@ TOOL_SECTIONS: dict[str, set[str]] = {
     "text": {"color"},
     "sticky": {"color", "fill"},
 }
-#: Sections that make sense for a selection of objects of a given type.
 TYPE_SECTIONS: dict[str, set[str]] = {
     "stroke": {"color", "width"}, "line": {"color", "width"}, "arrow": {"color", "width"},
     "rect": {"color", "width", "fill"}, "ellipse": {"color", "width", "fill"},
@@ -64,7 +60,7 @@ TYPE_SECTIONS: dict[str, set[str]] = {
 }
 TOOL_TITLES = {name: text.split(" (")[0] for name, text, *_ in TOOLS}
 
-try:                                    # the canvas remaps near-black / near-white ink on a dark board
+try:
     from lanboard.client.canvas.items import display_color as _board_color
 except Exception:                       # pragma: no cover - canvas package without the helper
     def _board_color(c: QColor) -> QColor:
@@ -149,7 +145,7 @@ class ToolPalette(FloatingCard):
         self.tool_buttons: dict[str, _ToolButton] = {}
         self.tool_actions: dict[str, QAction] = {}
         self._can_edit = True
-        self._tool_before_lock: str | None = None   # tool to restore when edit rights return
+        self._tool_before_lock: str | None = None
         self._columns = 1
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
@@ -161,7 +157,6 @@ class ToolPalette(FloatingCard):
             b.clicked.connect(lambda _=False, n=name: self.select_tool(n))
             self.group.addButton(b)
             self.tool_buttons[name] = b
-            # single-key shortcut lives on an action so it works window-wide
             act = QAction(text, self)
             act.setShortcut(QKeySequence(key))
             act.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
@@ -181,7 +176,6 @@ class ToolPalette(FloatingCard):
             canvas.tool_changed.connect(self.reflect_tool)
         self.select_tool("pen")
 
-    # -- layout ------------------------------------------------------------------
     def _relayout(self) -> None:
         """Place buttons in one column (with dividers) or two (compact windows)."""
         while self.grid.count():
@@ -212,7 +206,6 @@ class ToolPalette(FloatingCard):
             self._columns = cols
             self._relayout()
 
-    # -- helpers ---------------------------------------------------------------
     def _call(self, method: str, *args) -> None:
         fn = getattr(self.canvas, method, None)
         if callable(fn):
@@ -221,7 +214,6 @@ class ToolPalette(FloatingCard):
     def retheme(self) -> None:
         self.update()
 
-    # -- tools -----------------------------------------------------------------
     def select_tool(self, name: str) -> None:
         """User picked a tool: tell the canvas and highlight the button."""
         b = self.tool_buttons.get(name)
@@ -258,13 +250,8 @@ class ToolPalette(FloatingCard):
             self._tool_before_lock = None
 
 
-# Backwards-compatible name (the palette replaced the old fixed rail).
 ToolRail = ToolPalette
 
-
-# ---------------------------------------------------------------------------
-# style bar
-# ---------------------------------------------------------------------------
 
 class _Swatch(QToolButton):
     """A round colour chip. Checked = currently selected colour."""
@@ -296,7 +283,6 @@ class _Swatch(QToolButton):
         else:
             r = full.adjusted(3, 3, -3, -3)
         c = shown_color(self.hex)
-        # a hairline ring keeps very light / very dark chips visible on either theme
         ring = QColor(t["border_strong"])
         p.setPen(QPen(ring, 1) if c.lightness() > 225 or c.lightness() < 45 else Qt.PenStyle.NoPen)
         p.setBrush(c)
@@ -360,7 +346,6 @@ class StyleBar(FloatingCard):
         self.title.setStyleSheet("font-size: 10px; font-weight: 700;")
         lay.addWidget(self.title)
 
-        # --- colours ---------------------------------------------------------
         self.color_group = _Group()
         self.swatch_group = QButtonGroup(self)
         self.swatch_group.setExclusive(True)
@@ -386,7 +371,6 @@ class StyleBar(FloatingCard):
         self.color_group.row.addWidget(self.more_btn)
         lay.addWidget(self.color_group)
 
-        # --- width -----------------------------------------------------------
         self.width_group = _Group()
         self.width_group.row.setSpacing(8)
         self.preview = _WidthPreview()
@@ -405,7 +389,6 @@ class StyleBar(FloatingCard):
         self.width_group.row.addWidget(self.width_label)
         lay.addWidget(self.width_group)
 
-        # --- fill + smart ink ------------------------------------------------
         self.opt_group = _Group()
         self.opt_group.row.setSpacing(4)
         self.fill_btn = QToolButton()
@@ -431,7 +414,6 @@ class StyleBar(FloatingCard):
         self.retheme()
         theme.on_theme_change(self, self.retheme)
 
-        # initial state pushed to the canvas so both sides agree
         self.swatches[0].setChecked(True)
         self._call("set_color", self.current_color)
         self._call("set_width", WIDTH_DEFAULT)
@@ -439,7 +421,6 @@ class StyleBar(FloatingCard):
         self._call("set_smart_ink", False)
         self.set_context("pen")
 
-    # -- helpers ---------------------------------------------------------------
     def _call(self, method: str, *args) -> None:
         fn = getattr(self.canvas, method, None)
         if callable(fn):
@@ -450,13 +431,12 @@ class StyleBar(FloatingCard):
         self.title.setStyleSheet(f"font-size: 10px; font-weight: 700; color: {t['muted']};")
         self.more_btn.setIcon(theme.icon("plus", t["text2"], 14))
         for s in self.swatches + [self.custom_swatch]:
-            s.update()                   # colours are shown through the board mapping
+            s.update()
         self.preview.update()
         self.fill_btn.setIcon(theme.icon("fill", t["text2"], 18, on_color=t["accent"]))
         self.smart_btn.setIcon(theme.icon("smart", t["text2"], 18, on_color=t["accent"]))
         self.update()
 
-    # -- context -----------------------------------------------------------------
     def set_context(self, tool: str | None, selected_types: set[str] | None = None) -> bool:
         """Show only the sections that matter. Returns False when nothing applies (bar hidden)."""
         if tool == "select":
@@ -509,7 +489,6 @@ class StyleBar(FloatingCard):
     def has_content(self) -> bool:
         return bool(self._context and self._context[1])
 
-    # -- style setters -------------------------------------------------------------
     def set_color(self, hex_color: str) -> None:
         self.current_color = hex_color
         for s in self.swatches + [self.custom_swatch]:
@@ -533,7 +512,7 @@ class StyleBar(FloatingCard):
     def set_width(self, w: int) -> None:
         if self.width_slider.value() != w:
             self.width_slider.setValue(w)
-            return                          # valueChanged re-enters with the same w
+            return
         self.preview.width_px = w
         self.preview.update()
         self.width_label.setText(f"{w} px")

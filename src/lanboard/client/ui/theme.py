@@ -33,24 +33,21 @@ from PySide6.QtGui import (QBrush, QColor, QFont, QFontDatabase, QIcon, QPainter
                            QPainterPath, QPainterPathStroker, QPalette, QPen, QPixmap, QPolygonF)
 from PySide6.QtWidgets import QApplication
 
-# ---------------------------------------------------------------------------
-# palettes (design tokens)
-# ---------------------------------------------------------------------------
 
 LIGHT: dict[str, str] = {
     "name": "light",
-    "bg": "#eceef4",          # window background behind panels
-    "surface": "#ffffff",     # cards, panels, top bar
-    "surface2": "#f4f5f9",    # inputs, hovered rows, secondary buttons
-    "surface3": "#e8eaf1",    # pressed / selected neutral
-    "float": "#ffffff",       # floating cards over the canvas
+    "bg": "#eceef4",
+    "surface": "#ffffff",
+    "surface2": "#f4f5f9",
+    "surface3": "#e8eaf1",
+    "float": "#ffffff",
     "border": "#e3e6ee",
     "border_strong": "#cdd2df",
     "text": "#121626",
     "text2": "#474f66",
     "muted": "#868ea5",
-    "accent": "#1f57c3",      # cobalt blue
-    "accent2": "#b45309",     # amber (second colour: snapshot/history frames, JSON literals)
+    "accent": "#1f57c3",
+    "accent2": "#b45309",
     "accent_hover": "#1a4aa6",
     "accent_soft": "#e8eefb",
     "accent_text": "#ffffff",
@@ -65,7 +62,7 @@ LIGHT: dict[str, str] = {
     "neutral_soft": "#eceef3",
     "canvas": "#f8f9fc",
     "shadow": "#141a3340",
-    "console": "#f7f8fc",     # Network tab "mission control" panels
+    "console": "#f7f8fc",
     "console_line": "#e6e8f0",
     "chart_in": "#1f57c3",
     "chart_out": "#f2711c",
@@ -107,13 +104,9 @@ DARK: dict[str, str] = {
     "chart_rtt": "#34d399",
 }
 
-#: The ten colour swatches of the drawing palette (chosen to stay readable on
-#: both a white and a dark canvas).
 SWATCHES = ["#1b2130", "#e5484d", "#f76b15", "#f5b400", "#30a46c",
             "#12a594", "#0090ff", "#4f63e8", "#8e4ec6", "#ffffff"]
 
-#: Colours for message families in the Network Inspector (by MsgType name).
-#: Families: handshake, ordered ops, recovery, presence, chat, liveness, errors, blobs.
 MSG_FAMILY = {
     "HELLO": "info", "CHALLENGE": "info", "JOIN": "info", "JOINED": "info", "LEAVE": "info",
     "OP": "accent", "OP_SUBMIT": "accent", "OP_BATCH": "accent", "OP_REJECT": "danger",
@@ -196,10 +189,6 @@ def rgba(c: str, a: float) -> str:
     return f"rgba({q.red()},{q.green()},{q.blue()},{int(a * 255)})"
 
 
-# ---------------------------------------------------------------------------
-# fonts
-# ---------------------------------------------------------------------------
-
 UI_FAMILY = "Inter"
 MONO_FAMILY = "JetBrains Mono"
 _SYSTEM_MONO = ["Menlo", "Consolas", "DejaVu Sans Mono", "Courier New"]
@@ -268,10 +257,6 @@ def mono_css() -> str:
     return ", ".join(f'"{f}"' for f in fams) + ", monospace"
 
 
-# ---------------------------------------------------------------------------
-# shared painting helpers
-# ---------------------------------------------------------------------------
-
 def accent_gradient(r: QRectF, t: dict[str, str] | None = None, vertical: bool = False) -> QBrush:
     """The brand fill for ``r``: the flat accent colour.
 
@@ -295,7 +280,7 @@ def paint_shadow(p: QPainter, r: QRectF, radius: float, spread: int = 10, streng
     p.setPen(Qt.PenStyle.NoPen)
     steps = max(2, spread // 2)
     for i in range(steps):
-        k = (i + 1) / steps                       # 0..1 from the card edge outwards
+        k = (i + 1) / steps
         grow = spread * k
         c = QColor(base)
         c.setAlphaF(min(1.0, base.alphaF() * strength * 0.55 * (1.0 - k) ** 1.5 + 0.004))
@@ -315,17 +300,13 @@ def paint_card(p: QPainter, r: QRectF, radius: float = 14, fill: str | QColor | 
     p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius)
 
 
-# ---------------------------------------------------------------------------
-# stylesheet
-# ---------------------------------------------------------------------------
-
 def stylesheet(t: dict[str, str]) -> str:
     """Build the application QSS from palette tokens.
 
     Widgets opt into special looks through ``objectName`` (``#TopBar``) or
     dynamic properties (``[role="primary"]``) so code never hard-codes colours.
     """
-    grad = t['accent']               # primary buttons: flat accent, no gradient
+    grad = t['accent']
     grad_hover = t['accent_hover']
     mono = mono_css()
     return f"""
@@ -486,7 +467,7 @@ def apply_theme(app: QApplication | None = None, mode: str = "light") -> dict[st
     _ICON_CACHE.clear()
     if app is not None:
         load_fonts()
-        app.setStyle("Fusion")             # consistent base look on every OS
+        app.setStyle("Fusion")
         base_font = QFont(UI_FAMILY)
         base_font.setPixelSize(13)
         app.setFont(base_font)
@@ -520,10 +501,6 @@ def repolish(widget) -> None:
     st.polish(widget)
     widget.update()
 
-
-# ---------------------------------------------------------------------------
-# painted icons
-# ---------------------------------------------------------------------------
 
 IconFn = Callable[[QPainter, QColor], None]
 _ICONS: dict[str, IconFn] = {}
@@ -569,7 +546,6 @@ def _i_select(p, c):
 
 @_register("hand")
 def _i_hand(p, c):
-    # silhouette = union of palm, four fingers and a thumb, outlined once
     path = QPainterPath()
     path.addRoundedRect(QRectF(6.2, 10.5, 12.3, 10.5), 4.5, 4.5)
     for x, top in ((8.0, 6.5), (10.9, 4.0), (13.8, 4.5), (16.7, 7.0)):
@@ -671,7 +647,6 @@ def _i_sticky(p, c):
 
 @_register("laser")
 def _i_laser(p, c):
-    # a glowing dot leaving a fading trail
     pts = [(21, 3), (18.5, 7.5), (14.5, 9), (12.5, 12.5)]
     for i in range(len(pts) - 1):
         tc = QColor(c)
@@ -1096,7 +1071,6 @@ def _i_more(p, c):
 
 @_register("panel")
 def _i_panel(p, c):
-    # window with a right-hand side panel (toggle the side panel)
     p.setPen(_pen(c))
     p.drawRoundedRect(QRectF(3.5, 4.5, 17, 15), 2.5, 2.5)
     p.drawLine(QPointF(14.5, 4.5), QPointF(14.5, 19.5))
@@ -1211,7 +1185,7 @@ def _i_bolt(p, c):
 
 
 def _paint_icon(name: str, c: QColor, size: int) -> QPixmap:
-    dpr = 3.0                                    # crisp on Retina / 4K screens
+    dpr = 3.0
     pm = QPixmap(int(size * dpr), int(size * dpr))
     pm.setDevicePixelRatio(dpr)
     pm.fill(Qt.GlobalColor.transparent)
@@ -1270,7 +1244,7 @@ def paint_logo(p: QPainter, rect: QRectF) -> None:
     p.scale(s, s)
     pen = _pen(QColor("white"), 2.2)
     p.setPen(pen)
-    p.setBrush(Qt.BrushStyle.NoBrush)   # stroke only: the tile's gradient brush would fill the curve
+    p.setBrush(Qt.BrushStyle.NoBrush)
     path = QPainterPath(QPointF(5, 15.5))
     path.cubicTo(7.5, 8, 10, 8, 11.2, 12.5)
     path.cubicTo(12.4, 17, 15, 16.5, 17.2, 9.5)

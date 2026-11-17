@@ -38,7 +38,6 @@ from lanboard.common.messages import Err, MsgType  # noqa: E402
 from lanboard.common.protocol import FrameDecoder, encode  # noqa: E402
 
 
-# ============================================================ helpers
 @pytest.fixture(scope="module")
 def qapp():
     """The networking layer only needs a QCoreApplication. But Qt allows one
@@ -54,7 +53,7 @@ def qapp():
     return app
 
 
-def wait_until(pred, timeout: float = 10.0) -> bool:   # generous: slow CI / Windows refused-connect delays
+def wait_until(pred, timeout: float = 10.0) -> bool:
     """Pump the Qt event loop until ``pred()`` is true or ``timeout`` passes."""
     deadline = time.monotonic() + timeout
     while not pred():
@@ -94,7 +93,6 @@ class FakeServer:
         self.port = self._lsock.getsockname()[1]
         threading.Thread(target=self._accept_loop, daemon=True).start()
 
-    # ---------------------------------------------------------- control
     def push(self, t: int, payload: dict) -> None:
         for conn, lock in list(self._conns):
             self._send(conn, lock, t, payload)
@@ -114,7 +112,6 @@ class FakeServer:
         self.drop_all()
         self._lsock.close()
 
-    # -------------------------------------------------------- internals
     def _send(self, conn, lock, t, payload) -> None:
         data = encode(t, payload)
         self.sent_sizes.setdefault(int(t), []).append(len(data))
@@ -167,7 +164,7 @@ class FakeServer:
             if self.verifier and not p.get("create"):
                 proof = p.get("proof")
                 if proof is None or not auth.check_proof(self.verifier, st["nonce"], proof):
-                    st["nonce"] = auth.new_nonce()      # fresh nonce for every attempt
+                    st["nonce"] = auth.new_nonce()
                     code = Err.AUTH_REQUIRED if proof is None else Err.BAD_PASSWORD
                     send(MsgType.ERROR, {"code": code, "msg": "password", "salt": self.salt,
                                          "nonce": st["nonce"]})
@@ -210,7 +207,7 @@ def pw_server():
 @pytest.fixture
 def net(qapp):
     n = NetClient()
-    n.ping_interval = 60.0          # tests that need heartbeats shorten it
+    n.ping_interval = 60.0
     n.backoff = (0.05,)
     n.states = Recorder()
     n.joins = Recorder()
@@ -242,9 +239,8 @@ def states(net) -> list[str]:
     return [a[0] for a in net.states]
 
 
-# ======================================================== handshake
 def test_handshake_reaches_joined(net, server):
-    assert net.send(MsgType.CHAT_SEND, {"cmid": "x", "text": "hi"}) is False   # not joined yet
+    assert net.send(MsgType.CHAT_SEND, {"cmid": "x", "text": "hi"}) is False
     net.connect_to("127.0.0.1", server.port, "alice", "r1")
     assert wait_until(net.is_joined)
     assert states(net) == ["connecting", "authenticating", "joined"]
@@ -255,9 +251,7 @@ def test_handshake_reaches_joined(net, server):
     assert net.user_id == "u1" and net.resume_token == "tok-1"
     assert net.joins[0][0]["resumed"] is False
     assert net.server_info["server_id"] == "srv-1"
-    # TCP_NODELAY is on (getsockopt returns non-zero; macOS reports the flag bit, 4).
     assert int(net._sock.socketOption(QAbstractSocket.SocketOption.LowDelayOption)) != 0
-    # SNAPSHOT (after JOINED) arrives through `message`. Handshake frames do not.
     assert wait_until(lambda: any(m[0] == MsgType.SNAPSHOT for m in net.messages))
     assert not any(m[0] in (MsgType.CHALLENGE, MsgType.JOINED) for m in net.messages)
     assert net.send(MsgType.CHAT_SEND, {"cmid": "x", "text": "hi"}) is True
@@ -278,17 +272,17 @@ def test_password_auto_retry_after_auth_required(net, pw_server):
     net.connect_to("127.0.0.1", pw_server.port, "bob", "r1", password="secret")
     assert wait_until(net.is_joined)
     assert len(pw_server.joins) == 2
-    assert "proof" not in pw_server.joins[0]      # salt unknown at first
-    assert "proof" in pw_server.joins[1]          # retried once with HMAC proof
+    assert "proof" not in pw_server.joins[0]
+    assert "proof" in pw_server.joins[1]
     assert not net.pw_req and not net.errors
 
 
 def test_bad_password_prompts_then_succeeds(net, pw_server):
     net.connect_to("127.0.0.1", pw_server.port, "bob", "r1", password="wrong")
     assert wait_until(lambda: len(net.pw_req) == 1)
-    assert net.pw_req[0] == ("r1", True)          # wrong previous attempt
+    assert net.pw_req[0] == ("r1", True)
     assert net.state == "authenticating"
-    assert len(pw_server.joins) == 2              # first JOIN + one automatic retry, then stop
+    assert len(pw_server.joins) == 2
     net.provide_password("secret")
     assert wait_until(net.is_joined)
     assert len(pw_server.joins) == 3 and len(net.pw_req) == 1
@@ -299,10 +293,10 @@ def test_password_required_without_password(net, pw_server):
     assert wait_until(lambda: net.pw_req)
     assert net.pw_req[0] == ("r1", False)
     QTest.qWait(100)
-    assert len(pw_server.joins) == 1 and not net.is_joined()   # waits for the user
+    assert len(pw_server.joins) == 1 and not net.is_joined()
     net.provide_password("wrong")
     assert wait_until(lambda: len(net.pw_req) == 2)
-    assert net.pw_req[1] == ("r1", True)          # user-typed password: no silent retry
+    assert net.pw_req[1] == ("r1", True)
     net.provide_password("secret")
     assert wait_until(net.is_joined)
 
@@ -312,7 +306,7 @@ def test_fatal_error_stops(net, server):
     assert wait_until(lambda: net.state == "closed")
     assert net.errors == [(Err.ROOM_NOT_FOUND, "no room missing")]
     QTest.qWait(300)
-    assert len(server.hellos) == 1                # no reconnect
+    assert len(server.hellos) == 1
     assert states(net)[-1] == "closed"
 
 
@@ -321,7 +315,7 @@ def test_fatal_kicked_after_join(net, server):
     assert wait_until(net.is_joined)
     server.push(MsgType.ERROR, {"code": Err.FORBIDDEN, "msg": "viewers cannot draw"})
     assert wait_until(lambda: net.errors)
-    assert net.is_joined()                        # FORBIDDEN after join is not fatal
+    assert net.is_joined()
     server.push(MsgType.ERROR, {"code": Err.KICKED, "msg": "bye"})
     assert wait_until(lambda: net.state == "closed")
     QTest.qWait(200)
@@ -335,7 +329,6 @@ def test_connect_failed_does_not_retry(net, qapp):
     assert "reconnecting" not in states(net)
 
 
-# ======================================================== reconnect
 def test_reconnect_resumes_with_token_and_last_seq(net, server):
     net.last_seq_provider = lambda: 42
     net.connect_to("127.0.0.1", server.port, "alice", "r1", create=True)
@@ -364,10 +357,10 @@ def test_reconnect_backoff_keeps_retrying_while_server_down(net, server):
     net.connect_to("127.0.0.1", server.port, "alice", "r1")
     assert wait_until(net.is_joined)
     port = server.port
-    server.close()                                # listener gone: connects are refused
-    assert wait_until(lambda: net._attempt >= 4, timeout=30)   # Windows: each refused connect takes ~2 s
+    server.close()
+    assert wait_until(lambda: net._attempt >= 4, timeout=30)
     assert net.state == "reconnecting" and not net.errors
-    revived = FakeServer(port=port)                    # server comes back on the same port
+    revived = FakeServer(port=port)
     try:
         assert wait_until(lambda: len(net.joins) == 2, timeout=4)
     finally:
@@ -385,7 +378,6 @@ def test_close_sends_leave_and_does_not_reconnect(net, server):
     assert len(server.hellos) == 1
 
 
-# ======================================================== heartbeat
 def test_ping_pong_rtt(net, server):
     net.ping_interval = 0.05
     rtts = Recorder()
@@ -410,7 +402,6 @@ def test_silent_link_is_declared_dead(net, server):
     assert wait_until(lambda: len(server.hellos) >= 2)
 
 
-# ======================================================== inspector
 def test_frame_log_sizes_and_fields(net, server):
     net.connect_to("127.0.0.1", server.port, "alice", "r1")
     assert wait_until(lambda: any(f[0]["name"] == "SNAPSHOT" for f in net.frames))
@@ -447,7 +438,6 @@ def test_frame_sizer_byte_by_byte():
     assert _FrameSizer().feed(stream) == [len(f) for f in frames]
 
 
-# ============================================================ chaos
 def test_chaos_drop_in_client_only_affects_ops(net, server):
     net.connect_to("127.0.0.1", server.port, "alice", "r1")
     assert wait_until(net.is_joined)
@@ -473,7 +463,7 @@ def test_fault_injector_disabled_passthrough(qapp):
     fi.latency_ms = 500
     out, deliver = _sink()
     assert fi.process(MsgType.OP, {"seq": 1}, deliver) is None
-    assert out == [(MsgType.OP, {"seq": 1})]                     # synchronous, untouched
+    assert out == [(MsgType.OP, {"seq": 1})]
 
 
 def test_fault_injector_drop_only_ops(qapp):
@@ -500,7 +490,7 @@ def test_fault_injector_delay(qapp):
     fi.enabled, fi.latency_ms = True, 60
     out, deliver = _sink()
     assert fi.process(MsgType.OP, {"seq": 1}, deliver) == "delayed 60 ms"
-    assert out == []                                            # not yet
+    assert out == []
     QTest.qWait(20)
     assert out == []
     assert wait_until(lambda: len(out) == 1, timeout=1)
@@ -529,7 +519,6 @@ def test_fault_injector_dup_and_delay_tag_and_cut(qapp):
     assert cuts == [1]
 
 
-# ========================================================== metrics
 def test_metrics_window_and_totals(qapp):
     m = Metrics(autostart=False)
     got = Recorder()
@@ -544,7 +533,7 @@ def test_metrics_window_and_totals(qapp):
     assert s["by_type"] == {"OP": 3, "PING": 1}
     assert s["rtt_ms"] == 1.5 and s["rtt_hist"] == [1.5]
     assert (s["total_in"], s["total_out"]) == (3, 1)
-    s2 = m.tick()                                               # next second: rates reset
+    s2 = m.tick()
     assert (s2["msgs_in"], s2["bytes_in"], s2["by_type"]) == (0, 0, {})
     assert (s2["total_in"], s2["total_out"], s2["rtt_ms"]) == (3, 1, 1.5)
     for i in range(100):
@@ -553,21 +542,20 @@ def test_metrics_window_and_totals(qapp):
 
 
 def test_netclient_counts_traffic_and_forwards_stats(net, server):
-    net.metrics.stop()                  # tick manually so the window is deterministic
+    net.metrics.stop()
     got = Recorder()
     net.stats.connect(got)
     net.connect_to("127.0.0.1", server.port, "alice", "r1")
     assert wait_until(lambda: any(m[0] == MsgType.SNAPSHOT for m in net.messages))
     s = net.metrics.tick()
     assert got and got[-1][0] == s
-    assert s["msgs_in"] >= 3 and s["total_in"] >= 3            # CHALLENGE, JOINED, SNAPSHOT
-    assert s["msgs_out"] >= 2                                   # HELLO, JOIN (+PING)
+    assert s["msgs_in"] >= 3 and s["total_in"] >= 3
+    assert s["msgs_out"] >= 2
     assert s["by_type"]["HELLO"] == 1 and s["by_type"]["JOINED"] == 1
     expected_in = sum(sum(v) for v in server.sent_sizes.values())
     assert wait_until(lambda: net.metrics.total_bytes_in == expected_in)
 
 
-# ======================================================== discovery
 class FakeResponder:
     """UDP discovery responder on 127.0.0.1 that answers as two servers."""
 
@@ -594,7 +582,7 @@ class FakeResponder:
                          "rooms": [{"code": "r1", "name": "R", "users": 1, "protected": False,
                                     "locked": False}]}
                 self.sock.sendto(json.dumps(reply).encode(), addr)
-            self.sock.sendto(b"not json", addr)                    # garbage is ignored
+            self.sock.sendto(b"not json", addr)
 
     def close(self) -> None:
         self._stop.set()
@@ -614,7 +602,7 @@ def test_discovery_dedupes_sorts_and_expires(qapp):
         assert all(s["host"] == "127.0.0.1" and s["port"] == 5050 for s in servers)
         assert set(servers[0]) == {"server_id", "name", "host", "port", "proto", "rooms", "last_seen"}
         n_emits = len(seen)
-        QTest.qWait(300)                       # refreshes only update last_seen: no new emits
+        QTest.qWait(300)
         assert len(seen) == n_emits
         resp.active = False
         assert wait_until(lambda: seen[-1][0] == [], timeout=2)

@@ -63,7 +63,6 @@ class BotClient:
         self.ping_enabled = ping
         self.client_id = uuid.uuid4().hex[:8]
 
-        # session state
         self.user_id: str | None = None
         self.role: str | None = None
         self.resume_token: str | None = None
@@ -84,7 +83,7 @@ class BotClient:
         self.resyncs = 0
         self.snapshots = 0
 
-        self._buffer: dict[int, dict] = {}       # out-of-order OPs waiting for a gap to fill
+        self._buffer: dict[int, dict] = {}
         self._resync_asked = False
         self._op_counter = 0
         self._obj_counter = 0
@@ -98,7 +97,6 @@ class BotClient:
         self.connected = False
         self.frames_in = self.frames_out = self.bytes_in = self.bytes_out = 0
 
-    # ------------------------------------------------------------------ plumbing
     def _notify(self) -> None:
         self._changed.set()
         self._changed = asyncio.Event()
@@ -150,7 +148,6 @@ class BotClient:
         """All inbox messages of one type (not consumed)."""
         return [p for t, p in self.inbox if t == msg_type]
 
-    # ------------------------------------------------------------------ connect
     def _verifier(self, salt: str) -> str:
         if salt not in self._verifier_cache:
             self._verifier_cache[salt] = auth.make_verifier(self.password or "", salt)
@@ -199,7 +196,7 @@ class BotClient:
                 continue
             await self._close_transport()
             raise JoinError(code, p.get("msg", ""))
-        self.create = False                       # a later reconnect joins the existing room
+        self.create = False
         await asyncio.wait_for(self._synced.wait(), timeout)
         if self.ping_enabled:
             self._tasks.append(asyncio.create_task(self._ping_loop()))
@@ -246,7 +243,7 @@ class BotClient:
 
     async def _read_loop(self) -> None:
         dec = FrameDecoder()
-        parts = PartAssembler()                 # per connection: transfer ids restart
+        parts = PartAssembler()
         reader = self._reader
         assert reader is not None
         try:
@@ -260,7 +257,7 @@ class BotClient:
                     if t in (MsgType.SNAPSHOT, MsgType.HISTORY):
                         p = parts.add(t, p)
                         if p is None:
-                            continue            # wait for the remaining parts
+                            continue
                     self._on_message(t, p)
                     self.inbox.append((t, p))
                 self._notify()
@@ -278,7 +275,6 @@ class BotClient:
             self.send(MsgType.PING, payload)
             await asyncio.sleep(C.PING_INTERVAL)
 
-    # ------------------------------------------------------------------ inbound
     def _on_message(self, t: int, p: dict) -> None:
         if t == MsgType.OP:
             self._on_op(p)
@@ -301,7 +297,7 @@ class BotClient:
                 self.hash_checks += 1
                 if p.get("hash") != self.board.hash():
                     self.hash_mismatches += 1
-                    self.send(MsgType.RESYNC, {"last_seq": -1})   # heal: forces a SNAPSHOT
+                    self.send(MsgType.RESYNC, {"last_seq": -1})
         elif t == MsgType.JOINED:
             self.joined = p
             self.user_id, self.role = p["user_id"], p["role"]
@@ -336,9 +332,6 @@ class BotClient:
         """Called after SNAPSHOT / OP_BATCH: finish the join or re-ask for a remaining gap."""
         if not self._synced.is_set():
             self._synced.set()
-            # Offline edits are re-sent in the same callback, before any new submit can
-            # interleave, so the server sees them in the order the user made them.
-            # Ops the server already accepted are deduplicated by op_id.
             for op_id, op in list(self.pending.items()):
                 self.send(MsgType.OP_SUBMIT, {"op_id": op_id, "op": op})
         if self._buffer:
@@ -356,13 +349,13 @@ class BotClient:
             self.acked += 1
         seq = m["seq"]
         if seq <= self.board.seq:
-            self.dup_ops += 1                     # duplicate or already in our snapshot
+            self.dup_ops += 1
             return
         if seq == self.board.seq + 1:
             self.board.apply(m["op"], seq)
             self._drain_buffer()
             return
-        self._buffer[seq] = m                     # gap: hold it and ask for the missing tail
+        self._buffer[seq] = m
         if not self._resync_asked:
             self._resync_asked = True
             self.resyncs += 1
@@ -377,7 +370,6 @@ class BotClient:
         if not self._buffer:
             self._resync_asked = False
 
-    # ------------------------------------------------------------------ actions
     def new_id(self) -> str:
         self._obj_counter += 1
         return f"{self.user_id}-{self.client_id}-{self._obj_counter}"
@@ -403,10 +395,6 @@ class BotClient:
         """Wait until every submitted op is acknowledged or rejected."""
         await self.wait_until(lambda: not self.pending and not self._buffer, timeout)
 
-
-# ---------------------------------------------------------------------------
-# random workload
-# ---------------------------------------------------------------------------
 
 def random_stroke(bot: BotClient, rng: random.Random) -> dict:
     x, y = rng.randint(0, 1600), rng.randint(0, 900)
@@ -449,10 +437,6 @@ def random_op(bot: BotClient, rng: random.Random) -> dict:
                                   for _ in range(rng.randint(2, 4))]}
 
 
-# ---------------------------------------------------------------------------
-# stress CLI
-# ---------------------------------------------------------------------------
-
 async def _join_or_create(bot: BotClient) -> None:
     try:
         await bot.connect()
@@ -462,7 +446,7 @@ async def _join_or_create(bot: BotClient) -> None:
         bot.create = True
         try:
             await bot.connect()
-        except JoinError as exc2:          # somebody else created it in the meantime
+        except JoinError as exc2:
             if exc2.code != Err.ROOM_EXISTS:
                 raise
             bot.create = False
@@ -484,7 +468,7 @@ async def stress(args: argparse.Namespace) -> int:
         while not stop.is_set():
             if not bot.connected and not bot.kicked:
                 try:
-                    await bot.connect()           # resume after e.g. a lagging drop
+                    await bot.connect()
                 except Exception as exc:
                     print(f"{bot.username}: reconnect failed: {exc}")
                     await asyncio.sleep(1)
@@ -517,7 +501,6 @@ async def stress(args: argparse.Namespace) -> int:
     elapsed = time.monotonic() - t_start
     await asyncio.gather(*(b.settle(15) for b in bots), return_exceptions=True)
 
-    # the server's truth: a fresh observer receives SNAPSHOT {seq, hash}
     checker = BotClient(args.host, args.port, "checker", args.room, password=args.password)
     await checker.connect()
     seq, server_hash = checker.board.seq, checker.board.hash()

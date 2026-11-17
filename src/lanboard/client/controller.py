@@ -60,10 +60,10 @@ from ..common.model import Board, get_key, op_object_ids
 from ..common.protocol import PartAssembler, ProtocolError
 from ..common.undo import UndoManager
 
-GAP_TIMEOUT_MS = 400        # how long to wait for a missing seq before RESYNC
-MAX_REORDER = 256           # buffered out-of-order ops before forcing a RESYNC
-BLOB_RETRIES = 3            # BLOB_GET retries when the server does not have the image (yet)
-BLOB_RETRY_MS = 700         # back-off step between those retries
+GAP_TIMEOUT_MS = 400
+MAX_REORDER = 256
+BLOB_RETRIES = 3
+BLOB_RETRY_MS = 700
 
 
 def _differs(a: dict | None, b: dict | None) -> bool:
@@ -75,7 +75,6 @@ def _differs(a: dict | None, b: dict | None) -> bool:
 
 
 class SessionController(QObject):
-    # --- signals (see docs/CLIENT_API.md) ------------------------------------
     reset = Signal()
     objects_changed = Signal(object)
     participants_changed = Signal()
@@ -101,12 +100,12 @@ class SessionController(QObject):
     def __init__(self, net, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.net = net
-        self.board = Board()                    # confirmed replica
-        self.view = Board()                     # confirmed + pending (rendered)
-        self.pending: OrderedDict[str, dict] = OrderedDict()   # op_id -> local (normalised) op
-        self._wire: dict[str, dict] = {}        # op_id -> op as sent on the wire
-        self._reorder: dict[int, dict] = {}     # seq -> OpMsg waiting for its predecessors
-        self._parts = PartAssembler()           # multi-part SNAPSHOT / HISTORY in progress
+        self.board = Board()
+        self.view = Board()
+        self.pending: OrderedDict[str, dict] = OrderedDict()
+        self._wire: dict[str, dict] = {}
+        self._reorder: dict[int, dict] = {}
+        self._parts = PartAssembler()
         self.undo_mgr = UndoManager()
 
         self.participants: dict[str, dict] = {}
@@ -117,32 +116,28 @@ class SessionController(QObject):
         self._op_n = 0
         self._id_n = 0
         self._state = "offline"
-        self._last_hash: tuple[int, str] | None = None     # last verified (seq, hash)
-        self._hash_checks: dict[int, str] = {}              # future seq -> expected hash
+        self._last_hash: tuple[int, str] | None = None
+        self._hash_checks: dict[int, str] = {}
         self._mismatch = False
         self._healing = False
         self._resend_queue: list[tuple[str, dict]] = []
 
-        # blobs: content-addressed image store
         self._blobs: dict[str, bytes] = {}
         self._blob_mime: dict[str, str] = {}
         self._blob_requested: set[str] = set()
         self._blob_parts: dict[str, dict[int, bytes]] = {}
-        self._blob_uploads: list[str] = []      # uploads to (re)send once joined
-        self._blob_retries: dict[str, int] = {}  # hash -> BLOB_GET retries after NOT_FOUND
+        self._blob_uploads: list[str] = []
+        self._blob_retries: dict[str, int] = {}
 
-        # gap detection timer
         self._gap_timer = QTimer(self)
         self._gap_timer.setSingleShot(True)
         self._gap_timer.timeout.connect(self._on_gap_timeout)
 
-        # live stroke batching: collect points, flush at ~30 Hz
         self._live_buf: dict[str, dict] = {}
         self._live_timer = QTimer(self)
         self._live_timer.setInterval(C.LIVE_FLUSH_MS)
         self._live_timer.timeout.connect(self._flush_live)
 
-        # cursor throttling: at most one CURSOR per CURSOR_MIN_INTERVAL_MS, latest wins
         self._cursor_last = 0.0
         self._cursor_pending: tuple[float, float] | None = None
         self._cursor_timer = QTimer(self)
@@ -155,9 +150,6 @@ class SessionController(QObject):
         net.state_changed.connect(self._on_net_state)
         net.error.connect(self._on_net_error)
 
-    # =========================================================================
-    # identity & permissions
-    # =========================================================================
     @property
     def user_id(self) -> str:
         return (self.me or {}).get("user_id") or getattr(self.net, "user_id", None) or "local"
@@ -185,9 +177,6 @@ class SessionController(QObject):
     def can_clear(self) -> bool:
         return self.is_owner() or (self.can_edit() and bool((self.room or {}).get("editors_can_clear")))
 
-    # =========================================================================
-    # board editing API (used by canvas tools)
-    # =========================================================================
     def new_id(self) -> str:
         """Globally unique object id without a round trip.
 
@@ -210,7 +199,7 @@ class SessionController(QObject):
             return None
         self._op_n += 1
         op_id = f"{getattr(self.net, 'client_id', 'c')}:{self._op_n}"
-        local = self.view.normalise(op, self.user_id)        # e.g. clear -> delete{ids}
+        local = self.view.normalise(op, self.user_id)
         self.pending[op_id] = local
         self._wire[op_id] = op
         changed = self.view.apply(local)
@@ -256,7 +245,7 @@ class SessionController(QObject):
             return None
         prev = {k: copy.deepcopy(get_key(o, k)) for k in changes}
         if all(prev[k] == v for k, v in changes.items()):
-            return None                                       # nothing actually changes
+            return None
         return {"k": "update", "id": oid, "set": copy.deepcopy(changes), "prev": prev}
 
     def update_object(self, oid: str, changes: dict) -> None:
@@ -297,9 +286,6 @@ class SessionController(QObject):
     def _emit_undo_state(self) -> None:
         self.undo_state.emit(self.undo_mgr.can_undo, self.undo_mgr.can_redo)
 
-    # =========================================================================
-    # ephemeral presence API
-    # =========================================================================
     def send_cursor(self, x: float, y: float) -> None:
         """Throttled to 20 Hz. Only the latest position matters, so intermediates are dropped."""
         self._cursor_pending = (x, y)
@@ -358,9 +344,6 @@ class SessionController(QObject):
         if self.net.is_joined():
             self.net.send(MsgType.SIGNAL, {"kind": kind})
 
-    # =========================================================================
-    # chat, admin, saves, history
-    # =========================================================================
     def send_chat(self, text: str) -> None:
         text = (text or "").strip()
         if not text:
@@ -406,9 +389,6 @@ class SessionController(QObject):
     def request_history(self) -> None:
         self.net.send(MsgType.HISTORY_REQ, {})
 
-    # =========================================================================
-    # blobs (images / PDF pages)
-    # =========================================================================
     def put_blob(self, data: bytes, mime: str) -> str:
         """Store locally and upload in chunks. Returns the sha256 content address."""
         h = hashlib.sha256(data).hexdigest()
@@ -447,7 +427,7 @@ class SessionController(QObject):
         if len(parts) == count:
             data = b"".join(parts[i] for i in range(count))
             del self._blob_parts[h]
-            if hashlib.sha256(data).hexdigest() != h:          # integrity check
+            if hashlib.sha256(data).hexdigest() != h:
                 self._blob_requested.discard(h)
                 self.notice.emit("warn", "Image transfer corrupted, retrying...")
                 return
@@ -455,9 +435,6 @@ class SessionController(QObject):
             self._blob_mime[h] = p.get("mime", "image/png")
             self.blob_ready.emit(h)
 
-    # =========================================================================
-    # network events
-    # =========================================================================
     def _on_net_state(self, state: str) -> None:
         self._state = state
         self.connection_state.emit(state)
@@ -478,27 +455,22 @@ class SessionController(QObject):
         self.me = self.participants[self.me["user_id"]]
         self.chat = list(p.get("chat", []))
         self._reorder.clear()
-        self._parts.clear()                     # transfer ids restart on every connection
+        self._parts.clear()
         self._healing = False
         self._mismatch = False
         self.me_changed.emit(self.me)
         self.room_changed.emit(self.room)
         self.participants_changed.emit()
         self.chat_reset.emit(self.chat)
-        # Images first: the server handles one connection's frames in order, so the
-        # blobs are stored before the queued ops that reference them are sequenced
-        # (otherwise other clients would ask for an image the server doesn't have yet).
         for h in self._blob_uploads:
             self._upload_blob(h)
         self._blob_uploads.clear()
-        self._blob_requested.clear()                       # re-request anything still missing
-        # offline-first: replay everything not yet acknowledged, in original order.
-        # The server drops op_ids it already accepted and re-echoes them.
+        self._blob_requested.clear()
         self._resend_queue = list(self._wire.items())
         self._pump_resend()
         self._emit_sync()
 
-    RESEND_PER_TICK = 100          # stay under the server's 120 ops/s token bucket
+    RESEND_PER_TICK = 100
 
     def _pump_resend(self) -> None:
         """Replay queued offline ops in order, paced to respect the server's rate limit."""
@@ -514,11 +486,10 @@ class SessionController(QObject):
         if handler is not None:
             handler(self, p)
 
-    # --- board sync -------------------------------------------------------------
     def _on_snapshot(self, p: dict) -> None:
         p = self._parts.add(MsgType.SNAPSHOT, p)
         if p is None:
-            return                              # more parts to come: keep the old board for now
+            return
         snap = p.get("board") or {}
         self.board = Board.from_snapshot({"seq": p.get("seq", snap.get("seq", 0)),
                                           "objects": snap.get("objects", [])})
@@ -541,11 +512,6 @@ class SessionController(QObject):
     def _on_op(self, m: dict) -> None:
         seq = int(m.get("seq", 0))
         if seq <= self.board.seq:
-            # Duplicate: already applied. But it may still be the ack of one of our own
-            # ops: the server accepted it, the link died before the echo arrived, and the
-            # resume was healed by a SNAPSHOT that already contains it. The server then
-            # de-duplicates our resend and re-echoes the original seq: settle it here,
-            # or it would stay "pending" (and be resent) forever.
             op_id = m.get("op_id")
             if op_id in self.pending:
                 self.pending.pop(op_id, None)
@@ -554,7 +520,7 @@ class SessionController(QObject):
                 self._emit_sync()
             return
         if seq > self.board.seq + 1:
-            self._reorder[seq] = m                   # gap: hold until predecessors arrive
+            self._reorder[seq] = m
             if len(self._reorder) > MAX_REORDER:
                 self._request_resync()
             elif not self._gap_timer.isActive():
@@ -576,7 +542,6 @@ class SessionController(QObject):
         seq, op, op_id = int(m["seq"]), m["op"], m.get("op_id")
         mine = op_id in self.pending
         if not self.pending and not mine:
-            # fast path: nothing pending, so view == board. Apply to both.
             self.board.apply(op, seq)
             changed = self.view.apply(op, seq)
             if op.get("k") == "replace":
@@ -618,7 +583,6 @@ class SessionController(QObject):
         self._reorder.clear()
         self._gap_timer.stop()
         if self.net.is_joined():
-            # last_seq -1 asks the server for a full SNAPSHOT (used to heal a divergence)
             self.net.send(MsgType.RESYNC, {"last_seq": -1 if from_scratch else self.board.seq})
         self._emit_sync()
 
@@ -627,7 +591,7 @@ class SessionController(QObject):
         if seq == self.board.seq:
             self._check_hash(seq, h)
         elif seq > self.board.seq:
-            self._hash_checks[seq] = h               # verify when we get there
+            self._hash_checks[seq] = h
             for s in [s for s in self._hash_checks if s < self.board.seq]:
                 del self._hash_checks[s]
 
@@ -637,7 +601,6 @@ class SessionController(QObject):
             self._last_hash = (seq, actual)
             self._mismatch = False
         else:
-            # should never happen; if it does, heal by fetching a fresh replica
             self._mismatch = True
             self.notice.emit("warn", f"Board diverged at seq {seq}; resynchronising.")
             self._request_resync(from_scratch=True)
@@ -675,7 +638,6 @@ class SessionController(QObject):
             "verified_seq": self._last_hash[0] if self._last_hash else None,
         })
 
-    # --- presence ---------------------------------------------------------------
     def _on_user_joined(self, p: dict) -> None:
         part = p.get("participant") or {}
         if part.get("user_id"):
@@ -703,7 +665,7 @@ class SessionController(QObject):
         self.room = p.get("room") or self.room
         self.room_changed.emit(self.room)
         if self.me:
-            self.me_changed.emit(self.me)           # permissions may have changed
+            self.me_changed.emit(self.me)
 
     def _on_chat(self, p: dict) -> None:
         self.chat.append(p)
@@ -714,8 +676,6 @@ class SessionController(QObject):
     def _on_error(self, p: dict) -> None:
         h = p.get("hash")
         if isinstance(h, str) and p.get("code") == Err.NOT_FOUND and h in self._blob_requested:
-            # BLOB_GET raced the uploader (its upload has not finished yet): ask again a
-            # little later instead of showing a raw "unknown blob" error.
             tries = self._blob_retries.get(h, 0)
             if tries < BLOB_RETRIES:
                 self._blob_retries[h] = tries + 1

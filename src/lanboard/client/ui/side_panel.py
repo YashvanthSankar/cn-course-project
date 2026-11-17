@@ -26,10 +26,10 @@ class TabSwitcher(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.tabs: list[dict] = []           # {text, icon, badge, kind}
+        self.tabs: list[dict] = []
         self.current = 0
         self._hover = -1
-        self._x = 0.0                        # animated highlight position (in tab units)
+        self._x = 0.0
         self._anim = QVariantAnimation(self, duration=220)
         self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._anim.valueChanged.connect(self._set_x)
@@ -103,7 +103,6 @@ class TabSwitcher(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(t["surface3"] if not theme.manager().dark else t["bg"]))
         p.drawRoundedRect(track, 11, 11)
-        # sliding highlight
         hl = self._seg_rect(self._x)
         theme.paint_shadow(p, hl, 8, spread=4, strength=0.6, dy=1)
         p.setBrush(QColor(t["surface"] if not theme.manager().dark else t["surface3"]))
@@ -120,7 +119,6 @@ class TabSwitcher(QWidget):
             badge_txt = (str(tab["badge"]) if tab["badge"] < 100 else "99+") if tab["badge"] else ""
             bw = max(16, QFontMetrics(bf).horizontalAdvance(badge_txt) + 9) if badge_txt else 0
             show_text = r.width() >= tw + 30 + (bw + 4 if bw else 0)
-            # icon, label and badge are centred together as one group
             total = 16 + (6 + tw if show_text else 0) + (4 + bw if bw else 0)
             x0 = r.center().x() - total / 2
             theme.icon(tab["icon"], icol, 16).paint(p, QRectF(x0, r.center().y() - 8, 16, 16).toRect())
@@ -159,7 +157,6 @@ class SideTabs(QWidget):
         self._texts: list[str] = []
         self.switcher.selected.connect(self.setCurrentIndex)
 
-    # -- QTabWidget-like API ------------------------------------------------------
     def addTab(self, widget: QWidget, text: str, icon_name: str = "dot") -> int:  # noqa: N802
         self.stack.addWidget(widget)
         self._texts.append(text)
@@ -187,7 +184,6 @@ class SideTabs(QWidget):
     def tabText(self, i: int) -> str:  # noqa: N802
         return self._texts[i]
 
-    # -- badges -------------------------------------------------------------------
     def set_badge(self, i: int, n: int, kind: str = "accent") -> None:
         self.switcher.set_badge(i, n, kind)
 

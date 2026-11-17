@@ -32,7 +32,7 @@ from . import theme
 from .widgets import Segmented
 
 CHECKPOINT_EVERY = 200
-TICK_MS = 50                         # playback timer; 1x = 1 op per tick = 20 ops/s
+TICK_MS = 50
 SPEEDS = (1, 4, 16)
 
 
@@ -47,7 +47,7 @@ class HistoryTimeline:
                                       key=lambda o: o.get("seq", 0))
         base_board = Board.from_snapshot({"seq": self.base_seq, "objects": base.get("objects", [])})
         self.checkpoints: dict[int, Board] = {0: base_board}
-        self._work = base_board.copy()       # board being advanced during playback
+        self._work = base_board.copy()
         self._work_pos = 0
 
     def __len__(self) -> int:
@@ -71,7 +71,7 @@ class HistoryTimeline:
             entry = self.ops[i]
             try:
                 board.apply(entry["op"], int(entry.get("seq", 0)))
-            except Exception:                 # a malformed op is skipped, like on replicas
+            except Exception:
                 pass
             nxt = i + 1
             if nxt % self.every == 0 and nxt not in self.checkpoints:
@@ -113,7 +113,7 @@ def describe_op(op: dict) -> str:
 class HistoryPanel(QWidget):
     """Scrubber + time-lapse player for the room's op log."""
 
-    preview_changed = Signal(bool, int)      # (previewing?, seq)
+    preview_changed = Signal(bool, int)
 
     def __init__(self, controller, canvas, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -194,7 +194,6 @@ class HistoryPanel(QWidget):
         theme.on_theme_change(self, lambda: self._update_play_icon())
         self._update_play_icon()
 
-    # -- loading -------------------------------------------------------------
     def request(self) -> None:
         self.info.setText("Requesting the op log from the server…")
         self.load_btn.setEnabled(False)
@@ -208,7 +207,7 @@ class HistoryPanel(QWidget):
         self.load_btn.setEnabled(True)
         self.load_btn.setText("Reload history")
         text = f"{len(tl):,} ops · seq {tl.base_seq} → {tl.seq_at(tl.end)}"
-        if tl.base_seq > 0:                     # the server compacts old log entries into a base snapshot
+        if tl.base_seq > 0:
             text += f"\nOlder history trimmed. Starts at seq {tl.base_seq + 1}"
         self.info.setText(text)
         self.slider.blockSignals(True)
@@ -219,7 +218,6 @@ class HistoryPanel(QWidget):
         self.play_btn.setEnabled(tl.end > 0)
         self._caption(tl.end)
 
-    # -- preview ---------------------------------------------------------------
     def _on_slider(self, pos: int) -> None:
         self.show_position(pos)
 
@@ -278,11 +276,10 @@ class HistoryPanel(QWidget):
                 != QMessageBox.StandardButton.Yes:
             return
         board = self.timeline.board_at(pos)
-        objects = [dict(o) for o in board.objects.values()]   # live + tombstoned
+        objects = [dict(o) for o in board.objects.values()]
         self.controller.submit({"k": "replace", "objects": objects}, undoable=False)
         self.exit_preview()
 
-    # -- playback ------------------------------------------------------------------
     def toggle_play(self) -> None:
         if self.timer.isActive():
             self.stop()
@@ -293,7 +290,7 @@ class HistoryPanel(QWidget):
         if self.timeline is None or self.timeline.end == 0:
             return
         if self.slider.value() >= self.timeline.end:
-            self.slider.setValue(0)              # restart from the beginning
+            self.slider.setValue(0)
         self.timer.start()
         self._update_play_icon()
 

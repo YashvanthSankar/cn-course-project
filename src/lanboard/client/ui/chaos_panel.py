@@ -22,7 +22,6 @@ from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QSlider, QVBoxLa
 from . import theme
 from .widgets import ToggleSwitch
 
-#: attribute on net.chaos, label, max, unit, explanation
 KNOBS = [
     ("latency_ms", "Latency", 1000, "ms", "Delays every inbound frame. Watch RTT rise in the HUD."),
     ("jitter_ms", "Jitter", 500, "ms", "Random extra delay, so frames arrive out of order. Ops are still applied by seq."),
@@ -100,7 +99,6 @@ class ChaosPanel(QWidget):
                                 "and receives only the ops it missed. Edits made meanwhile are queued.")
         self.cut_btn.clicked.connect(self.cut)
         lay.addWidget(self.cut_btn)
-        # live counters kept by the FaultInjector (if it has them)
         self.counters = QLabel("")
         self.counters.setProperty("role", "mono")
         self.counters.setStyleSheet("font-size: 11px;")
@@ -127,7 +125,6 @@ class ChaosPanel(QWidget):
     def retheme(self) -> None:
         t = theme.tokens()
         self.cut_btn.setIcon(theme.icon("scissors", "#ffffff", 20))
-        # value read-outs are small monospace chips that turn amber while a fault is active
         for attr, lab in self.value_labels.items():
             active = self.enable.isChecked() and self.sliders[attr].value() > 0
             tok = "warn" if active else "muted"

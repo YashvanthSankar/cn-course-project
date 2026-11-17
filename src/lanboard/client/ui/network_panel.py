@@ -53,7 +53,6 @@ class LiveHeader(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(g)
         p.drawRoundedRect(r, 12, 12)
-        # faint "packet" ticks across the strip: decoration that hints at a wire
         p.setPen(QPen(QColor(255, 255, 255, 34), 1))
         x = r.left() + 8
         while x < r.right() - 4:
@@ -67,14 +66,12 @@ class LiveHeader(QWidget):
         p.setFont(theme.mono_font(11))
         p.setPen(QColor(255, 255, 255, 215))
         line = QRectF(r.left() + 14, r.top() + 29, r.width() - 28, 18)
-        # rate on the right wins; the endpoint elides into what is left (narrow side panel)
         fm = p.fontMetrics()
         rate = fm.elidedText(self.rate, Qt.TextElideMode.ElideRight, int(line.width() * 0.6))
         rate_w = fm.horizontalAdvance(rate)
         ep = fm.elidedText(f"TCP {host}:{port}", Qt.TextElideMode.ElideMiddle, int(line.width() - rate_w - 10))
         p.drawText(line, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, ep)
         p.drawText(line, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, rate)
-        # LIVE chip
         chip = QRectF(r.right() - 70, r.top() + 7, 58, 20)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 46))
@@ -104,7 +101,7 @@ class NetworkPanel(QWidget):
         self.setObjectName("SidePage")
         self.hud = HudPanel(net, controller)
         self.inspector = InspectorPanel(net)
-        self.inspector.setMinimumHeight(500)        # table + detail pane always usable
+        self.inspector.setMinimumHeight(500)
         self.chaos = ChaosPanel(net)
 
         column = QWidget()

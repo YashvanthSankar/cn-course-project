@@ -60,7 +60,7 @@ class Chart(QWidget):
                  parent: QWidget | None = None, height: int = 86) -> None:
         super().__init__(parent)
         self.title = title
-        self.series_meta = series                  # [(label, palette token)]
+        self.series_meta = series
         self.data = [deque([0.0] * HISTORY, maxlen=HISTORY) for _ in series]
         self.fmt = fmt
         self.setMinimumHeight(height)
@@ -86,7 +86,6 @@ class Chart(QWidget):
         p.setPen(QPen(QColor(t["console_line"]), 1))
         p.setBrush(QColor(t["console"]))
         p.drawRoundedRect(r, 12, 12)
-        # title + current values
         p.setFont(theme.ui_font(10, QFont.Weight.Bold))
         p.setPen(QColor(t["muted"]))
         p.drawText(QRectF(r.left() + 12, r.top() + 7, r.width() - 24, 16),
@@ -99,7 +98,6 @@ class Chart(QWidget):
             p.setPen(QColor(t[tok]))
             p.drawText(QRectF(x - w, r.top() + 7, w + 1, 16), Qt.AlignmentFlag.AlignVCenter, txt)
             x -= w + 12
-        # plot area with a faint grid
         plot = QRectF(r.left() + 10, r.top() + 30, r.width() - 20, r.height() - 38)
         peak = max((max(d) for d in self.data), default=0.0)
         peak = peak * 1.2 if peak > 0 else 1.0
@@ -142,7 +140,6 @@ class Chart(QWidget):
             line.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             p.setPen(line)
             p.drawPath(path)
-            # newest sample marker
             p.setPen(QPen(QColor(t["console"]), 2))
             p.setBrush(c)
             p.drawEllipse(last, 3.6, 3.6)
@@ -162,10 +159,9 @@ class MetricTile(QWidget):
         self.caption.setProperty("role", "section")
         self.caption.setStyleSheet("font-size: 10px;")
         lay.addWidget(self.caption)
-        self.value = ElidedLabel("–", min_px=min_px)    # min_px: shrink this far before eliding
+        self.value = ElidedLabel("–", min_px=min_px)
         self.value.setProperty("role", "metric")
         self.value.setStyleSheet("font-size: 16px;")
-        # never let a long value widen the panel: the tile elides (full text in the tooltip)
         lay.addWidget(self.value)
         self.setMinimumHeight(56)
 
@@ -198,7 +194,6 @@ class HudPanel(QWidget):
         lay.setContentsMargins(12, 4, 12, 8)
         lay.setSpacing(8)
 
-        # headline metrics
         row = QHBoxLayout()
         row.setSpacing(8)
         self.metric_labels: dict[str, QLabel] = {}
@@ -259,7 +254,6 @@ class HudPanel(QWidget):
         if rtt is not None:
             self.metric_labels["rtt"].setText(self._ms(rtt))
         tin, tout = s.get("total_bytes_in", 0), s.get("total_bytes_out", 0)
-        # compact units so both totals fit the tile at the default 400 px side panel
         self.metric_labels["total"].setText(f"{compact_bytes(tin)} / {compact_bytes(tout)}")
         self.tiles["total"].setToolTip(f"Bytes received / sent on this connection\n"
                                        f"{human_bytes(tin)} / {human_bytes(tout)}")

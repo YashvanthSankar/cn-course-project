@@ -34,7 +34,7 @@ RTT_HISTORY = 60
 
 
 class Metrics(QObject):
-    stats = Signal(object)             # dict (object = no QVariantMap copy)
+    stats = Signal(object)
 
     def __init__(self, parent: QObject | None = None, interval_ms: int = 1000,
                  autostart: bool = True) -> None:
@@ -52,7 +52,6 @@ class Metrics(QObject):
         if autostart:
             self._timer.start()
 
-    # ------------------------------------------------------------ counting
     def count_in(self, name: str, size: int) -> None:
         self._msgs_in += 1
         self._bytes_in += size
@@ -71,7 +70,6 @@ class Metrics(QObject):
         self.rtt_ms = float(ms)
         self.rtt_hist.append(self.rtt_ms)
 
-    # ------------------------------------------------------------- timing
     def start(self) -> None:
         self._timer.start()
 

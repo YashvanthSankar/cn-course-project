@@ -11,7 +11,7 @@ from lanboard.server.discovery import lan_ipv4_addresses
 
 from test_e2e_client import ServerThread
 
-SRC = Path(__file__).resolve().parents[1] / "src"   # CI runs from a checkout, not an install
+SRC = Path(__file__).resolve().parents[1] / "src"
 
 
 def test_lan_addresses_are_usable():
@@ -19,7 +19,7 @@ def test_lan_addresses_are_usable():
     assert all(not ip.startswith(("127.", "169.254.", "0.")) for ip in ips)
     assert len(ips) == len(set(ips))
     for ip in ips:
-        socket.inet_aton(ip)                       # every entry is a valid dotted quad
+        socket.inet_aton(ip)
 
 
 def test_busy_port_gives_clear_error(tmp_path):
@@ -41,7 +41,6 @@ def test_is_lanboard_server_tells_real_server_from_other_program(tmp_path):
         assert is_lanboard_server(srv.port)
     finally:
         srv.stop()
-    # some unrelated program that accepts and sends garbage
     with socket.socket() as other:
         other.bind(("127.0.0.1", 0))
         other.listen()

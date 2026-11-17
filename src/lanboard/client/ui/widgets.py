@@ -103,10 +103,6 @@ def vsep(height: int = 22) -> QFrame:
     return f
 
 
-# ---------------------------------------------------------------------------
-# toggle switch
-# ---------------------------------------------------------------------------
-
 class ToggleSwitch(QCheckBox):
     """A painted on/off switch with a sliding knob and an optional text label."""
 
@@ -115,7 +111,7 @@ class ToggleSwitch(QCheckBox):
     def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._pos = 0.0                                    # 0 = off, 1 = on (animated)
+        self._pos = 0.0
         self._anim = QVariantAnimation(self, duration=160)
         self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._anim.valueChanged.connect(self._set_pos)
@@ -151,7 +147,6 @@ class ToggleSwitch(QCheckBox):
         y0 = (self.height() - self.TRACK_H) / 2
         track = QRectF(1, y0, self.TRACK_W, self.TRACK_H)
         p.setPen(Qt.PenStyle.NoPen)
-        # off track, then the gradient "on" track faded in by the knob position
         p.setBrush(QColor(t["border_strong"]))
         p.drawRoundedRect(track, self.TRACK_H / 2, self.TRACK_H / 2)
         if self._pos > 0:
@@ -171,10 +166,6 @@ class ToggleSwitch(QCheckBox):
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.text())
         p.end()
 
-
-# ---------------------------------------------------------------------------
-# port field
-# ---------------------------------------------------------------------------
 
 class PortEdit(QLineEdit):
     """A TCP port field (1..65535) with a spin-box-like ``value()`` API."""
@@ -197,10 +188,6 @@ class PortEdit(QLineEdit):
     def setValue(self, v: int) -> None:  # noqa: N802
         self.setText(str(int(v)))
 
-
-# ---------------------------------------------------------------------------
-# segmented control
-# ---------------------------------------------------------------------------
 
 class Segmented(QFrame):
     """A row of mutually exclusive pill buttons. Emits ``changed(index)``."""
@@ -236,10 +223,6 @@ class Segmented(QFrame):
             self.changed.emit(i)
 
 
-# ---------------------------------------------------------------------------
-# floating card
-# ---------------------------------------------------------------------------
-
 class FloatingCard(QWidget):
     """A widget that paints itself as a rounded card with a soft shadow.
 
@@ -258,7 +241,6 @@ class FloatingCard(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self._padding = padding
-        # a bound method (not a lambda) so Qt drops the connection when the card is deleted
         theme.manager().changed.connect(self._theme_changed)
 
     def _theme_changed(self, *_args) -> None:
@@ -286,10 +268,6 @@ class FloatingCard(QWidget):
         """Hook for subclasses that paint on top of the card background."""
 
 
-# ---------------------------------------------------------------------------
-# overlays: toasts + banner
-# ---------------------------------------------------------------------------
-
 LEVEL_TOKEN = {"error": "danger", "warn": "warn", "success": "success", "info": "accent"}
 LEVEL_ICON = {"error": "warn", "warn": "warn", "success": "check", "info": "info"}
 
@@ -313,7 +291,7 @@ class _Toast(FloatingCard):
         self.ic.setStyleSheet(f"background: {theme.rgba(t[tok], 0.16)}; border-radius: 13px;")
         lay.addWidget(self.ic, 0, Qt.AlignmentFlag.AlignTop)
         self.msg = QLabel(text)
-        self.msg.setWordWrap(len(text) > 56)          # short notices stay on one line
+        self.msg.setWordWrap(len(text) > 56)
         self.msg.setMaximumWidth(420)
         self.msg.setStyleSheet("font-weight: 500;")
         lay.addWidget(self.msg, 1)
@@ -333,7 +311,6 @@ class _Toast(FloatingCard):
         QTimer.singleShot(timeout_ms, self.dismiss)
 
     def paint_extra(self, p: QPainter) -> None:
-        # a slim coloured accent on the left edge tells the level at a glance
         t = theme.tokens()
         r = self.card_rect()
         p.setPen(Qt.PenStyle.NoPen)
@@ -341,7 +318,7 @@ class _Toast(FloatingCard):
         p.drawRoundedRect(QRectF(r.left() + 6, r.top() + 10, 3, r.height() - 20), 1.5, 1.5)
 
     def glide_to(self, pos: QPoint) -> None:
-        if not self._placed:                         # first placement: drop in from above
+        if not self._placed:
             self._placed = True
             self.move(pos.x(), pos.y() - 14)
         if self._move.endValue() == pos and self._move.state() == QPropertyAnimation.State.Running:
@@ -383,7 +360,6 @@ class ToastHost(QObject):
         parent.installEventFilter(self)
 
     def show(self, text: str, level: str = "info", timeout_ms: int = 4200) -> None:
-        # the same text twice in a row (e.g. repeated warnings) only refreshes the stack
         for old in self._toasts:
             if old.text == text and not old._closing:
                 return
@@ -437,7 +413,7 @@ class ToastHost(QObject):
             self._toasts.remove(toast)
         try:
             self._layout()
-        except RuntimeError:              # parent already destroyed (app shutting down)
+        except RuntimeError:
             pass
 
     def _layout(self) -> None:
@@ -449,7 +425,7 @@ class ToastHost(QObject):
                 toast.glide_to(QPoint(x, y))
                 toast.raise_()
                 y += toast.height() - FloatingCard.SHADOW - 4
-            except RuntimeError:              # C++ object already gone
+            except RuntimeError:
                 pass
 
     def relayout(self) -> None:
@@ -468,7 +444,7 @@ class Banner(FloatingCard):
 
     def __init__(self, parent: QWidget, offset: int = 12) -> None:
         super().__init__(parent, radius=18, padding=(12, 5, 6, 5))
-        self.offset = offset                       # distance from the parent's top edge
+        self.offset = offset
         self.setObjectName("Banner")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(*self.inner_margins())
@@ -526,10 +502,6 @@ class Banner(FloatingCard):
         return False
 
 
-# ---------------------------------------------------------------------------
-# popover
-# ---------------------------------------------------------------------------
-
 class Popover(FloatingCard):
     """A card shown under an anchor widget inside the same top-level window.
 
@@ -582,16 +554,12 @@ class Popover(FloatingCard):
             on_anchor = self._anchor is not None and self._anchor.rect().contains(self._anchor.mapFromGlobal(gp))
             if not inside:
                 self.close_popover()
-                return on_anchor                # swallow the click that would re-open it
+                return on_anchor
         elif et == QEvent.Type.KeyPress and self.isVisible() and ev.key() == Qt.Key.Key_Escape:
             self.close_popover()
             return True
         return False
 
-
-# ---------------------------------------------------------------------------
-# collapsible section
-# ---------------------------------------------------------------------------
 
 class Section(QWidget):
     """A section with an uppercase title row (click to collapse) and a body widget."""

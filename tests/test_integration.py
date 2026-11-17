@@ -48,15 +48,11 @@ def stroke(bot: BotClient, x: int = 0) -> dict:
 
 async def caught_up(srv: Server, *bots: BotClient, room: str = "R") -> None:
     for b in bots:
-        await b.settle()                       # every op acked => the server has sequenced it
+        await b.settle()
     seq = srv.rooms[room].seq
     for b in bots:
         await b.wait_until(lambda b=b: b.board.seq == seq)
 
-
-# ---------------------------------------------------------------------------
-# handshake & join
-# ---------------------------------------------------------------------------
 
 async def test_create_join_and_errors(server):
     a = await make(server, "alice", create=True, room_name="Lab")
@@ -98,14 +94,14 @@ async def test_list_rooms_and_ping_before_join(server):
 async def test_proto_mismatch_and_bad_frames(server):
     for payload in (encode(MsgType.HELLO, {"proto": 999, "username": "x", "client_id": "c"}),
                     b"\x00\x00\x00\x05\x01notjson",
-                    encode(MsgType.JOIN, {"room": "R"})):          # JOIN before HELLO
+                    encode(MsgType.JOIN, {"room": "R"})):
         r, w = await asyncio.open_connection("127.0.0.1", server.port)
         w.write(payload)
         dec, frames = FrameDecoder(), []
         while True:
             data = await asyncio.wait_for(r.read(65536), 2)
             if not data:
-                break                                             # server closed the socket
+                break
             frames += dec.feed(data)
         assert frames[-1][0] == MsgType.ERROR
         assert frames[-1][1]["code"] in (Err.PROTO_MISMATCH, Err.BAD_MESSAGE)
@@ -126,10 +122,6 @@ async def test_late_join_gets_snapshot(server):
     await a.close(); await b.close()
 
 
-# ---------------------------------------------------------------------------
-# ordering, dedupe, resume
-# ---------------------------------------------------------------------------
-
 async def test_concurrent_ops_are_totally_ordered(server):
     bots = [await make(server, "alice", create=True)]
     bots += [await make(server, f"b{i}") for i in range(3)]
@@ -141,7 +133,7 @@ async def test_concurrent_ops_are_totally_ordered(server):
     ref = server.rooms["R"].board.hash()
     for b in bots:
         seqs = [p["seq"] for p in b.received(MsgType.OP)]
-        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)   # in order, no gaps/dups
+        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
         assert b.board.hash() == ref
     for b in bots:
         await b.close()
@@ -155,7 +147,7 @@ async def test_duplicate_submit_is_deduplicated(server):
         a.send(MsgType.OP_SUBMIT, {"op_id": "dup-1", "op": op})
     await a.wait_until(lambda: len(a.received(MsgType.OP)) == 3)
     seqs = [p["seq"] for p in a.received(MsgType.OP)]
-    assert seqs == [1, 1, 1]                      # original OP re-sent to the sender
+    assert seqs == [1, 1, 1]
     await asyncio.sleep(0.1)
     assert [p["seq"] for p in b.received(MsgType.OP)] == [1]
     assert server.rooms["R"].seq == 1 and a.dup_ops == 2
@@ -174,11 +166,11 @@ async def test_resume_gets_op_batch_and_same_identity(server):
     assert left == {"user_id": uid, "reason": Reason.DISCONNECTED}
     for i in range(5):
         a.submit(stroke(a, i))
-    offline_op = b.submit(stroke(b, 99))          # made while offline: queued, sent on resume
+    offline_op = b.submit(stroke(b, 99))
     await a.settle()
     joined = await b.connect()
     assert joined["resumed"] is True and b.user_id == uid and b.resume_token == token
-    assert b.snapshots == snaps_before            # healed with OP_BATCH, not a snapshot
+    assert b.snapshots == snaps_before
     await b.settle()
     assert offline_op not in b.pending
     await caught_up(server, a, b)
@@ -223,10 +215,6 @@ async def test_resync_fills_gap(server):
     await a.close()
 
 
-# ---------------------------------------------------------------------------
-# auth & permissions
-# ---------------------------------------------------------------------------
-
 async def test_password_room(server):
     owner = await make(server, "alice", create=True, password="hunter2")
     assert owner.room["protected"] is True
@@ -239,7 +227,6 @@ async def test_password_room(server):
     ok = await make(server, "bob", password="hunter2")
     assert ok.role == "editor"
 
-    # raw: the nonce changes after each failure, so an old proof cannot be replayed
     r, w = await asyncio.open_connection("127.0.0.1", server.port)
     dec = FrameDecoder()
     queue: list = []
@@ -296,7 +283,7 @@ async def test_lock_room(server):
     a.submit(stroke(a))
     await a.settle()
     assert server.rooms["R"].seq == 1
-    b.send(MsgType.ROOM_SETTINGS, {"locked": False})          # editors cannot unlock
+    b.send(MsgType.ROOM_SETTINGS, {"locked": False})
     assert (await b.wait_for(MsgType.ERROR))["code"] == Err.FORBIDDEN
     await b.wait_for(MsgType.CHAT, lambda p: "locked" in p["text"])
     await a.close(); await b.close()
@@ -326,32 +313,28 @@ async def test_kick(server):
     a.send(MsgType.KICK, {"user_id": b.user_id})
     err = await b.wait_for(MsgType.ERROR)
     assert err["code"] == Err.KICKED
-    await b.wait_until(lambda: not b.connected)              # socket closed by the server
+    await b.wait_until(lambda: not b.connected)
     left = await a.wait_for(MsgType.USER_LEFT)
     assert left["reason"] == Reason.KICKED
-    with pytest.raises(JoinError) as exc:                     # kick = ban: the same app install
-        await b.connect(timeout=2)                            # cannot simply rejoin
+    with pytest.raises(JoinError) as exc:
+        await b.connect(timeout=2)
     assert exc.value.code == Err.KICKED
-    other = await make(server, "bob")                         # a different client still can
+    other = await make(server, "bob")
     assert other.joined["resumed"] is False
     await a.close(); await b.close(); await other.close()
 
 
-# ---------------------------------------------------------------------------
-# liveness
-# ---------------------------------------------------------------------------
-
 async def test_silent_client_times_out(server, monkeypatch):
     monkeypatch.setattr(C, "CLIENT_TIMEOUT", 0.6)
     monkeypatch.setattr(C, "PING_INTERVAL", 0.1)
-    a = await make(server, "alice", create=True)              # pings every 0.1 s
-    b = await make(server, "bob", ping=False)                 # silent
+    a = await make(server, "alice", create=True)
+    b = await make(server, "bob", ping=False)
     left = await a.wait_for(MsgType.USER_LEFT, timeout=4)
     assert left == {"user_id": b.user_id, "reason": Reason.TIMEOUT}
     await b.wait_until(lambda: not b.connected, timeout=2)
     assert a.connected and a.rtt is not None
     await asyncio.sleep(0.2)
-    assert server.rooms["R"].sessions[a.user_id].rtt is not None   # client-reported RTT kept
+    assert server.rooms["R"].sessions[a.user_id].rtt is not None
     await a.close(); await b.close()
 
 
@@ -385,10 +368,6 @@ async def test_slow_reader_is_dropped_as_lagging(server, monkeypatch):
     slow.close()
     await a.close()
 
-
-# ---------------------------------------------------------------------------
-# consistency checkpoints, history, saves
-# ---------------------------------------------------------------------------
 
 async def test_hash_broadcast(server):
     a = await make(server, "alice", create=True)
@@ -433,11 +412,11 @@ async def test_save_list_load(server):
     a.send(MsgType.LOAD, {"name": "nope"})
     assert (await a.wait_for(MsgType.ERROR))["code"] == Err.NOT_FOUND
     a.send(MsgType.LOAD, {"name": "draft 1"})
-    h = await b.wait_for(MsgType.HASH)                     # a replace always gets a checkpoint
+    h = await b.wait_for(MsgType.HASH)
     await caught_up(server, a, b)
     assert b.received(MsgType.OP)[-1]["op"]["k"] == "replace"
     assert h["hash"] == b.board.hash() == server.rooms["R"].board.hash()
-    assert len(b.board) == 4 and server.rooms["R"].board.hash() == saved_hash   # restored exactly
+    assert len(b.board) == 4 and server.rooms["R"].board.hash() == saved_hash
     b.send(MsgType.LIST_SAVES, {})
     assert [s["name"] for s in (await b.wait_for(MsgType.SAVES))["saves"]] == ["draft 1"]
     await a.wait_for(MsgType.CHAT, lambda p: "loaded" in p["text"])
@@ -452,13 +431,9 @@ async def test_chat(server):
     assert m["text"] == "hello world" and m["user_id"] == a.user_id and m["username"] == "alice"
     assert m["color"] == a.joined["color"] and isinstance(m["ts"], float)
     mine = await a.wait_for(MsgType.CHAT, lambda p: p["kind"] == "user")
-    assert mine["cmid"] == cmid                           # sender correlates its echo
+    assert mine["cmid"] == cmid
     await a.close(); await b.close()
 
-
-# ---------------------------------------------------------------------------
-# blobs
-# ---------------------------------------------------------------------------
 
 def blob_chunks(data: bytes, mime: str = "image/png") -> list[dict]:
     sha = hashlib.sha256(data).hexdigest()
@@ -473,7 +448,7 @@ async def test_blob_upload_and_download(server):
     b = await make(server, "bob")
     data = os.urandom(2 * C.BLOB_CHUNK + 1234)
     chunks = blob_chunks(data)
-    for c in reversed(chunks):                             # any order works
+    for c in reversed(chunks):
         a.send(MsgType.BLOB_PUT, c)
     stored = await a.wait_for(MsgType.BLOB_STORED)
     assert stored == {"hash": chunks[0]["hash"]}
@@ -486,26 +461,19 @@ async def test_blob_upload_and_download(server):
     b.send(MsgType.BLOB_GET, {"hash": "0" * 64})
     assert (await b.wait_for(MsgType.ERROR))["code"] == Err.NOT_FOUND
 
-    # corrupted upload: sha256 does not match
     bad = blob_chunks(b"hello")[0]
     bad["hash"] = "f" * 64
     a.send(MsgType.BLOB_PUT, bad)
     assert (await a.wait_for(MsgType.ERROR))["code"] == Err.BAD_MESSAGE
-    # too large
     big = dict(bad, size=C.MAX_BLOB + 1, hash="e" * 64)
     a.send(MsgType.BLOB_PUT, big)
     assert (await a.wait_for(MsgType.ERROR))["code"] == Err.TOO_LARGE
-    # viewers cannot upload
     a.send(MsgType.SET_ROLE, {"user_id": b.user_id, "role": "viewer"})
     await b.wait_until(lambda: b.role == "viewer")
     b.send(MsgType.BLOB_PUT, blob_chunks(b"x")[0])
     assert (await b.wait_for(MsgType.ERROR))["code"] == Err.FORBIDDEN
     await a.close(); await b.close()
 
-
-# ---------------------------------------------------------------------------
-# persistence
-# ---------------------------------------------------------------------------
 
 async def test_restart_restores_board_and_sessions(tmp_path):
     data = str(tmp_path / "data")
@@ -527,12 +495,12 @@ async def test_restart_restores_board_and_sessions(tmp_path):
         room = srv2.rooms["R"]
         assert room.seq == 7 and room.board.hash() == want and room.protected
         a.port = srv2.port
-        await a.connect()                                 # resume token survived the restart
+        await a.connect()
         assert a.joined["resumed"] is True and a.role == "owner"
         assert a.board.hash() == want
         assert any(m["text"] == "remember me" for m in a.joined["chat"])
         b = await make(srv2, "bob", password="pw")
-        assert int(b.user_id[1:]) > int(a.user_id[1:])    # user ids are never reused
+        assert int(b.user_id[1:]) > int(a.user_id[1:])
         await a.close(); await b.close()
     finally:
         await srv2.stop()
@@ -561,12 +529,12 @@ async def test_killed_server_recovers_from_log(tmp_path):
                 await asyncio.sleep(0.05)
         a = BotClient("127.0.0.1", port, "alice", "K", create=True)
         await a.connect()
-        for i in range(C.AUTOSAVE_EVERY_OPS + 13):         # past one autosave, plus a tail
+        for i in range(C.AUTOSAVE_EVERY_OPS + 13):
             a.submit(stroke(a, i))
         await a.settle()
         want, seq = a.board.hash(), a.board.seq
     finally:
-        proc.send_signal(signal.SIGKILL)                   # no chance to flush anything
+        proc.send_signal(signal.SIGKILL)
         proc.wait(5)
     srv = Server("127.0.0.1", 0, str(data), discovery=False)
     await srv.start()
@@ -583,22 +551,22 @@ async def test_history_after_restart_starts_at_seq_1(tmp_path, flush):
     srv = Server("127.0.0.1", 0, data, discovery=False)
     await srv.start()
     a = await make(srv, "alice", create=True)
-    n = 2 * C.AUTOSAVE_EVERY_OPS + 7                      # past two compactions, plus a tail
+    n = 2 * C.AUTOSAVE_EVERY_OPS + 7
     for i in range(n):
         a.submit(stroke(a, i))
         if i % 100 == 99:
-            await a.settle()                              # stay under the ops/s rate limit
+            await a.settle()
     await a.settle()
     room = srv.rooms["R"]
-    for _ in range(100):                                  # let the autosave task finish
+    for _ in range(100):
         if not room._saving and room.archived_seq >= C.AUTOSAVE_EVERY_OPS:
             break
         await asyncio.sleep(0.02)
-    assert room.archived_seq >= C.AUTOSAVE_EVERY_OPS      # ops really left ops.jsonl
+    assert room.archived_seq >= C.AUTOSAVE_EVERY_OPS
     assert len(room.store.load_ops()) < n
     want = room.board.hash()
     await a.close()
-    await srv.stop(flush=flush)                           # flush=False: no final snapshot
+    await srv.stop(flush=flush)
 
     srv2 = Server("127.0.0.1", 0, data, discovery=False)
     await srv2.start()
@@ -621,12 +589,12 @@ async def test_late_join_when_snapshot_exceeds_max_frame(server, monkeypatch):
     """A board bigger than MAX_FRAME still reaches late joiners (SNAPSHOT parts),
     and so do a long resume (several OP_BATCH frames) and the HISTORY."""
     from lanboard.common import protocol
-    monkeypatch.setattr(protocol, "MAX_FRAME", 64 * 1024)  # every encode() now refuses > 64 KiB
+    monkeypatch.setattr(protocol, "MAX_FRAME", 64 * 1024)
     a = await make(server, "alice", create=True)
     c = await make(server, "carol")
-    c.drop()                                               # will resume after a long gap
+    c.drop()
     pts = [v for i in range(150) for v in (i * 7, 1000 + i * 3)]
-    for batch in range(12):                               # 12 batches x 25 strokes of ~1 KB
+    for batch in range(12):
         a.submit({"k": "batch", "ops": [
             {"k": "add", "obj": {"id": a.new_id(), "type": "stroke",
                                  "style": {"color": "#123456", "width": 3}, "geom": {"pts": pts}}}
@@ -635,12 +603,12 @@ async def test_late_join_when_snapshot_exceeds_max_frame(server, monkeypatch):
     room = server.rooms["R"]
     assert not a.rejects and len(room.board) == 300
     whole = len(json.dumps(room.board.snapshot()))
-    assert whole > protocol.MAX_FRAME                      # one SNAPSHOT frame could not carry it
-    b = await make(server, "bob")                          # late join: SNAPSHOT in parts
+    assert whole > protocol.MAX_FRAME
+    b = await make(server, "bob")
     assert len(room.snapshot_frames()) > 1
     assert b.board.seq == room.seq and b.board.hash() == room.board.hash()
-    await c.connect()                                      # resume: 12 big ops, split by bytes
-    assert c.joined["resumed"] is True and c.snapshots == 1  # healed by OP_BATCH frames
+    await c.connect()
+    assert c.joined["resumed"] is True and c.snapshots == 1
     await c.wait_until(lambda: c.board.seq == room.seq)
     assert c.board.hash() == room.board.hash()
     b.send(MsgType.HISTORY_REQ, {})
@@ -651,22 +619,17 @@ async def test_late_join_when_snapshot_exceeds_max_frame(server, monkeypatch):
 
 async def test_oversized_op_rejected_connection_stays_up(server):
     a = await make(server, "alice", create=True)
-    # ~5 MiB: fits in one frame (MAX_FRAME 8 MiB) but exceeds MAX_OP_BYTES (4 MiB)
     objs = [{"id": f"t{i}", "type": "text", "geom": {"x": i, "y": 0, "text": "x" * 180}}
             for i in range(25_000)]
     op_id = a.submit({"k": "replace", "objects": objs})
     rej = await a.wait_for(MsgType.OP_REJECT)
     assert rej["op_id"] == op_id and rej["code"] == Err.TOO_LARGE and "too large" in rej["msg"]
     assert server.rooms["R"].seq == 0
-    a.submit(stroke(a))                                    # same connection still works
+    a.submit(stroke(a))
     await a.settle()
     assert a.connected and server.rooms["R"].seq == 1
     await a.close()
 
-
-# ---------------------------------------------------------------------------
-# discovery
-# ---------------------------------------------------------------------------
 
 async def test_udp_discovery(tmp_path):
     srv = Server("127.0.0.1", 0, str(tmp_path), "disco", discovery=True, discovery_port=0)

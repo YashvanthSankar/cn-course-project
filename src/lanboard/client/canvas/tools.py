@@ -33,10 +33,10 @@ from .scene import item_hit
 if TYPE_CHECKING:                                    # pragma: no cover
     from .view import CanvasView
 
-HOLD_MS = 450                       # Smart Ink: hold the pen still this long before release
-HOLD_SLOP_PX = 4.0                  # "still" = moved less than this many screen pixels
-DRAG_SLOP_PX = 3.0                  # a click that moves less than this is not a drag
-MIN_RESIZE_PX = 8.0                 # a resized selection never gets smaller than this on screen
+HOLD_MS = 450
+HOLD_SLOP_PX = 4.0
+DRAG_SLOP_PX = 3.0
+MIN_RESIZE_PX = 8.0
 HIGHLIGHTER_OPACITY = 0.35
 HIGHLIGHTER_MIN_WIDTH = 14
 
@@ -81,7 +81,6 @@ class Tool:
     def cursor(self) -> QCursor:
         return QCursor(Qt.CursorShape.CrossCursor)
 
-    # gesture hooks: ``pos`` is in scene coordinates
     def press(self, pos: QPointF, ev) -> None: ...
     def move(self, pos: QPointF, ev) -> None: ...
     def release(self, pos: QPointF, ev) -> None: ...
@@ -97,10 +96,6 @@ class Tool:
         """Abort an in-progress gesture without committing anything."""
 
 
-# ===========================================================================
-# freehand: pen + highlighter (with Smart Ink)
-# ===========================================================================
-
 class PenTool(Tool):
     name = "pen"
     highlighter = False
@@ -113,12 +108,11 @@ class PenTool(Tool):
         self.hold = QTimer()
         self.hold.setSingleShot(True)
         self.hold.timeout.connect(self._on_hold)
-        self._anchor = QPointF()          # screen position the hold timer measures from
-        self._snap: dict | None = None    # recognised shape, waiting for release
+        self._anchor = QPointF()
+        self._snap: dict | None = None
         self._ghost: ShapeItem | None = None
         self._pulse: PulseItem | None = None
 
-    # style of the stroke being drawn
     def _style(self) -> tuple[str, float, float]:
         v = self.view
         if self.highlighter:
@@ -139,22 +133,21 @@ class PenTool(Tool):
     def move(self, pos, ev) -> None:
         if self.sid is None:
             return
-        # skip sub-pixel jitter: at 120 Hz the mouse often reports the same spot
         min_d = 0.6 / self.view.scale_factor()
         if math.hypot(pos.x() - self.pts[-2], pos.y() - self.pts[-1]) < min_d:
             return
         if len(self.pts) >= C.MAX_STROKE_POINTS * 4:
-            return                                   # absurdly long stroke: stop growing
+            return
         new = [round(pos.x(), 2), round(pos.y(), 2)]
         self.pts += new
         self.preview.append(new)
         color, width, _ = self._style()
-        self.ctrl.send_live(self.sid, color, width, new, self.name)   # controller batches ~30 Hz
+        self.ctrl.send_live(self.sid, color, width, new, self.name)
         d = ev.position() - self._anchor
         if abs(d.x()) + abs(d.y()) > HOLD_SLOP_PX:
             self._anchor = ev.position()
             self._clear_snap()
-            self.hold.start(HOLD_MS)                 # restart the "held still" countdown
+            self.hold.start(HOLD_MS)
 
     def _on_hold(self) -> None:
         """The pen has been still for HOLD_MS: preview the Smart Ink snap."""
@@ -214,7 +207,7 @@ class PenTool(Tool):
         """RDP with ~0.6 screen px tolerance, rounded to 0.1 to keep ops small."""
         eps = 0.6 / self.view.scale_factor()
         pts = G.round_pts(G.rdp(self.pts, eps), 1)
-        while len(pts) > C.MAX_STROKE_POINTS:        # very long stroke: simplify harder
+        while len(pts) > C.MAX_STROKE_POINTS:
             eps *= 2
             pts = G.round_pts(G.rdp(self.pts, eps), 1)
         return pts if len(pts) >= 2 else self.pts[:2]
@@ -236,10 +229,6 @@ class HighlighterTool(PenTool):
     name = "highlighter"
     highlighter = True
 
-
-# ===========================================================================
-# eraser
-# ===========================================================================
 
 class EraserTool(Tool):
     """Drag a circle. Touched objects vanish at once; release = one delete op (one undo)."""
@@ -307,7 +296,7 @@ class EraserTool(Tool):
     def _erase(self, a: QPointF, b: QPointF) -> None:
         r = self._radius()
         sweep = QRectF(a, b).normalized().adjusted(-r, -r, r, r)
-        board = self.ctrl.view                     # hit test against the authoritative view board
+        board = self.ctrl.view
         newly = []
         for it in self.scene.candidates_in(sweep):
             obj = board.get(it.oid) or it.obj
@@ -335,10 +324,6 @@ class EraserTool(Tool):
         self.hits = []
         self.scene.clear_hidden()
 
-
-# ===========================================================================
-# shapes: line, arrow, rect, ellipse
-# ===========================================================================
 
 class ShapeTool(Tool):
     """Rubber-band shapes. Shift snaps lines to 45 degrees and boxes to squares and circles."""
@@ -394,10 +379,6 @@ class ShapeTool(Tool):
         self.ghost, self.start = None, None
 
 
-# ===========================================================================
-# text and sticky notes
-# ===========================================================================
-
 class TextTool(Tool):
     name = "text"
 
@@ -435,13 +416,8 @@ class StickyTool(Tool):
                      "w": self.W, "h": self.H, "text": ""},
             "style": {"fill": fill, "color": STICKY_TEXT, "font_size": 16},
         })
-        # the add was applied to the view synchronously, so the item exists now
         QTimer.singleShot(0, lambda: self.view.edit_object(oid))
 
-
-# ===========================================================================
-# select / move / resize
-# ===========================================================================
 
 class SelectTool(Tool):
     """Click, shift-click and rubber-band selection, then drag to move or resize.
@@ -456,11 +432,11 @@ class SelectTool(Tool):
     """
 
     name = "select"
-    edits = False                                   # viewers may select (but not move)
+    edits = False
 
     def __init__(self, view) -> None:
         super().__init__(view)
-        self.mode: str | None = None                # "move" | "band" | "resize" | None
+        self.mode: str | None = None
         self.origin = QPointF()
         self._screen_origin = QPointF()
         self.start_pos: dict[str, QPointF] = {}
@@ -472,9 +448,9 @@ class SelectTool(Tool):
         self.band.setBrush(QBrush(fill))
         self.band.is_overlay = True                 # type: ignore[attr-defined]
         self._base_sel: list[str] = []
-        self._handle: str | None = None              # "nw" | "n" | … while resizing
-        self._resize_src: dict[str, dict] = {}        # oid -> object before the resize
-        self._box0: G.Rect = (0.0, 0.0, 0.0, 0.0)     # frame box before the resize
+        self._handle: str | None = None
+        self._resize_src: dict[str, dict] = {}
+        self._box0: G.Rect = (0.0, 0.0, 0.0, 0.0)
 
     def cursor(self) -> QCursor:
         return QCursor(Qt.CursorShape.ArrowCursor)
@@ -497,7 +473,6 @@ class SelectTool(Tool):
         self.origin, self._screen_origin = pos, ev.position()
         can_edit = self.view.can_edit()
         shift = bool(ev.modifiers() & Qt.KeyboardModifier.ShiftModifier)
-        # 1) one of the 8 resize handles of the selection frame
         h = self.scene.selection.handle_at(pos) if can_edit else None
         if h is not None:
             self.mode = "resize"
@@ -508,12 +483,10 @@ class SelectTool(Tool):
             self._box0 = (f.left(), f.top(), f.right(), f.bottom())
             return
         it = self.scene.object_item_at(pos, self._r())
-        # 2) vote badge on a sticky note (S12)
         if isinstance(it, StickyItem) and it.badge_rect().contains(it.mapFromScene(pos)):
             self.view.toggle_vote(it.oid)
             self.mode = None
             return
-        # 3) object: select it and get ready to move
         if it is not None:
             sel = self.scene.selected_ids
             if shift:
@@ -527,7 +500,6 @@ class SelectTool(Tool):
             else:
                 self.mode = None
             return
-        # 4) empty space: rubber band
         self._base_sel = self.scene.selected_ids if shift else []
         if not shift:
             self.scene.set_selection([])
@@ -547,7 +519,6 @@ class SelectTool(Tool):
         elif self.mode == "band":
             self.band.setRect(QRectF(self.origin, pos).normalized())
         elif self.mode == "resize" and self._handle is not None:
-            # live preview: re-render the local items only, nothing is sent yet
             for oid, ch in self._resize_changes(pos, ev).items():
                 it = self.scene.items_by_id.get(oid)
                 if it is not None:
@@ -559,7 +530,6 @@ class SelectTool(Tool):
         d = pos - self.origin
         shift = bool(ev.modifiers() & Qt.KeyboardModifier.ShiftModifier)
         types = {o.get("type") for o in self._resize_src.values()}
-        # images and lone text keep their proportions on corners; Shift does it for anything
         keep = shift or (len(self._resize_src) == 1 and bool(types & {"image", "text"}))
         box1 = G.resize_box(self._box0, self._handle, d.x(), d.y(), keep_aspect=keep,
                             min_size=MIN_RESIZE_PX / self.view.scale_factor())
@@ -588,7 +558,7 @@ class SelectTool(Tool):
                     ox, oy = (obj.get("off") or [0, 0])
                     changes[oid] = {"off": [round(ox + delta.x(), 1), round(oy + delta.y(), 1)]}
                 if changes:
-                    self.ctrl.update_many(changes)        # one batch op = one undo step
+                    self.ctrl.update_many(changes)
             self._restore_positions()
             self.start_pos = {}
         elif mode == "band":
@@ -602,7 +572,7 @@ class SelectTool(Tool):
                 changes = {oid: ch for oid, ch in self._resize_changes(pos, ev).items()
                            if self.ctrl.view.is_live(oid)}
                 if changes:
-                    self.ctrl.update_many(changes)        # one batch op = one undo step
+                    self.ctrl.update_many(changes)
             self._end_resize()
         self.scene.selection.refresh()
 
@@ -641,10 +611,6 @@ class SelectTool(Tool):
             self.scene.selection.refresh()
         self.mode = None
 
-
-# ===========================================================================
-# laser pointer and pan
-# ===========================================================================
 
 class LaserTool(Tool):
     """Fading laser trail (S10). Points go out at ~30 Hz. Never saved to the board."""

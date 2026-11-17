@@ -110,9 +110,6 @@ def free_port(kind: int = socket.SOCK_STREAM) -> int:
         return s.getsockname()[1]
 
 
-# =============================================================================
-# real servers
-# =============================================================================
 LAN = [ip for ip in lan_ipv4_addresses() if not ip.startswith("169.254.")]
 HOST = LAN[0] if LAN else "127.0.0.1"
 CHILD_ENV = dict(os.environ, PYTHONUNBUFFERED="1")
@@ -172,9 +169,6 @@ def make_client(name: str, room: str = ROOM, create: bool = False, password: str
     return n, c
 
 
-# =============================================================================
-# a one-page "lecture slide" PDF, imported through the real PDF import path
-# =============================================================================
 def make_pdf(path: str) -> None:
     pdf = QPdfWriter(path)
     pdf.setPageSize(QPageSize(QPageSize.PageSizeId.A5))
@@ -205,9 +199,6 @@ def make_pdf(path: str) -> None:
     p.end()
 
 
-# =============================================================================
-# 1. connect dialog with REAL discovery
-# =============================================================================
 def shoot_connect() -> None:
     server = start_discovery_server()
     print(f"discovery server on TCP {server.port}, UDP {server.discovery_port}", flush=True)
@@ -227,14 +218,13 @@ def shoot_connect() -> None:
         dlg.resize(1000, 680)
         dlg.show()
         suffix = "" if mode == "light" else "_dark"
-        # host mode first, untouched defaults
         dlg.mode.set_index(1)
         dlg.start_server.setChecked(True)
         wait(300)
         save(dlg.grab(), f"connect_host{suffix}.png")
         dlg.start_server.setChecked(False)
         dlg.mode.set_index(0)
-        for _ in range(40):                      # wait until our server answered a probe
+        for _ in range(40):
             wait(100)
             if browser.servers():
                 break
@@ -242,7 +232,6 @@ def shoot_connect() -> None:
         found = browser.servers()
         print("discovered:", [(s["name"], s["host"], s["port"], len(s["rooms"])) for s in found], flush=True)
         if found:
-            # click the open room, as a user would: fills address, port and room code
             top = dlg.tree.topLevelItem(0)
             for i in range(top.childCount() if top else 0):
                 child = top.child(i)
@@ -262,16 +251,12 @@ def shoot_connect() -> None:
     theme.apply_theme(app, "light")
 
 
-# =============================================================================
-# 2. the demo room
-# =============================================================================
 def build_board(ctl, others) -> None:
     """A small architecture sketch, drawn by several real clients."""
-    ink, indigo, violet = "#1b2130", "#1d4ed8", "#c2410c"   # board inks: blue, burnt orange
+    ink, indigo, violet = "#1b2130", "#1d4ed8", "#c2410c"
     add = ctl.add_object
     add({"type": "text", "style": {"color": ink, "font_size": 34},
          "geom": {"x": 80, "y": 40, "text": "LANBoard: how one edit travels"}})
-    # clients
     for i, label in enumerate(("Client A  (Qt)", "Client B  (Qt)", "Client C  (Qt)")):
         y = 150 + i * 150
         add({"type": "rect", "style": {"color": indigo, "width": 3, "fill": "#e8eefb"},
@@ -280,7 +265,6 @@ def build_board(ctl, others) -> None:
              "geom": {"x": 104, "y": y + 30, "text": label}})
         add({"type": "arrow", "style": {"color": indigo, "width": 3},
              "geom": {"x1": 310, "y1": y + 48, "x2": 520, "y2": 330}})
-    # server
     add({"type": "rect", "style": {"color": violet, "width": 4, "fill": "#fdf1e3"},
          "geom": {"x": 530, "y": 250, "w": 260, "h": 170}})
     add({"type": "text", "style": {"color": ink, "font_size": 22},
@@ -289,14 +273,12 @@ def build_board(ctl, others) -> None:
          "geom": {"x": 556, "y": 312, "text": "room actor\nboard + op log\nseq = seq + 1"}})
     add({"type": "text", "style": {"color": indigo, "font_size": 15},
          "geom": {"x": 330, "y": 210, "text": "TCP, framed JSON"}})
-    # disk
     add({"type": "ellipse", "style": {"color": "#30a46c", "width": 3, "fill": "#e9f9ef"},
          "geom": {"x": 560, "y": 500, "w": 200, "h": 90}})
     add({"type": "text", "style": {"color": ink, "font_size": 16},
          "geom": {"x": 598, "y": 530, "text": "ops.jsonl"}})
     add({"type": "line", "style": {"color": "#30a46c", "width": 3},
          "geom": {"x1": 660, "y1": 425, "x2": 660, "y2": 495}})
-    # stickies (other users)
     a, b, c = others[0][1], others[1][1], others[2][1]
     a.add_object({"type": "sticky", "style": {"fill": "#fff59d", "font_size": 17},
                   "geom": {"x": 860, "y": 150, "w": 230, "h": 140,
@@ -307,11 +289,10 @@ def build_board(ctl, others) -> None:
     c.add_object({"type": "sticky", "style": {"fill": "#c8f7dc", "font_size": 17},
                   "geom": {"x": 860, "y": 490, "w": 230, "h": 140,
                            "text": "Gap in seq? Send RESYNC"}})
-    # freehand: a circle around "seq = seq + 1" and an underline
     pts = []
     for i in range(72):
         t = i / 66 * 2 * math.pi
-        wob = 1 + 0.04 * math.sin(3 * t)             # a little hand-drawn wobble
+        wob = 1 + 0.04 * math.sin(3 * t)
         pts += [round(660 + 168 * wob * math.cos(t), 1), round(335 + 118 * wob * math.sin(t), 1)]
     add({"type": "stroke", "style": {"color": "#e5484d", "width": 4}, "geom": {"pts": pts}})
     wave = []
@@ -350,7 +331,6 @@ def main_window_shots() -> None:
     others = []
     for name in ("Jeeva", "Sai Teja", "Nithilla", "Asha"):
         others.append(make_client(name))
-    # Ravi (later a viewer) gets his own real window, created before he connects
     vnet = NetClient()
     vctl = SessionController(vnet)
     vwin = MainWindow(vctl, settings=tmp_settings(), lan_addresses=[])
@@ -359,21 +339,18 @@ def main_window_shots() -> None:
     vnet.connect_to(HOST, PORT, "Ravi", ROOM)
     others.append((vnet, vctl))
     wait(1500)
-    # a password-protected second room, so discovery lists it with a lock
     secret = make_client("Karthik", SECRET_ROOM, create=True, password=SECRET_PW, room_name="Viva prep")
     wait(600)
 
     build_board(ctl, others)
     wait(1500)
 
-    # PDF page, imported through the real import path (pypdfium2 -> blob upload)
     pdf_path = os.path.join(tempfile.mkdtemp(), "lecture7.pdf")
     make_pdf(pdf_path)
     win.canvas.zoom_fit()
     wait(300)
     win.canvas.import_pdf(pdf_path)
     wait(1500)
-    # move the PDF page to the right of the sketch
     pdf_ids = [oid for oid, o in ctl.view.objects.items() if o.get("type") == "image"]
     for oid in pdf_ids:
         g = ctl.view.objects[oid]["geom"]
@@ -391,19 +368,16 @@ def main_window_shots() -> None:
                                  "geom": {"x": x0 + g["w"] * 0.45, "y": y0 + g["h"] + 76,
                                           "text": "this is our frame header!"}})
     wait(800)
-    # dot votes on the stickies
     for sid in find_sticky_ids(ctl)[:1]:
         ctl.update_object(sid, {"votes": [ctl.user_id, others[0][0].user_id, others[1][0].user_id]})
     wait(500)
 
-    # roles and hands
     uid = {name: n.user_id for name, (n, _c) in zip(("Jeeva", "Sai Teja", "Nithilla", "Asha", "Ravi"), others)}
     ctl.set_role(uid["Ravi"], "viewer")
     ctl.set_role(uid["Asha"], "viewer")
     others[2][1].send_signal("hand_up")
     wait(500)
 
-    # chat
     ctl.send_chat("Hi team, I've sketched the architecture on the left.")
     wait(250)
     others[0][1].send_chat("Nice. I'll explain the frame format using the PDF slide.")
@@ -420,7 +394,6 @@ def main_window_shots() -> None:
     fit(win)
     wait(600)
 
-    # remote presence: cursors and an in-progress live stroke
     def presence():
         for i, (_n, c) in enumerate(others[:3]):
             c.send_cursor(420 + i * 260, 640 - i * 40)
@@ -445,15 +418,14 @@ def main_window_shots() -> None:
         if want(name.removesuffix(".png")):
             save(w.grab(), name)
 
-    # ---------------- light
     win.show_tab(win.TAB_PEOPLE)
     shot("light.png")
-    if want("people_roles"):              # the side panel only, cropped from the real window
+    if want("people_roles"):
         clear_toasts()
         pix = win.grab()
         tl = win.side.mapTo(win, QPoint(0, 0))
         dpr = pix.devicePixelRatio()
-        h = min(win.side.height(), 340)              # the list, without the empty space below it
+        h = min(win.side.height(), 340)
         save(pix.copy(int(tl.x() * dpr), int(tl.y() * dpr), int(win.side.width() * dpr), int(h * dpr)),
              "people_roles.png")
     win.show_tab(win.TAB_CHAT)
@@ -487,7 +459,6 @@ def main_window_shots() -> None:
     shot("shortcuts.png")
     win.shortcuts.hide()
 
-    # ---------------- network (light): HUD charts + inspector after some traffic
     def traffic(n=10, delay=300):
         for k in range(n):
             ctl.add_object({"type": "stroke", "style": {"color": "#8e4ec6", "width": 3},
@@ -496,7 +467,7 @@ def main_window_shots() -> None:
             wait(delay)
 
     win.show_tab(win.TAB_NET)
-    win.body.setSizes([W - 500, 500])          # drag the splitter: the Network tab likes ~500 px
+    win.body.setSizes([W - 500, 500])
     wait(200)
     fit(win)
     traffic(12)
@@ -505,7 +476,6 @@ def main_window_shots() -> None:
         insp.table.selectRow(max(0, insp.model.rowCount() - 2))
     shot("network_light.png")
 
-    # ---------------- viewer + locked: Ravi's own window
     ctl.set_room(locked=True)
     wait(400)
     fit(vwin)
@@ -517,12 +487,10 @@ def main_window_shots() -> None:
     ctl.set_room(locked=False)
     wait(400)
 
-    # ---------------- dark
     theme.apply_theme(app, "dark")
     wait(400)
     win.show_tab(win.TAB_CHAT)
     shot("dark.png")
-    # selection in dark mode
     sids = find_sticky_ids(ctl)
     if sids:
         win.canvas.canvas.set_selection(sids[:2])
@@ -534,7 +502,6 @@ def main_window_shots() -> None:
     shot("canvas_dark_selection.png")
     win.canvas.canvas.set_selection([])
 
-    # ---------------- network dark: mission control, then Chaos Lab
     win.show_tab(win.TAB_NET)
     sa = win.network.findChild(QScrollArea)
     sa.verticalScrollBar().setValue(0)
@@ -546,7 +513,6 @@ def main_window_shots() -> None:
         insp.table.selectRow(max(0, insp.model.rowCount() - 2))
     shot("network_dark.png")
 
-    # Chaos Lab: latency + duplicates + drops; collapse the HUD so the lab is in view
     chaos = win.network.chaos
     chaos.enable.setChecked(True)
     chaos.sliders["latency_ms"].setValue(120)
@@ -561,14 +527,13 @@ def main_window_shots() -> None:
         insp.table.selectRow(max(0, insp.model.rowCount() - 3))
     sa.verticalScrollBar().setValue(win.network.sections[1].parentWidget().y() + 150)
     shot("network_dark_inspector.png")
-    win.network.sections[1].toggle.setChecked(False)          # collapse inspector
+    win.network.sections[1].toggle.setChecked(False)
     wait(200)
     sa.verticalScrollBar().setValue(sa.verticalScrollBar().maximum())
     chaos.update_counters()
     shot("chaos_lab.png")
     win.network.sections[1].toggle.setChecked(True)
 
-    # cut the cable: offline editing with queued ops, then reconnect
     chaos.reset()
     chaos.enable.setChecked(False)
     wait(300)
@@ -583,7 +548,7 @@ def main_window_shots() -> None:
         sa.verticalScrollBar().setValue(0)
         wait(250)
         save(win.grab(), "offline.png")
-        wait(4000)                       # reconnect + resend
+        wait(4000)
         win.show_tab(win.TAB_PEOPLE)
         clear_toasts()
         wait(300)
@@ -592,7 +557,6 @@ def main_window_shots() -> None:
     theme.apply_theme(app, "light")
     wait(300)
 
-    # ---------------- password prompt: a new client joins the protected room
     if want("password_prompt"):
         pnet = NetClient()
         pctl = SessionController(pnet)
@@ -642,16 +606,13 @@ def composite_dialog(back: QPixmap, dlg: QPixmap) -> QImage:
     ddpr = dlg.devicePixelRatio()
     dw, dh = dlg.width() / ddpr, dlg.height() / ddpr
     x, y = (lw - dw) / 2, (lh - dh) / 2.6
-    for i in range(14, 0, -1):                       # soft shadow
+    for i in range(14, 0, -1):
         p.fillRect(QRectF(x - i, y - i + 8, dw + 2 * i, dh + 2 * i), QColor(0, 0, 0, 6))
     p.drawPixmap(QRectF(x, y, dw, dh), dlg, QRectF(0, 0, dlg.width(), dlg.height()))
     p.end()
     return img
 
 
-# =============================================================================
-# 3. server terminal dashboard (real subprocess output)
-# =============================================================================
 ANSI = re.compile(r"\x1b\[(\d+(?:;\d+)*)m")
 SGR = {"1": "bold", "2": "dim", "31": "#ff6b6b", "32": "#4ade80", "33": "#facc15", "36": "#22d3ee"}
 
@@ -761,7 +722,6 @@ def render_terminal(prompt: str, frame: str) -> QImage:
     return img
 
 
-# =============================================================================
 if __name__ == "__main__":
     t0 = time.time()
     main_window_shots()

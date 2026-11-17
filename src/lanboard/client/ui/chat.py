@@ -38,7 +38,7 @@ def format_time(ts) -> str:
         ts = float(ts)
     except (TypeError, ValueError):
         ts = time.time()
-    if ts > 1e12:                       # milliseconds
+    if ts > 1e12:
         ts /= 1000.0
     return time.strftime("%H:%M", time.localtime(ts))
 
@@ -104,9 +104,9 @@ class ChatModel(QAbstractListModel):
 class BubbleDelegate(QStyledItemDelegate):
     """Paints chat bubbles. Sizes are computed from the wrapped text height."""
 
-    AV = 28            # avatar diameter
+    AV = 28
     PAD_X, PAD_Y = 12, 8
-    MAX_FRAC = 0.78    # bubble width as a fraction of the view
+    MAX_FRAC = 0.78
 
     def __init__(self, view: QListView) -> None:
         super().__init__(view)
@@ -170,7 +170,7 @@ class BubbleDelegate(QStyledItemDelegate):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(theme.accent_gradient(bubble, t))
             p.drawRoundedRect(bubble, 14, 14)
-            if not cont:                           # a squared corner marks the start of a group
+            if not cont:
                 p.drawRoundedRect(QRectF(bubble.right() - 14, bubble.top(), 14, 14), 3, 3)
             fg, meta = QColor("white"), QColor(255, 255, 255, 185)
         else:
@@ -231,7 +231,7 @@ class ChatPanel(QWidget):
         self.view.setModel(self.model)
         self.delegate = BubbleDelegate(self.view)
         self.view.setItemDelegate(self.delegate)
-        self.view.setResizeMode(QListView.ResizeMode.Adjust)          # re-wrap bubbles on resize
+        self.view.setResizeMode(QListView.ResizeMode.Adjust)
         self.view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.view.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -261,7 +261,6 @@ class ChatPanel(QWidget):
         if getattr(controller, "chat", None):
             self.reset(list(controller.chat))
 
-    # -- inbound --------------------------------------------------------------
     def reset(self, messages: list) -> None:
         self.messages = []
         self._ids = set()
@@ -293,7 +292,6 @@ class ChatPanel(QWidget):
             self.messages = self.messages[-C.CHAT_HISTORY_MAX:]
         return True
 
-    # -- rendering --------------------------------------------------------------
     def _is_mine(self, m: dict) -> bool:
         me = self.controller.me or {}
         return bool(me) and me.get("user_id") == m.get("user_id") and m.get("kind") != "system"
@@ -321,7 +319,6 @@ class ChatPanel(QWidget):
                 lines.append(f"[{stamp}] {m.get('username') or m.get('user_id') or '?'}: {m.get('text', '')}")
         return "\n".join(lines)
 
-    # -- outbound ---------------------------------------------------------------
     def send(self) -> None:
         text = self.input.text().strip()
         if not text:
@@ -332,7 +329,6 @@ class ChatPanel(QWidget):
     def focus_input(self) -> None:
         self.input.setFocus(Qt.FocusReason.ShortcutFocusReason)
 
-    # -- unread badge -------------------------------------------------------------
     def showEvent(self, ev) -> None:  # noqa: N802
         super().showEvent(ev)
         if self.unread:

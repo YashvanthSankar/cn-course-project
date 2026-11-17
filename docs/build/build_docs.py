@@ -71,10 +71,6 @@ HEADING = re.compile(r'<h(?P<lvl>[23]) id="(?P<id>[^"]+)">(?P<body>.*?)</h(?P=lv
 SECNUM = re.compile(r"^((?:Appendix\s+)?[A-Z0-9]+(?:\.[0-9]+)*\.?)\s+(.*)$", re.S)
 
 
-# =============================================================================
-# 1. verification against the code
-# =============================================================================
-
 def hexdump(data: bytes) -> str:
     """Classic 16-bytes-per-line dump: offset, hex bytes, printable ASCII."""
     lines = []
@@ -184,7 +180,6 @@ def verify(md: str) -> list[str]:
 
     errors: list[str] = []
 
-    # --- message catalogue: every type, right code, nothing invented ----------
     rows = dict((name, int(code, 16)) for code, name in
                 re.findall(r"^\|\s*`0x([0-9A-F]{2})`\s*\|\s*`([A-Z_]+)`\s*\|", md, re.M))
     for m in MsgType:
@@ -196,7 +191,6 @@ def verify(md: str) -> list[str]:
         if name not in MsgType.__members__:
             errors.append(f"catalogue: {name} is not a MsgType")
 
-    # --- Appendix A constants -------------------------------------------------
     appendix = md.split("## Appendix A.", 1)[-1].split("\n## ", 1)[0]
     cache: dict[str, dict[str, object]] = {}
     pattern = re.compile(r"^\|\s*`([A-Z_][A-Z0-9_]*)`\s*\|\s*`([^`]+)`[^|]*\|\s*`([a-z_/]+\.py)`", re.M)
@@ -222,21 +216,15 @@ def verify(md: str) -> list[str]:
     if found < 20:
         errors.append(f"appendix A: only {found} constant rows parsed (table format changed?)")
 
-    # --- worked examples --------------------------------------------------------
     for key, text in worked_examples().items():
         if text not in md:
             errors.append(f"worked example: {key} does not match the encoder output:\n{text}")
 
-    # --- traffic figures --------------------------------------------------------
     for key, value in traffic_numbers().items():
         if f"{value:,}" not in md:
             errors.append(f"performance: {key} = {value:,} not found in the document")
     return errors
 
-
-# =============================================================================
-# 2. markdown -> HTML
-# =============================================================================
 
 def inline_md(text: str) -> str:
     """Tiny inline formatter for captions: escape, then `code` and **bold**."""
@@ -332,10 +320,6 @@ def page_html(body: str, toc: str) -> str:
             f"<style>\n{font_faces()}\n{css}\n</style></head><body>\n{body}\n</body></html>\n")
 
 
-# =============================================================================
-# 3. HTML -> PDF
-# =============================================================================
-
 def print_pdf(chrome: str, html_path: Path, pdf_path: Path) -> None:
     cmd = [chrome, "--headless", "--disable-gpu", "--no-pdf-header-footer",
            "--run-all-compositor-stages-before-draw", "--virtual-time-budget=15000",
@@ -358,7 +342,6 @@ def heading_pages(pdf_path: Path, headings: list[dict]) -> dict[str, int] | None
         tp = pdf[i].get_textpage()
         texts.append(re.sub(r"\s+", "", tp.get_text_range()))
     pages: dict[str, int] = {}
-    # skip the cover and the contents page(s): search after the page with the end marker
     start = next((i + 1 for i, t in enumerate(texts) if "TOCENDMARK" in t), 2)
     for h in headings:
         if h["id"] == "contents":

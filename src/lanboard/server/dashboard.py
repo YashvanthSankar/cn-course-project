@@ -25,7 +25,7 @@ from .discovery import lan_ipv4_addresses
 if TYPE_CHECKING:
     from .server import Server
 
-CLEAR = "\x1b[H\x1b[2J"        # cursor home + clear screen
+CLEAR = "\x1b[H\x1b[2J"
 BOLD, DIM, RESET = "\x1b[1m", "\x1b[2m", "\x1b[0m"
 GREEN, YELLOW, RED, CYAN = "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[36m"
 
@@ -67,7 +67,6 @@ class Dashboard:
         self._last_seq[code] = (now, seq)
         if prev and now > prev[0]:
             inst = (seq - prev[1]) / (now - prev[0])
-            # exponential moving average smooths the 1 Hz samples
             self._rates[code] = 0.5 * self._rates.get(code, inst) + 0.5 * inst
         return self._rates.get(code, 0.0)
 
@@ -122,6 +121,6 @@ class Dashboard:
             try:
                 self.out.write(self.render())
                 self.out.flush()
-            except Exception:                           # never let the UI kill the server
+            except Exception:
                 logging.getLogger("lanboard.dashboard").exception("dashboard render failed")
             await asyncio.sleep(interval)

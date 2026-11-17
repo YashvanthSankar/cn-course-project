@@ -33,8 +33,8 @@ from .items import ACCENT, ACCENT_DARK, STICKY_FILL, display_color, qcolor
 if TYPE_CHECKING:                                    # pragma: no cover
     from .view import CanvasView
 
-REFRESH_MS = 100                    # throttle: at most 10 repaints per second
-MAX_STROKE_SAMPLES = 24             # points per stroke in the overview
+REFRESH_MS = 100
+MAX_STROKE_SAMPLES = 24
 
 
 def _palette(dark: bool) -> dict[str, QColor]:
@@ -48,16 +48,12 @@ def _palette(dark: bool) -> dict[str, QColor]:
             "hover": QColor(27, 33, 48, 16), "accent": qcolor(ACCENT)}
 
 
-# ===========================================================================
-# minimap
-# ===========================================================================
-
 class Minimap(QWidget):
     """Overview of the board. Click or drag to pan the main view."""
 
     W, H = 200, 130
     RADIUS = 10.0
-    INSET = 7.0                     # gap between the card edge and the drawing
+    INSET = 7.0
 
     def __init__(self, view: "CanvasView", parent=None) -> None:
         super().__init__(parent)
@@ -67,13 +63,13 @@ class Minimap(QWidget):
         self.setToolTip("Overview: click or drag to move around the board")
         self.setMouseTracking(False)
 
-        self._cache: QPixmap | None = None           # rendered objects
-        self._cache_world = QRectF()                 # world rect the cache was drawn for
-        self._content = QRectF()                     # union of all object bounds
+        self._cache: QPixmap | None = None
+        self._cache_world = QRectF()
+        self._content = QRectF()
         self._content_dirty = True
-        self._world = QRectF()                       # scene rect mapped onto the widget
-        self._drag_world: QRectF | None = None       # world frozen while dragging
-        self._grab = QPointF()                       # scene offset of the press inside the viewport box
+        self._world = QRectF()
+        self._drag_world: QRectF | None = None
+        self._grab = QPointF()
 
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -85,7 +81,6 @@ class Minimap(QWidget):
         view.board_theme_changed.connect(lambda *_: self._on_content())
         self._refresh()
 
-    # -- update scheduling ------------------------------------------------------
     def _on_content(self) -> None:
         self._content_dirty = True
         self.schedule()
@@ -106,7 +101,6 @@ class Minimap(QWidget):
         self._content_dirty = False
         self.update()
 
-    # -- mapping between scene and widget ----------------------------------------
     def _inner(self) -> QRectF:
         i = self.INSET
         return QRectF(i, i, self.width() - 2 * i, self.height() - 2 * i)
@@ -146,7 +140,6 @@ class Minimap(QWidget):
         vis = self.view.visible_rect()
         return QRectF(self.scene_to_widget(vis.topLeft()), self.scene_to_widget(vis.bottomRight()))
 
-    # -- rendering ---------------------------------------------------------------
     def _render_cache(self) -> None:
         """Draw every visible board object, simplified, into ``self._cache``."""
         dpr = max(1.0, self.devicePixelRatioF())
@@ -166,7 +159,7 @@ class Minimap(QWidget):
         p.translate(inner.left(), inner.top())
         p.scale(k, k)
         p.translate(-self._world.left(), -self._world.top())
-        tiny = 1.5 / k                                   # 1.5 px in scene units
+        tiny = 1.5 / k
         for it in sorted(items.values(), key=lambda i: i.zValue()):
             if not it.isVisible():
                 continue
@@ -176,7 +169,7 @@ class Minimap(QWidget):
             color = qcolor(style.get("color"))
             if dark and t != "sticky":
                 color = display_color(color)
-            if br.width() < tiny and br.height() < tiny:   # level of detail: just a dot
+            if br.width() < tiny and br.height() < tiny:
                 p.fillRect(QRectF(br.center().x() - tiny / 2, br.center().y() - tiny / 2, tiny, tiny), color)
                 continue
             p.save()
@@ -225,7 +218,6 @@ class Minimap(QWidget):
             p.setBrush(pal["image"])
             p.drawRect(r)
         elif t == "text":
-            # text becomes a few faint "lines of text" bars
             size = float(style.get("font_size") or 20)
             lines = (g.get("text") or " ").split("\n")
             c = QColor(color)
@@ -250,7 +242,6 @@ class Minimap(QWidget):
         p.setClipPath(path)
         if self._cache is not None:
             p.drawPixmap(0, 0, self._cache)
-        # the main view's viewport: accent outline over a soft accent wash
         box = self.viewport_box().intersected(self._inner().adjusted(-2, -2, 2, 2))
         if not box.isEmpty():
             wash = QColor(pal["accent"])
@@ -260,15 +251,13 @@ class Minimap(QWidget):
             p.drawRoundedRect(box, 2.5, 2.5)
         p.end()
 
-    # -- interaction -------------------------------------------------------------
     def mousePressEvent(self, ev) -> None:
         if ev.button() != Qt.MouseButton.LeftButton:
             return
         pos = ev.position()
-        self._drag_world = QRectF(self._world)           # freeze the mapping while dragging
+        self._drag_world = QRectF(self._world)
         vis = self.view.visible_rect()
         here = self.widget_to_scene(pos)
-        # grabbed inside the viewport box: keep the grab point; elsewhere jump there
         self._grab = vis.center() - here if self.viewport_box().contains(pos) else QPointF()
         self.view.pan_to(here + self._grab)
         self.update()
@@ -298,13 +287,9 @@ def _same_rect(a: QRectF, b: QRectF, tol: float = 0.01) -> bool:
             and abs(a.width() - b.width()) < tol * s and abs(a.height() - b.height()) < tol * s)
 
 
-# ===========================================================================
-# zoom controls
-# ===========================================================================
-
 def _glyph(kind: str, color: QColor, size: int = 16) -> QIcon:
     """Tiny vector icons for the zoom pill: "minus", "plus" and "fit" (four corners)."""
-    pix = QPixmap(size * 2, size * 2)                    # 2x for sharp HiDPI rendering
+    pix = QPixmap(size * 2, size * 2)
     pix.setDevicePixelRatio(2.0)
     pix.fill(Qt.GlobalColor.transparent)
     p = QPainter(pix)

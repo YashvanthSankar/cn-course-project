@@ -55,9 +55,9 @@ from .room import BadMessage, Room, clean_password, clean_text
 
 log = logging.getLogger("lanboard.server")
 
-MAX_AUTH_FAILURES = 10        # wrong passwords per connection before we hang up
-FLUSH_GRACE = 5.0             # seconds a closing connection may take to flush its queue
-_CLOSE = None                 # writer-queue sentinel: flush what is queued, then close
+MAX_AUTH_FAILURES = 10
+FLUSH_GRACE = 5.0
+_CLOSE = None
 
 
 class ClientConnection:
@@ -79,11 +79,11 @@ class ClientConnection:
         self.state = "hello"
         self.username = "guest"
         self.client_id = ""
-        self.nonce = auth.new_nonce()           # challenge for password proofs, single use
+        self.nonce = auth.new_nonce()
         self.auth_failures = 0
-        self.session: Any = None                # room.Session once joined
+        self.session: Any = None
         self.room: Room | None = None
-        self.uploads: dict[str, dict] = {}      # partial BLOB_PUT uploads, keyed by sha256
+        self.uploads: dict[str, dict] = {}
         self.closed = False
         self.close_reason: str | None = None
         self.connected_at = time.monotonic()
@@ -93,7 +93,6 @@ class ClientConnection:
         self.frames_out = 0
         self._writer_task: asyncio.Task | None = None
 
-    # ------------------------------------------------------------------ metrics
     @property
     def bytes_in(self) -> int:
         return self.decoder.bytes_in
@@ -102,7 +101,6 @@ class ClientConnection:
     def queue_depth(self) -> int:
         return self.queue.qsize()
 
-    # ------------------------------------------------------------------ sending
     def send(self, msg_type: int, payload: dict) -> None:
         self.send_frame(encode(msg_type, payload))
 
@@ -113,13 +111,10 @@ class ClientConnection:
         try:
             self.queue.put_nowait(frame)
         except asyncio.QueueFull:
-            # The client is not draining its socket fast enough. Disconnect it rather
-            # than buffer without bound or slow everyone else down. call_soon defers the
-            # teardown so we never mutate room membership in the middle of a broadcast.
             log.warning("%s: send queue full (%d frames), dropping as lagging",
                         self.peer, C.SEND_QUEUE_MAX)
             asyncio.get_running_loop().call_soon(self.close, Reason.LAGGING)
-            self.closed = True                  # stop queueing immediately
+            self.closed = True
 
     def error(self, code: str, msg: str, **extra: Any) -> None:
         self.send(MsgType.ERROR, {"code": code, "msg": msg, **extra})
@@ -152,7 +147,6 @@ class ClientConnection:
         except Exception:                       # pragma: no cover - best effort
             pass
 
-    # ------------------------------------------------------------------ closing
     def close(self, reason: str = Reason.DISCONNECTED, *, flush: bool = False) -> None:
         """Tear the connection down (idempotent).
 
@@ -164,7 +158,7 @@ class ClientConnection:
             return
         self.close_reason = reason
         self.closed = True
-        self.uploads.clear()                    # partial uploads die with the connection
+        self.uploads.clear()
         s, room = self.session, self.room
         self.session = self.room = None
         if s is not None and room is not None and s.conn is self:
@@ -172,8 +166,7 @@ class ClientConnection:
         self.server.connections.discard(self)
         if flush and self._writer_task is not None and not self._writer_task.done():
             try:
-                self.queue.put_nowait(_CLOSE)   # writer exits after sending what is queued
-                # a peer that never reads must not pin the connection open forever
+                self.queue.put_nowait(_CLOSE)
                 asyncio.get_running_loop().call_later(FLUSH_GRACE, self._abort)
                 return
             except asyncio.QueueFull:
@@ -186,17 +179,16 @@ class ClientConnection:
             self._writer_task.cancel()
         transport = self.writer.transport
         if transport is not None:
-            transport.abort()                   # RST the peer; safe to call repeatedly
+            transport.abort()
 
-    # ------------------------------------------------------------------ main loop
     async def run(self) -> None:
         self._writer_task = asyncio.create_task(self._writer_loop(), name=f"writer {self.peer}")
         try:
             while not self.closed:
                 data = await self.reader.read(C.READ_CHUNK)
                 if not data:
-                    break                           # orderly EOF from the peer
-                self.last_seen = time.monotonic()   # any bytes count as activity
+                    break
+                self.last_seen = time.monotonic()
                 for msg_type, payload in self.decoder.feed(data):
                     if self.closed:
                         break
@@ -228,9 +220,8 @@ class ClientConnection:
             self.error(Err.BAD_MESSAGE, msg)
         self.close(Reason.DISCONNECTED, flush=True)
 
-    # ------------------------------------------------------------------ dispatch
     async def dispatch(self, msg_type: int, p: dict) -> None:
-        if log.isEnabledFor(logging.DEBUG):     # avoid str(p) on the hot path otherwise
+        if log.isEnabledFor(logging.DEBUG):
             text = str(p)
             log.debug("%s -> %s %s", self.peer, type_name(msg_type),
                       text if len(text) < 200 else text[:200] + "...")
@@ -281,7 +272,7 @@ class ClientConnection:
                                       "server_name": self.server.name, "proto": C.PROTO_VERSION})
 
     def _auth_error(self, code: str, msg: str, room: Room) -> None:
-        self.nonce = auth.new_nonce()           # never accept a proof for the same nonce twice
+        self.nonce = auth.new_nonce()
         self.error(code, msg, salt=room.salt, nonce=self.nonce)
 
     def on_join(self, p: dict) -> None:
@@ -318,7 +309,6 @@ class ClientConnection:
         token = p.get("resume_token")
         s = room.by_token.get(token) if isinstance(token, str) else None
         if s is not None:
-            # Resume: same user id and role; the old socket (maybe half-open) is replaced.
             old = s.conn
             if old is not None and old is not self:
                 s.conn = None
@@ -341,7 +331,7 @@ class ClientConnection:
                 if self.auth_failures >= MAX_AUTH_FAILURES:
                     self.close(Reason.DISCONNECTED, flush=True)
                 return
-            self.nonce = auth.new_nonce()       # consumed
+            self.nonce = auth.new_nonce()
         self._enter(room, role="owner" if room.owner_id is None else "editor")
 
     def _enter(self, room: Room, role: str) -> None:
@@ -369,7 +359,6 @@ class Server:
         self.requested_port = port
         self.port = port
         self.name = name or socket.gethostname().split(".")[0] or "LANBoard"
-        # no data_dir: the per-user app-data folder, never the current directory
         self.storage = Storage(data_dir or default_data_dir())
         self.discovery_enabled = discovery
         self.discovery_port = C.DISCOVERY_PORT if discovery_port is None else discovery_port
@@ -386,7 +375,6 @@ class Server:
         self._housekeeper: asyncio.Task | None = None
         self._client_tasks: set[asyncio.Task] = set()
 
-    # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
         meta = self.storage.load_server_meta()
         self.server_id = meta.get("server_id") or uuid.uuid4().hex[:12]
@@ -400,15 +388,11 @@ class Server:
                 continue
             if room is not None:
                 self.rooms[room.code] = room
-                for uid in room.sessions:       # never reuse a user id seen before
+                for uid in room.sessions:
                     if uid[1:].isdigit():
                         self._next_user = max(self._next_user, int(uid[1:]) + 1)
         self._save_server_meta()
 
-        # reuse_address=None = the platform default: SO_REUSEADDR on POSIX (so a restart
-        # does not wait for old TIME_WAIT sockets), but *not* on Windows, where
-        # SO_REUSEADDR would let a second server bind the same port and silently
-        # share (steal) its connections instead of failing with "address in use".
         self._listener = await asyncio.start_server(
             self._on_client, self.host, self.requested_port, ssl=self.ssl_context,
             limit=C.READ_CHUNK, reuse_address=None)
@@ -456,7 +440,6 @@ class Server:
             self._listener = None
         log.info("server stopped")
 
-    # ------------------------------------------------------------------ registry
     def allocate_user(self) -> tuple[str, str]:
         """Next server-wide unique user id (``u<n>``) and a round-robin colour.
 
@@ -482,7 +465,7 @@ class Server:
         store = self.storage.room_store(code)
         store.ensure()
         room = Room(code, name, store, password=password)
-        store.save_meta(room.to_meta())         # the room exists on disk from the start
+        store.save_meta(room.to_meta())
         self.rooms[code] = room
         log.info("room %s created (%s)%s", code, name, " [password]" if password else "")
         return room
@@ -490,13 +473,12 @@ class Server:
     def room_summaries(self) -> list[dict]:
         return [r.summary() for r in sorted(self.rooms.values(), key=lambda r: r.code)]
 
-    # ------------------------------------------------------------------ connections
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         sock = writer.get_extra_info("socket")
         if sock is not None:
             try:
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)   # disable Nagle
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)   # OS-level backup
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             except OSError:
                 pass
         conn = ClientConnection(self, reader, writer)

@@ -8,10 +8,6 @@ import pytest
 from lanboard.common import geometry as G
 
 
-# ---------------------------------------------------------------------------
-# synthetic stroke generators (flat point lists, like a mouse would produce)
-# ---------------------------------------------------------------------------
-
 def circle(cx=200, cy=150, rx=80, ry=80, n=90, start=0.3, sweep=2 * math.pi * 1.02, noise=0.0, seed=1):
     rnd = random.Random(seed)
     out = []
@@ -33,16 +29,12 @@ def polyline(corners, per_side=25, noise=0.0, seed=2):
 
 
 def rect_stroke(x=50, y=40, w=220, h=140, noise=0.0, seed=3):
-    c = [(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x + 3, y + 2)]   # closes near the start
+    c = [(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x + 3, y + 2)]
     return polyline(c, noise=noise, seed=seed)
 
 
-# ---------------------------------------------------------------------------
-# rdp / smoothing
-# ---------------------------------------------------------------------------
-
 def test_rdp_collinear_collapses_to_endpoints():
-    pts = [float(i) for x in range(11) for i in (x, 2 * x)]           # points on y = 2x
+    pts = [float(i) for x in range(11) for i in (x, 2 * x)]
     assert G.rdp(pts, 0.5) == [0.0, 0.0, 10.0, 20.0]
 
 
@@ -58,7 +50,7 @@ def test_rdp_short_and_degenerate_inputs():
     assert G.rdp([1, 2], 1) == [1, 2]
     assert G.rdp([1, 2, 3, 4], 1) == [1, 2, 3, 4]
     long = [float(v) for i in range(20000) for v in (i, math.sin(i / 50) * 30)]
-    assert len(G.rdp(long, 0.5)) < len(long)                            # no recursion error
+    assert len(G.rdp(long, 0.5)) < len(long)
 
 
 def test_chaikin_and_smooth_preserve_ends():
@@ -68,10 +60,6 @@ def test_chaikin_and_smooth_preserve_ends():
     s = G.smooth(polyline([(0, 0), (50, 0)], noise=2.0))
     assert s[:2] != [] and len(s) % 2 == 0
 
-
-# ---------------------------------------------------------------------------
-# bounds and hit testing
-# ---------------------------------------------------------------------------
 
 def _obj(t, geom, **style):
     return {"id": t, "type": t, "geom": geom, "style": style, "off": [0, 0]}
@@ -87,19 +75,19 @@ def test_bbox_includes_off():
 
 def test_hit_test_stroke_uses_segment_distance():
     s = _obj("stroke", {"pts": [0, 0, 100, 0, 100, 100]}, width=4)
-    assert G.hit_test(s, 50, 3, 2)          # near first segment (within radius + width/2)
+    assert G.hit_test(s, 50, 3, 2)
     assert not G.hit_test(s, 50, 10, 2)
     assert G.hit_test(s, 102, 50, 1)
-    assert not G.hit_test(s, 50, 50, 5)     # inside the corner but far from ink
+    assert not G.hit_test(s, 50, 50, 5)
     s["off"] = [0, 50]
     assert G.hit_test(s, 50, 52, 2)
 
 
 def test_hit_test_shapes():
     r = _obj("rect", {"x": 0, "y": 0, "w": 100, "h": 50}, width=2)
-    assert G.hit_test(r, 0, 25, 2) and not G.hit_test(r, 50, 25, 2)   # outline only
+    assert G.hit_test(r, 0, 25, 2) and not G.hit_test(r, 50, 25, 2)
     r["style"]["fill"] = "#ff0000"
-    assert G.hit_test(r, 50, 25, 2)                                     # filled -> inside hits
+    assert G.hit_test(r, 50, 25, 2)
     e = _obj("ellipse", {"x": 0, "y": 0, "w": 100, "h": 50}, width=2)
     assert G.hit_test(e, 100, 25, 2) and G.hit_test(e, 50, 0.5, 2)
     assert not G.hit_test(e, 50, 25, 2) and not G.hit_test(e, 98, 2, 2)
@@ -132,10 +120,6 @@ def test_constraints():
     assert x == pytest.approx(y)
     assert G.constrain_square(0, 0, 50, -20) == (50, -50)
 
-
-# ---------------------------------------------------------------------------
-# Smart Ink
-# ---------------------------------------------------------------------------
 
 def test_recognize_line():
     r = G.recognize_shape(polyline([(10, 10), (300, 120)]))
@@ -184,10 +168,10 @@ def test_recognize_arrow():
 
 
 @pytest.mark.parametrize("pts", [
-    polyline([(0, 0), (200, 0), (100, 170), (2, 2)]),                        # triangle
-    polyline([(0, 0), (100, 0), (200, 100), (0, 100), (200, 0)]),              # zigzag
-    circle(sweep=math.pi),                                                    # half circle (open arc)
-    [0, 0, 3, 3, 5, 5, 6, 7],                                                 # tiny scribble
+    polyline([(0, 0), (200, 0), (100, 170), (2, 2)]),
+    polyline([(0, 0), (100, 0), (200, 100), (0, 100), (200, 0)]),
+    circle(sweep=math.pi),
+    [0, 0, 3, 3, 5, 5, 6, 7],
 ])
 def test_recognize_rejects_other_strokes(pts):
     r = G.recognize_shape(pts)
@@ -196,21 +180,17 @@ def test_recognize_rejects_other_strokes(pts):
         assert r is None
 
 
-# ---------------------------------------------------------------------------
-# resizing from the selection handles
-# ---------------------------------------------------------------------------
-
 def test_resize_box_edges_and_clamp():
     from lanboard.common.geometry import resize_box
     box = (0.0, 0.0, 100.0, 50.0)
-    assert resize_box(box, "e", 20, 99) == (0, 0, 120, 50)               # only the right edge
+    assert resize_box(box, "e", 20, 99) == (0, 0, 120, 50)
     assert resize_box(box, "n", 99, -10) == (0, -10, 100, 50)
     assert resize_box(box, "nw", 10, 10) == (10, 10, 100, 50)
-    assert resize_box(box, "w", 500, 0, min_size=5) == (95, 0, 100, 50)  # clamps instead of flipping
-    assert resize_box((0, 5, 100, 5), "s", 0, 40) == (0, 5, 100, 5)      # zero-height axis left alone
+    assert resize_box(box, "w", 500, 0, min_size=5) == (95, 0, 100, 50)
+    assert resize_box((0, 5, 100, 5), "s", 0, 40) == (0, 5, 100, 5)
     x0, y0, x1, y1 = resize_box(box, "se", 100, 0, keep_aspect=True)
     assert (x1 - x0, y1 - y0) == (200, 100) and (x0, y0) == (0, 0)
-    x0, y0, x1, y1 = resize_box(box, "nw", -100, 0, keep_aspect=True)    # anchored at the opposite corner
+    x0, y0, x1, y1 = resize_box(box, "nw", -100, 0, keep_aspect=True)
     assert (x0, y0, x1, y1) == (-100, -50, 100, 50)
 
 
@@ -228,4 +208,4 @@ def test_scale_changes_per_type():
     t = {"type": "text", "geom": {"x": 0, "y": 0, "text": "x"}, "style": {"font_size": 20}}
     assert scale_changes(t, src, (0, 0, 200, 200), "se")["style.font_size"] == 40
     assert scale_changes(t, src, (0, 0, 150, 100), "e")["style.font_size"] == 30
-    assert scale_changes(t, src, (0, 0, 9999, 9999))["style.font_size"] == 400        # clamped
+    assert scale_changes(t, src, (0, 0, 9999, 9999))["style.font_size"] == 400

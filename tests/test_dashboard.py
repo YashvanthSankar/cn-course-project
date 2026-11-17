@@ -32,7 +32,7 @@ async def test_dashboard_renders_rooms_people_and_logs(tmp_path):
             a.submit({"k": "add", "obj": {"id": a.new_id(), "type": "stroke",
                                                 "style": {"color": "#000000", "width": 2},
                                                 "geom": {"pts": [i, 0, i + 10, 10]}}})
-        await a.settle(timeout=30)   # slow CI runners (macOS took ~5 min for the suite)
+        await a.settle(timeout=30)
         room = srv.rooms["LAB"]
         room.locked = True
         ring = RingLogHandler(size=3)
@@ -48,21 +48,18 @@ async def test_dashboard_renders_rooms_people_and_logs(tmp_path):
         lines = {ln.split()[0]: ln for ln in text.splitlines() if ln.startswith("  ") and ln.split()}
         assert "owner" in lines["alice"] and "online" in lines["alice"]
         assert "editor" in lines["bob"]
-        # the ring buffer keeps only the newest lines
         assert "log line 4" in text and "log line 1" not in text
-        # the op-rate column is computed from successive renders
         a.submit({"k": "add", "obj": {"id": a.new_id(), "type": "stroke",
                                             "style": {"color": "#000000", "width": 2},
                                             "geom": {"pts": [0, 0, 5, 5]}}})
         try:
-            await a.settle(timeout=30)   # slow CI runners (macOS took ~5 min for the suite)
+            await a.settle(timeout=30)
         except asyncio.TimeoutError as e:
             raise AssertionError(f"not settled: pending={list(a.pending)} buffer={list(a._buffer)} "
                                  f"server seq={room.board.seq}") from e
         await asyncio.sleep(0.05)
         assert "ops/s" in plain(dash.render())
         assert dash._rates["LAB"] > 0
-        # bob's cable is cut (no LEAVE): his session stays, shown offline
         bob_s = next(s for s in room.sessions.values() if s.username == "bob")
         b.drop()
         for _ in range(200):
@@ -72,7 +69,6 @@ async def test_dashboard_renders_rooms_people_and_logs(tmp_path):
         text = plain(dash.render())
         bob = next(ln for ln in text.splitlines() if ln.strip().startswith("bob"))
         assert "offline" in bob
-        # run() keeps redrawing into its output stream until cancelled
         out = io.StringIO()
         task = asyncio.create_task(Dashboard(srv, None, out=out).run(interval=0.01))
         await asyncio.sleep(0.1)

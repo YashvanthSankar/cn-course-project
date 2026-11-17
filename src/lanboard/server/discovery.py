@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("lanboard.discovery")
 
-MAX_PROBE = 2048            # ignore anything larger than a sane probe
-MAX_ROOMS_LISTED = 40       # keep the reply in one comfortably sized datagram
+MAX_PROBE = 2048
+MAX_ROOMS_LISTED = 40
 
 
 def local_ip_for(remote_ip: str) -> str | None:
@@ -62,7 +62,7 @@ def _interface_ipv4s() -> list[str]:
         import struct
     except ImportError:
         return []
-    req = 0x8915 if sys.platform.startswith("linux") else 0xC0206921     # SIOCGIFADDR
+    req = 0x8915 if sys.platform.startswith("linux") else 0xC0206921
     out: list[str] = []
     try:
         names = [name for _, name in socket.if_nameindex()]
@@ -73,24 +73,24 @@ def _interface_ipv4s() -> list[str]:
             try:
                 ifreq = fcntl.ioctl(s.fileno(), req, struct.pack("256s", name.encode()[:15]))
             except OSError:
-                continue                        # interface has no IPv4 address
-            out.append(socket.inet_ntoa(ifreq[20:24]))   # sockaddr_in.sin_addr
+                continue
+            out.append(socket.inet_ntoa(ifreq[20:24]))
     return out
 
 
 def _rank(ip: str) -> int:
     """Typical LAN ranges first; Docker bridges, VirtualBox host-only and VPN/CGNAT last."""
     if ip.startswith("192.168.56."):
-        return 5                                # VirtualBox host-only adapter
+        return 5
     if ip.startswith("192.168."):
         return 0
     if ip.startswith("10."):
         return 1
     if ip.startswith(("172.17.", "172.18.")):
-        return 4                                # usually Docker bridges
+        return 4
     if ip.startswith("172."):
         return 2
-    return 6                                    # 100.x CGNAT / VPN / public
+    return 6
 
 
 def lan_ipv4_addresses() -> list[str]:
@@ -98,7 +98,7 @@ def lan_ipv4_addresses() -> list[str]:
     found: list[str] = []
     probes = ["10.255.255.255", "192.168.255.255", "172.31.255.255", "8.8.8.8"]
     for target in probes:
-        ip = local_ip_for(target)               # UDP connect(): sends no packet
+        ip = local_ip_for(target)
         if ip and ip not in found:
             found.append(ip)
     for ip in _interface_ipv4s():
@@ -144,14 +144,14 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
         except ValueError:
             return
         if not isinstance(msg, dict) or msg.get("magic") != C.DISCOVERY_MAGIC:
-            return                                       # not for us: stay silent
+            return
         self.probes += 1
         try:
             self.transport.sendto(self.reply_for(addr), addr)
         except OSError as exc:
             log.debug("discovery reply to %s failed: %s", addr, exc)
 
-    def error_received(self, exc: Exception) -> None:   # ICMP errors etc.; harmless
+    def error_received(self, exc: Exception) -> None:
         log.debug("discovery socket error: %s", exc)
 
 

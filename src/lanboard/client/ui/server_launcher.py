@@ -62,13 +62,13 @@ def address_rank(addr: str, virtual: bool = False) -> int:
     if ip in ipaddress.IPv4Network("10.0.0.0/8"):
         return 1
     if ip in ipaddress.IPv4Network("172.17.0.0/16") or ip in ipaddress.IPv4Network("172.18.0.0/16"):
-        return 3                                      # usually Docker bridges
+        return 3
     if ip in ipaddress.IPv4Network("172.16.0.0/12"):
         return 2
-    return 4                                          # CGNAT/VPN/public last
+    return 4
 
 
-LAN_RANK_MAX = 3                                      # address_rank <= this: a private LAN address
+LAN_RANK_MAX = 3
 
 
 def prefer_lan(addrs: list[str], virtual=frozenset()) -> list[str]:
@@ -109,7 +109,6 @@ def lan_ipv4_addresses(lan_only: bool = False) -> list[str]:
                 virtual.add(text)
     if lan_only:
         return prefer_lan(out, virtual)
-    # physical before virtual, then private ranges (typical LANs) first
     out.sort(key=lambda a: (address_rank(a, a in virtual), a))
     return out
 
@@ -185,7 +184,7 @@ class ServerProcess(QObject):
         super().__init__(parent)
         self.port = int(port)
         self.proc: subprocess.Popen | None = None
-        self.reused = False              # a server was already listening on the port
+        self.reused = False
         self._t0 = 0.0
         self._timer = QTimer(self)
         self._timer.setInterval(self.POLL_MS)
@@ -197,7 +196,6 @@ class ServerProcess(QObject):
     def start(self) -> None:
         if port_accepts(self.port):
             if is_lanboard_server(self.port):
-                # An earlier LANBoard server already serves this port: use it.
                 self.reused = True
                 QTimer.singleShot(0, self.ready.emit)
             else:
@@ -208,13 +206,11 @@ class ServerProcess(QObject):
         self.command = server_command(self.port, data_dir or None)
         env = dict(os.environ)
         if not getattr(sys, "frozen", False):
-            # make "-m lanboard.server" importable even when running from a source checkout
             src = str(Path(__file__).resolve().parents[3])
             env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
         kwargs = {}
         if os.name == "nt":
             kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        # Logs go to a file, never to a pipe nobody drains (a full pipe would block the server).
         self.log_path = Path(data_dir or ".") / f"server-{self.port}.log"
         try:
             self._log = open(self.log_path, "wb")

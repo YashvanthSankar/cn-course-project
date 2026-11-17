@@ -70,13 +70,13 @@ from .persistence import RoomStore
 
 log = logging.getLogger("lanboard.room")
 
-DEDUPE_MAX = 4096          # remembered op_ids per session (bounded LRU)
-CATCHUP_MAX_OPS = 5000     # longer gaps are healed with a SNAPSHOT instead of OP_BATCH
-OP_BATCH_CHUNK = 500       # at most this many ops per OP_BATCH frame (and <= PART_BYTES)
-JOIN_CHAT_TAIL = 200       # chat messages included in JOINED
-LIVE_PER_SEC = 240         # ephemeral frames per client per second (excess silently dropped)
-CHAT_PER_SEC = 5           # chat messages per client per second (burst 2x)
-MAX_UPLOADS = 4            # concurrent partial blob uploads per connection
+DEDUPE_MAX = 4096
+CATCHUP_MAX_OPS = 5000
+OP_BATCH_CHUNK = 500
+JOIN_CHAT_TAIL = 200
+LIVE_PER_SEC = 240
+CHAT_PER_SEC = 5
+MAX_UPLOADS = 4
 SYSTEM_COLOR = "#808080"
 
 _HEX = re.compile(r"^[0-9a-f]+$")
@@ -87,10 +87,6 @@ _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 class BadMessage(ValueError):
     """A payload violates the wire contract: reply ERROR BAD_MESSAGE and close."""
 
-
-# ---------------------------------------------------------------------------
-# payload helpers
-# ---------------------------------------------------------------------------
 
 def get_str(p: dict, key: str, max_len: int, *, required: bool = True) -> str | None:
     v = p.get(key)
@@ -184,13 +180,12 @@ class Session:
         self.color = color
         self.role = role
         self.resume_token = resume_token
-        self.order = order                      # join order; used for owner promotion
-        self.client_id = ""                     # the app install it last connected from (kick = ban)
-        self.conn: Any = None                   # current ClientConnection, None while offline
+        self.order = order
+        self.client_id = ""
+        self.conn: Any = None
         self.hand = False
         self.disconnected_at: float | None = time.monotonic()
-        self.rtt: float | None = None           # client-reported RTT (ms), for the dashboard
-        # op_id -> OpMsg for ops already accepted from this user (idempotent resend)
+        self.rtt: float | None = None
         self.accepted: OrderedDict[str, dict] = OrderedDict()
         self.op_bucket = TokenBucket(C.OPS_PER_SEC_LIMIT)
         self.live_bucket = TokenBucket(LIVE_PER_SEC)
@@ -230,30 +225,25 @@ class Room:
         self.created = time.time()
 
         self.board = Board()
-        # history = every OpMsg after history_base.seq, contiguous in seq:
-        # history[i]["seq"] == history_base.seq + 1 + i
         self.history_base = Board()
         self.history: list[dict] = []
-        self.history_sizes: list[int] = []      # JSON bytes of each history entry (byte cap)
+        self.history_sizes: list[int] = []
         self.history_bytes = 0
-        self.archived_seq = 0                   # last seq already in history.jsonl
-        self._rewrite_history = True            # history files must be rewritten from memory
-        self._history_busy: set[str] = set()    # user_ids with a HISTORY being built
+        self.archived_seq = 0
+        self._rewrite_history = True
+        self._history_busy: set[str] = set()
 
         self.sessions: dict[str, Session] = {}
         self.by_token: dict[str, Session] = {}
-        # client_ids removed by the owner. A kicked client may not rejoin this room
-        # for as long as the server runs (kept in memory only, never persisted).
         self.banned: set[str] = set()
         self._order = 0
 
         self.chat: deque[dict] = deque(maxlen=C.CHAT_HISTORY_MAX)
         self.chat_seq = 0
 
-        # persistence bookkeeping
         self.ops_since_snapshot = 0
         self.last_snapshot = time.monotonic()
-        self.dirty = False                      # room.json needs rewriting
+        self.dirty = False
         self._saving = False
         self._meta_writing = False
         self._tasks: set[asyncio.Task] = set()
@@ -280,7 +270,6 @@ class Room:
             MsgType.BLOB_GET: self.on_blob_get,
         }
 
-    # ------------------------------------------------------------------ queries
     @property
     def seq(self) -> int:
         return self.board.seq
@@ -313,7 +302,6 @@ class Room:
     def is_owner(self, s: Session) -> bool:
         return s.role == "owner" and self.owner_id == s.user_id
 
-    # ------------------------------------------------------------------ sending
     def broadcast(self, msg_type: int, payload: dict, exclude: Session | None = None) -> None:
         """Send one message to every online member (optionally except one).
 
@@ -342,7 +330,6 @@ class Room:
     def _broadcast_room(self) -> None:
         self.broadcast(MsgType.ROOM_UPDATE, {"room": self.info()})
 
-    # ------------------------------------------------------------------ chat
     def _add_chat(self, msg: dict) -> None:
         self.chat.append(msg)
         try:
@@ -358,7 +345,6 @@ class Room:
                         "color": SYSTEM_COLOR, "ts": round(time.time(), 3), "text": text,
                         "kind": "system"})
 
-    # ------------------------------------------------------------------ membership
     def unique_username(self, wanted: str, exclude: Session | None = None) -> str:
         """Return ``wanted``, or ``wanted (2)``, ``(3)``... if taken in this room."""
         taken = {s.username for s in self.sessions.values() if s is not exclude}
@@ -436,7 +422,7 @@ class Room:
             self.presenter = None
             room_changed = True
         if self.owner_id == s.user_id:
-            self._promote_owner()               # broadcasts ROOM_UPDATE itself
+            self._promote_owner()
         elif room_changed:
             self._broadcast_room()
         self.dirty = True
@@ -460,7 +446,6 @@ class Room:
                     and now - s.disconnected_at > C.SESSION_TTL:
                 self.remove_session(s, Reason.EXPIRED)
 
-    # ------------------------------------------------------------------ catch-up
     def snapshot_frames(self) -> list[bytes]:
         """Encoded SNAPSHOT for the current seq (cached: many late joiners, one encode).
 
@@ -481,7 +466,7 @@ class Room:
             return
         try:
             frames = self.snapshot_frames()
-        except ProtocolError:                   # one object larger than a frame: cannot happen
+        except ProtocolError:
             log.error("[%s] board object too large for a SNAPSHOT frame", self.code)
             self._error(s, Err.TOO_LARGE, "board snapshot cannot be encoded")
             return
@@ -498,9 +483,8 @@ class Room:
         if not ok:
             self.send_snapshot(s)
             return
-        start = last_seq - self.base_seq                    # history[i].seq == base_seq + 1 + i
+        start = last_seq - self.base_seq
         tail = self.history[start:]
-        # split by count *and* bytes: 500 big strokes could exceed one frame
         ranges = pack_ranges(self.history_sizes[start:], part_budget(), OP_BATCH_CHUNK)
         try:
             frames = [encode(MsgType.OP_BATCH, {"ops": tail[a:b]}) for a, b in ranges]
@@ -510,7 +494,6 @@ class Room:
         for f in frames:
             s.conn.send_frame(f)
 
-    # ------------------------------------------------------------------ dispatch
     async def handle(self, s: Session, msg_type: int, p: dict) -> None:
         """Route one message from a joined client to its handler."""
         handler = self._handlers.get(msg_type)
@@ -520,7 +503,6 @@ class Room:
         if asyncio.iscoroutine(result):
             await result
 
-    # ------------------------------------------------------------------ board ops
     def check_permission(self, s: Session, op: Any) -> tuple[str, str] | None:
         """Server-side access control for an op (step 2 of the pipeline)."""
         if s.role == "viewer":
@@ -550,38 +532,28 @@ class Room:
         Steps (see messages.py): joined -> permission -> rate limit -> validate
         -> dedupe -> normalise -> size check -> seq+apply -> log -> broadcast (+HASH).
         """
-        # 1. joined
         if self.sessions.get(s.user_id) is not s:
             self._reject(s, op_id, Err.NOT_JOINED, "not a member of this room")
             return None
-        # 2. permission
         denied = self.check_permission(s, op)
         if denied:
             self._reject(s, op_id, *denied)
             return None
-        # 3. rate limit
         if not s.op_bucket.take():
             self._reject(s, op_id, Err.RATE_LIMITED, f"more than {C.OPS_PER_SEC_LIMIT} ops/s")
             return None
-        # 4. validate
         try:
             validate_op(op)
             self._check_capacity(op)
         except InvalidOp as exc:
             self._reject(s, op_id, Err.INVALID_OP, str(exc))
             return None
-        # 5. dedupe: an op re-sent after a reconnect is acknowledged again, never re-applied
         prev = s.accepted.get(op_id)
         if prev is not None:
             self._send(s, MsgType.OP, prev)
             return None
-        # 6. normalise (clear -> delete of live ids, add.owner forced to the sender)
         kind = op["k"]
         op = self.board.normalise(op, s.user_id)
-        # 7. size check: encode the OP frame once, before committing. An op whose
-        #    frame is absurdly large is refused here with a clear error; the
-        #    connection stays up and no seq is used. (Frames above MAX_FRAME never
-        #    get this far: the decoder treats them as a broken stream.)
         seq = self.seq + 1
         msg = {"seq": seq, "user_id": s.user_id, "op_id": op_id,
                "ts": round(time.time(), 3), "op": op}
@@ -594,21 +566,17 @@ class Room:
             self._reject(s, op_id, Err.TOO_LARGE,
                          f"edit too large ({what}; the limit is {C.MAX_OP_BYTES:,} bytes)")
             return None
-        # 8. sequence + apply (apply copies what it keeps, so ``msg`` stays as encoded)
         self.board.apply(op, seq)
-        # 9. log: disk (crash recovery) and memory (resume/timeline) before anyone sees it.
-        #    The log line is the frame's JSON payload, so nothing is encoded twice.
         raw = frame[HEADER_SIZE + 1:]
         try:
             size = self.store.append_op(msg, raw)
-        except OSError as exc:                  # disk full etc.: keep serving, shout in the log
+        except OSError as exc:
             size = len(raw) + 1
             log.error("[%s] cannot append to ops.jsonl: %s (seq %d not durable until the "
                       "next snapshot)", self.code, exc, seq)
         self._add_history(msg, size)
         s.remember(op_id, msg)
         self.ops_since_snapshot += 1
-        # 10. broadcast to everyone, sender included (its echo is the ack)
         self.broadcast_frame(frame)
         if kind == "replace" or seq % C.HASH_EVERY_OPS == 0:
             self.broadcast(MsgType.HASH, {"seq": seq, "hash": self.board.hash()})
@@ -655,7 +623,7 @@ class Room:
         del self.history[:drop]
         del self.history_sizes[:drop]
         self.history_bytes -= freed
-        self._rewrite_history = True            # the files still start at the old base
+        self._rewrite_history = True
 
     def on_resync(self, s: Session, p: dict) -> None:
         self.send_catch_up(s, p.get("last_seq"))
@@ -667,7 +635,7 @@ class Room:
         created; ``base_seq > 0`` means older ops were dropped by the caps
         and the time-lapse starts from the base board at that seq.
         """
-        base = self.history_base.snapshot()     # deep copy: safe to encode in a thread
+        base = self.history_base.snapshot()
         return {"base_seq": base["seq"], "base": base, "ops": list(self.history)}
 
     async def on_history_req(self, s: Session, p: dict) -> None:
@@ -690,13 +658,12 @@ class Room:
             except ProtocolError:
                 self._error(s, Err.TOO_LARGE, "history cannot be encoded")
                 return
-            if s.conn is conn:                  # still the same connection after the await
+            if s.conn is conn:
                 for f in frames:
                     conn.send_frame(f)
         finally:
             self._history_busy.discard(s.user_id)
 
-    # ------------------------------------------------------------------ ephemeral relay
     def _may_draw(self, s: Session) -> bool:
         return s.role != "viewer" and (not self.locked or self.is_owner(s))
 
@@ -724,8 +691,6 @@ class Room:
             self._relay(s, MsgType.STROKE_END, out)
 
     def on_laser(self, s: Session, p: dict) -> None:
-        # Pointing is not editing: viewers keep the laser (it is never saved, and
-        # _relay rate-limits it like every other ephemeral message).
         self._relay(s, MsgType.LASER, {"pts": get_pts(p)})
 
     def on_viewport(self, s: Session, p: dict) -> None:
@@ -743,7 +708,6 @@ class Room:
         else:
             self._relay(s, MsgType.SIGNAL, {"kind": kind})
 
-    # ------------------------------------------------------------------ chat
     def on_chat_send(self, s: Session, p: dict) -> None:
         raw = get_str(p, "text", 4 * C.MAX_CHAT_LEN)
         cmid = get_str(p, "cmid", 64, required=False)
@@ -760,7 +724,6 @@ class Room:
             msg["cmid"] = cmid
         self._add_chat(msg)
 
-    # ------------------------------------------------------------------ admin
     def _require_owner(self, s: Session) -> bool:
         if self.is_owner(s):
             return True
@@ -782,7 +745,7 @@ class Room:
             if role != "owner":
                 self._error(s, Err.FORBIDDEN, "transfer ownership to someone else first")
             return
-        if role == "owner":                     # ownership transfer
+        if role == "owner":
             s.role = "editor"
             t.role = "owner"
             self.owner_id = t.user_id
@@ -810,21 +773,18 @@ class Room:
         conn = t.conn
         client_id = t.client_id or (getattr(conn, "client_id", "") if conn else "")
         if client_id:
-            self.banned.add(client_id)             # kick = ban: no instant rejoin
+            self.banned.add(client_id)
         if conn is not None:
-            # detach first so closing the socket does not broadcast "disconnected"
             t.conn = None
             conn.session = conn.room = None
             conn.send(MsgType.ERROR, {"code": Err.KICKED, "msg": f"removed by {s.username}"})
             conn.close(Reason.KICKED, flush=True)
-        self.remove_session(t, Reason.KICKED)      # invalidates the resume token too
+        self.remove_session(t, Reason.KICKED)
         self.system_chat(f"{s.username} removed {t.username}")
 
     def on_room_settings(self, s: Session, p: dict) -> None:
         if not self._require_owner(s):
             return
-        # Validate every field first, then apply: a bad field must not leave the
-        # room half-changed with no ROOM_UPDATE telling anyone what changed.
         if "locked" in p and not isinstance(p["locked"], bool):
             raise BadMessage("locked must be a bool")
         if "editors_can_clear" in p and not isinstance(p["editors_can_clear"], bool):
@@ -856,7 +816,6 @@ class Room:
             self.system_chat(n)
         self.dirty = True
 
-    # ------------------------------------------------------------------ saves
     async def on_save(self, s: Session, p: dict) -> None:
         name = clean_text(get_str(p, "name", 256), 64)
         if not name:
@@ -864,7 +823,6 @@ class Room:
         if s.role == "viewer":
             self._error(s, Err.FORBIDDEN, "viewers cannot save")
             return
-        # capture a consistent copy on the loop thread, write it in a worker thread
         objects = copy.deepcopy([o for o in self.board.objects.values() if not o["deleted"]])
         await asyncio.to_thread(self.store.write_save, name, self.seq, objects)
         saves = await asyncio.to_thread(self.store.list_saves)
@@ -883,19 +841,15 @@ class Room:
         if data is None:
             self._error(s, Err.NOT_FOUND, f"no save named {name!r}")
             return
-        # the load goes through the normal pipeline as a ``replace`` op
         msg = self.submit(s, f"load:{auth.new_nonce()}",
                           {"k": "replace", "objects": data.get("objects", [])})
         if msg is not None:
             self.system_chat(f"{s.username} loaded {name!r}")
 
-    # ------------------------------------------------------------------ blobs
     async def on_blob_put(self, s: Session, p: dict) -> None:
         sha = get_str(p, "hash", 64)
         mime = get_str(p, "mime", 100)
         size = get_int(p, "size", 0, 2 ** 40)
-        # chunks are at least 1 KiB (clients use BLOB_CHUNK), so the count is bounded by the
-        # size: otherwise a client could announce a million empty chunks and fill our memory
         count = get_int(p, "count", 1, max(1, -(-size // 1024)))
         index = get_int(p, "index", 0, count - 1)
         data = get_str(p, "data", 2 * C.BLOB_CHUNK + 1024)
@@ -912,7 +866,7 @@ class Room:
             return
         if sha not in conn.uploads and await asyncio.to_thread(self.store.has_blob, sha):
             if index == 0 and s.conn is conn:
-                self._send(s, MsgType.BLOB_STORED, {"hash": sha})   # already have it: dedupe
+                self._send(s, MsgType.BLOB_STORED, {"hash": sha})
             return
         if s.conn is not conn:
             return
@@ -940,7 +894,6 @@ class Room:
             return
         if len(up["chunks"]) < count:
             return
-        # all chunks are in: assemble, verify integrity end-to-end, store
         del conn.uploads[sha]
         blob = b"".join(up["chunks"][i] for i in range(count))
         if len(blob) != size or hashlib.sha256(blob).hexdigest() != sha:
@@ -967,7 +920,6 @@ class Room:
                                               "index": i, "count": count,
                                               "data": base64.b64encode(chunk).decode("ascii")})
 
-    # ------------------------------------------------------------------ persistence
     def to_meta(self) -> dict:
         return {"code": self.code, "name": self.name, "created": self.created,
                 "salt": self.salt, "verifier": self.verifier, "locked": self.locked,
@@ -995,7 +947,6 @@ class Room:
         replayed = room._load_board(store)
         room.ops_since_snapshot = replayed
 
-        # sessions survive restarts, so clients can resume as the same user/role
         for sm in meta.get("sessions", []):
             try:
                 s = Session(sm["user_id"], sm["username"], sm["color"], sm["role"],
@@ -1004,7 +955,6 @@ class Room:
                 continue
             room.sessions[s.user_id] = s
             room.by_token[s.resume_token] = s
-        # rebuild the op-id dedupe tables from the replayed log
         for msg in room.history:
             s = room.sessions.get(msg.get("user_id"))
             if s is not None and isinstance(msg.get("op_id"), str):
@@ -1058,7 +1008,7 @@ class Room:
         base_snap, archived = store.load_history()
         logged = store.load_ops_sized()
         self.history_base = Board.from_snapshot(base_snap) if base_snap else Board()
-        self._rewrite_history = base_snap is None           # create the files at the next checkpoint
+        self._rewrite_history = base_snap is None
         gap = self._extend_history(archived)
         self.archived_seq = self.base_seq + len(self.history)
         if gap is None:
@@ -1066,7 +1016,7 @@ class Room:
         end = self.base_seq + len(self.history)
 
         if snap and self.base_seq <= snap_seq <= end:
-            self.board = Board.from_snapshot(snap)          # fast path: replay only the tail
+            self.board = Board.from_snapshot(snap)
             start = snap_seq - self.base_seq
         elif snap is None or snap_seq < self.base_seq:
             self.board = self.history_base.copy()
@@ -1087,7 +1037,7 @@ class Room:
                         self.code, gap, self.base_seq + len(self.history))
         for m in self.history[start:]:
             self.board.apply(m["op"], m["seq"])
-        self._trim_history()                                # the caps may have been lowered
+        self._trim_history()
         return self.board.seq - snap_seq
 
     def _spawn(self, coro) -> None:
@@ -1100,9 +1050,9 @@ class Room:
             return
         try:
             asyncio.get_running_loop()
-        except RuntimeError:                    # no loop (synchronous unit test): housekeeping
-            return                              # will pick it up later
-        self._saving = True                     # set now so a second trigger is a no-op
+        except RuntimeError:
+            return
+        self._saving = True
         self._spawn(self.write_snapshot())
 
     async def write_snapshot(self) -> None:
@@ -1122,21 +1072,17 @@ class Room:
             snap = self.board.snapshot()
             seq = snap["seq"]
             base_seq = self.base_seq
-            upto = max(0, seq - base_seq)                   # history[:upto] has seq <= snapshot
+            upto = max(0, seq - base_seq)
             if self._rewrite_history:
-                # trimmed (or first checkpoint): base + every op up to the snapshot
-                self._rewrite_history = False               # a trim during the await sets it again
+                self._rewrite_history = False
                 base = self.history_base.snapshot()
                 archive = self.history[:upto]
             else:
-                base = None                                 # just append the new ops
+                base = None
                 archive = self.history[max(0, self.archived_seq - base_seq):upto]
             await asyncio.to_thread(self.store.write_checkpoint, snap, archive, base)
             self.archived_seq = max(seq, base_seq)
             if self.base_seq > seq:
-                # The history was trimmed past the snapshot while it was being
-                # written, so memory no longer holds every op after ``seq``. The
-                # log on disk still does: keep it until the next checkpoint.
                 log.debug("[%s] snapshot @%d written, log kept (history moved on)", self.code, seq)
                 return
             tail = self.history[seq - self.base_seq:]
@@ -1146,7 +1092,7 @@ class Room:
             log.debug("[%s] snapshot @%d written, %d ops archived, %d kept in log",
                       self.code, seq, len(archive), len(tail))
         except Exception:
-            self._rewrite_history = True                    # state of the files is unknown
+            self._rewrite_history = True
             log.exception("[%s] snapshot failed", self.code)
         finally:
             self._saving = False
