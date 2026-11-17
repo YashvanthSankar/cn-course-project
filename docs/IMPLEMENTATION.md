@@ -57,7 +57,7 @@ cn-course-project/
 │   ├── smoke_test.py         # runs the frozen bundle (server + headless client + bots)
 │   └── make_release.py       # assembles the submission zip
 ├── .github/workflows/build.yml   # Windows/Linux/macOS: tests -> build -> smoke test -> artifact
-└── docs/                     # technical documentation (PDF + source), presentation, ARCHITECTURE, IMPLEMENTATION, CLIENT_API, FEATURES, brief/ (PDF)
+└── docs/                     # technical documentation (PDF + source), presentation, CONCEPT, FEATURES, RESEARCH, ARCHITECTURE, IMPLEMENTATION, CLIENT_API, brief/ (PDF)
 ```
 
 ## 2. Module details

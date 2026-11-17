@@ -166,7 +166,9 @@ The submission zip (executables, source, documents, videos) is put together by
 |---|---|
 | [`docs/LANBoard_Technical_Documentation.pdf`](docs/LANBoard_Technical_Documentation.pdf) | technical documentation and user guide (source: [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)) |
 | [`docs/LANBoard_Presentation.pptx`](docs/LANBoard_Presentation.pptx) | the presentation deck used in the explanation video |
-| [`docs/FEATURES.md`](docs/FEATURES.md) | feature list |
+| [`docs/CONCEPT.md`](docs/CONCEPT.md) | the idea, scope, how the design meets the rubric, demo story |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | full feature list: signature, mandatory and extra features |
+| [`docs/RESEARCH.md`](docs/RESEARCH.md) | whiteboards we studied for design ideas, and what we chose |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | architecture, wire protocol, sync and undo rules |
 | [`docs/CLIENT_API.md`](docs/CLIENT_API.md) | internal contracts between client modules |
 | [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) | code layout, testing and build |
