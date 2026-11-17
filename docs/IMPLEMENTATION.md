@@ -1,7 +1,7 @@
 # IMPLEMENTATION — Code Layout, Modules & Build Plan
 
 Read `docs/ARCHITECTURE.md` first (protocol and semantics). This file covers *where code goes* and *how each
-piece is built and tested*. Owners are listed in `docs/TODO.md`.
+piece is built and tested*. The area each team member presents is listed in `TEAM.md`.
 
 ## 1. Repository layout
 ```
@@ -57,7 +57,7 @@ cn-course-project/
 │   ├── smoke_test.py         # runs the frozen bundle (server + headless client + bots)
 │   └── make_release.py       # assembles the submission zip
 ├── .github/workflows/build.yml   # Windows/Linux/macOS: tests -> build -> smoke test -> artifact
-└── docs/                     # PROJECT_BRIEF, CONCEPT, ARCHITECTURE, IMPLEMENTATION, CLIENT_API, TODO, RESEARCH, brief/ (PDF)
+└── docs/                     # technical documentation (PDF + source), presentation, ARCHITECTURE, IMPLEMENTATION, CLIENT_API, FEATURES, brief/ (PDF)
 ```
 
 ## 2. Module details
@@ -148,7 +148,7 @@ class UndoManager: record(op); undo(board); redo(board)
 | Room logic | seq, dedupe, roles, compaction | `tests/test_server.py` (fake connections, no sockets) |
 | Integration | real TCP server + headless clients; real NetClient + SessionController | `tests/test_integration.py`, `test_e2e_client.py` |
 | Convergence / faults | 6 bots with random concurrent ops, link loss, offline edits, resume → identical board hashes | `tests/test_convergence.py`; manual: Chaos Lab (`client/chaos.py`) |
-| LAN manual | 3–4 laptops, internet off, Wi-Fi pull test | checklist in TODO.md |
+| LAN manual | 3–4 laptops, internet off, Wi-Fi pull test | checklist in the technical documentation, section 13 |
 | Load | N bots drawing; reports convergence | `python -m lanboard.tools.bot --bots 8 --rate 20 --seconds 30` |
 | Frozen bundle | server + headless client + bots against `dist/LANBoard` | `packaging/smoke_test.py` (also in CI) |
 

@@ -7,12 +7,13 @@ Usage (from anywhere; paths are relative to the repository)::
 Layout of the zip (entries at the zip root)::
 
     README_SUBMISSION.txt                  team, contents, quick run steps (Windows/macOS/Linux)
+    TEAM.md                                team members, roll numbers, video chapters
     executables/<platform>/LANBoard/...    lanboard-server[.exe], lanboard-client[.exe], _internal/
     source/...                             `git archive HEAD`: committed files only
     docs/LANBoard_Technical_Documentation.pdf
     docs/LANBoard_Presentation.pptx
-    docs/LANBoard_Contributions_Report.pdf
-    video/README.txt                       drop the member explanation videos here
+    video/LANBoard_Explanation_Video.mp4   all members in one file (with chapters)
+    video/parts/*.mp4                      the same, one file per member
 
 Inputs:
 
@@ -24,7 +25,8 @@ Inputs:
   ``LANBoard/`` folder or as the ``LANBoard-<OS>.zip`` produced by
   .github/workflows/build.yml (the downloaded GitHub artifact, a zip that holds
   that zip, works too).
-* The documents are looked up in ``docs/``, ``report/``, the repository root and
+* Videos are taken from ``--video DIR`` (default ``~/Desktop/LANBoard_scripts``).
+* The documents are looked up in ``docs/``, the repository root and
   ``release/docs/``; missing ones only produce a warning.
 
 Unix permission bits and symlinks are stored in the zip (the macOS bundle has
@@ -53,7 +55,6 @@ ZIP_NAME = "LANBoard_CN_Project_2026.zip"
 DOCS = {
     "LANBoard_Technical_Documentation.pdf": "Technical Documentation (PDF)",
     "LANBoard_Presentation.pptx": "Presentation (PPT)",
-    "LANBoard_Contributions_Report.pdf": "Team contributions report (PDF)",
 }
 WIN_PATH_WARN = 150
 
@@ -232,7 +233,7 @@ def add_source(packer: Packer) -> str:
 
 
 def find_doc(name: str, out_dir: Path) -> Path | None:
-    for d in (ROOT / "docs", ROOT / "report", ROOT, out_dir / "docs"):
+    for d in (ROOT / "docs", ROOT, out_dir / "docs"):
         if (d / name).is_file():
             return d / name
     return None
@@ -275,7 +276,10 @@ CONTENTS
       _internal/              shared runtime: keep it next to the two programs
   source/                     commented source code (git commit {commit.split()[0]})
 {doc_lines}
-  video/                      member explanation videos
+  video/LANBoard_Explanation_Video.mp4
+                              explanation video, all members in order (chapters)
+  video/parts/                the same video, one file per member
+  TEAM.md                     team, roll numbers, where each member starts in the video
   README_SUBMISSION.txt       this file
 
 No internet connection is needed at any point. Everything runs over TCP
@@ -375,17 +379,14 @@ RUN FROM SOURCE (alternative)
 """
 
 
-VIDEO_NOTE = """Member explanation videos
-=========================
-
-Put one video per team member in this folder before submitting, e.g.
-
-  01_<Name>_<RollNo>.mp4
-
-Each member explains their own contribution using the presentation and the
-source code, with name and face clearly visible (see docs/PROJECT_BRIEF.md,
-"Explanation Video").
-"""
+VIDEOS = {
+    "LANBoard_Explanation_Video_Full.mp4": "video/LANBoard_Explanation_Video.mp4",
+    "Part1_Yashvanth_server_core.mp4": "video/parts/1_Yashvanth_S_CS24I1029_server_core.mp4",
+    "Part2_Jeevanandham_networking.mp4": "video/parts/2_Jeevanandham_T_CS24I1035_networking.mp4",
+    "Part3_Akula_SaiTeja_canvas.mp4": "video/parts/3_Akula_Sai_Teja_CS24I1054_canvas.mp4",
+    "Part4_Nithillakrishi_ui.mp4": "video/parts/4_Nithillakrishi_P_Y_CS24I1039_ui.mp4",
+    "Part5_Live_demo_SaiTeja.mp4": "video/parts/5_Live_demo.mp4",
+}
 
 
 def human(n: float) -> str:
@@ -401,6 +402,8 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "release"), help="output folder (default: release/)")
     ap.add_argument("--dist", default=str(ROOT / "dist" / "LANBoard"), help="this machine's bundle")
     ap.add_argument("--no-local-dist", action="store_true", help="do not include this machine's dist/")
+    ap.add_argument("--video", default=str(Path.home() / "Desktop" / "LANBoard_scripts"),
+                    help="folder with the explanation videos")
     args = ap.parse_args()
 
     out_dir = Path(args.out).resolve()
@@ -455,12 +458,20 @@ def main() -> int:
             p = find_doc(name, out_dir)
             docs_found[name] = p is not None
             if p is None:
-                warn(f"docs/{name} not found (looked in docs/, report/, repo root, release/docs/)")
+                warn(f"docs/{name} not found (looked in docs/, repo root, release/docs/)")
                 continue
             packer.add_bytes(f"docs/{name}", p.read_bytes(), 0o644)
             print(f"  + docs/{name}  (from {p})")
 
-        packer.add_bytes("video/README.txt", VIDEO_NOTE.encode("utf-8"))
+        print("video:")
+        for src_name, arc in VIDEOS.items():
+            src = Path(args.video) / src_name
+            if not src.is_file():
+                warn(f"video {src} not found")
+                continue
+            packer.add_bytes(arc, src.read_bytes(), 0o644, compress=False)
+            print(f"  + {arc}  (from {src})")
+        packer.add_bytes("TEAM.md", (ROOT / "TEAM.md").read_bytes(), 0o644)
         packer.add_bytes("README_SUBMISSION.txt",
                          readme_text(platforms, docs_found, commit).replace("\n", "\r\n").encode("utf-8"))
         packer.close()

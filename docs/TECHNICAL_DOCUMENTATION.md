@@ -17,7 +17,7 @@
 <div><b>0</b><span>internet, accounts or cloud services needed</span></div>
 </div>
 <table>
-<thead><tr><th>Team member</th><th>Roll no.</th><th>Area built</th></tr></thead>
+<thead><tr><th>Team member</th><th>Roll no.</th><th>Area presented</th></tr></thead>
 <tbody>
 <tr><td>Yashvanth S</td><td>CS24I1029</td><td>Server core &amp; state</td></tr>
 <tr><td>Jeevanandham T</td><td>CS24I1035</td><td>Protocol &amp; networking</td></tr>
@@ -79,7 +79,7 @@ Figure 1 shows a typical deployment. Any laptop on the LAN can host the server, 
 
 ### 2.3 Source code map
 
-| Module | Responsibility | Owner |
+| Module | Responsibility | Presented by |
 |---|---|---|
 | `common/protocol.py` | `encode`, incremental `FrameDecoder`, multi-part split (`encode_parts`) and `PartAssembler` | Jeevanandham |
 | `common/messages.py` | `MsgType` codes, payload contracts (docstring), `Err`, `Reason` | Jeevanandham |
@@ -856,7 +856,7 @@ All tunables live in `common/config.py` unless another file is named. The build 
 
 ## Appendix B. Requirements traceability
 
-Every requirement and rubric item of the brief (docs/PROJECT_BRIEF.md), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed below the table (B.1–B.6) and in §14.
+Every requirement and rubric item of the brief (docs/brief/), how LANBoard meets it, where the code is (paths below `src/lanboard/`) and which tests cover it (`tests/`). Weaknesses found during this audit are marked **⚠** and listed below the table (B.1–B.6) and in §14.
 
 | Requirement | How we meet it | Code | Tests |
 |---|---|---|---|
@@ -899,11 +899,11 @@ Every requirement and rubric item of the brief (docs/PROJECT_BRIEF.md), how LANB
 * **B.5** *(fixed)* The server dashboard had no automated tests; `test_dashboard.py` now covers it.
 * **B.6** *(fixed)* The end-to-end window tests (§13.3) found nine UI-level bugs: Ctrl/Cmd+Enter in a text editor focused chat instead of committing; an image inserted offline never reached others (ops were replayed before the image upload) and showed a raw "unknown blob" error; imports and exports showed duplicate toasts; the "raised a hand" toast never fired; editors could press Present although the server ignores their view; a kicked user could rejoin through "Back to start" (new client id per session); viewers could press Save; viewers' laser pointer was not relayed.
 
-## Appendix C. Team contributions and third-party software
+## Appendix C. Team and third-party software
 
-Each member built and maintains one area. Each member's commits are recorded in the git history.
+Each member presents one area of the system in the explanation video and the viva.
 
-| Member | Area built |
+| Member | Area presented |
 |---|---|
 | Yashvanth S (CS24I1029) | server core: listener, connections, rooms, op pipeline, sessions, persistence, history, dashboard |
 | Jeevanandham T (CS24I1035) | protocol and networking: framing, message catalogue, client transport, reconnect, discovery, Chaos Lab, metrics, bot |

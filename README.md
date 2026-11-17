@@ -82,69 +82,31 @@ the end that every copy of the board matches:
 - Campus Wi-Fi often blocks traffic between clients. For demos, use a phone hotspot or a small
   switch.
 
-## Team and contributions
+## Team
 
-| Name | Roll no. | Area |
+| Name | Roll no. | Area presented |
 |---|---|---|
 | Yashvanth S | CS24I1029 | Server core & state |
 | Jeevanandham T | CS24I1035 | Protocol & networking |
 | Akula Sai Teja | CS24I1054 | Canvas & drawing tools |
 | Nithillakrishi P Y | CS24I1039 | UI & collaboration features |
 
-Each of us built one area end to end: the code, its tests, and our part of the documentation,
-the slides and the explanation video. The git history shows each member's commits. Paths below are
-relative to `src/lanboard/`. Talking points and likely viva questions for every area are in
-[`docs/PRESENTER_GUIDE.md`](docs/PRESENTER_GUIDE.md), and the module map is in
-[`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md). For a short write-up of who built what and how it
-works, read the [contributions report](report/LANBoard_Contributions_Report.pdf).
+Each member explains one area in the explanation video and in the viva. The same list, with the
+files behind each area and the matching video, is in [`TEAM.md`](TEAM.md). Paths are relative to
+`src/lanboard/`; the full module map is in [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md).
 
-**Yashvanth S (CS24I1029): server core and state** (slides 2 to 9)
-- `server/server.py`: the TCP listener, one `ClientConnection` per socket with reader and writer
-  tasks, the handshake, bounded send queues and the idle-client watchdog.
-- `server/room.py`: the `Room` sequencer. It runs the op pipeline (permission, rate limit,
-  validation, dedupe, `seq`, broadcast, HASH) and handles sessions, roles, lock and kick, chat,
-  saves and history.
-- `server/persistence.py`: the write-ahead op log, atomic snapshots, the history archive and
-  restore after a restart.
-- `server/dashboard.py`: the live terminal dashboard (`--dashboard`).
-- Multi-part transfers for large snapshots and histories (`encode_parts` and `PartAssembler` in
-  `common/protocol.py`).
-- `common/model.py` (with Akula): the shared `Board`, `apply`, `normalise`, `validate_op` and `hash`.
-- `client/controller.py` (his half): the confirmed board replica and the ordering rules.
-- `tools/bot.py`: the headless bot client and stress test.
-- Integration of all four areas, the end-to-end tests, and most of the documentation.
+- **Server core and state:** `server/server.py`, `server/room.py`, `server/persistence.py`,
+  `server/dashboard.py`, the shared `common/model.py`, and the confirmed replica in
+  `client/controller.py`.
+- **Protocol and networking:** `common/protocol.py`, `common/messages.py`, `client/net.py`,
+  `client/discovery.py`, `server/discovery.py`, the gap and duplicate handling in
+  `client/controller.py`, `client/chaos.py` and `client/metrics.py`.
+- **Canvas and drawing tools:** `client/canvas/`, `common/geometry.py`, `common/undo.py`.
+- **UI and collaboration features:** `client/ui/` (connect dialog, main window, chat, people and
+  roles, history, Network Inspector, themes) and the cross-platform builds in `packaging/`.
 
-**Jeevanandham T (CS24I1035): protocol and networking** (slides 10 to 17)
-- `common/protocol.py`: length-prefixed framing and the incremental `FrameDecoder`.
-- `common/messages.py`: the message catalogue and the `MsgType` codes.
-- `client/net.py`: `NetClient` over `QTcpSocket`, with the handshake, heartbeats, reconnect with
-  backoff, and resume.
-- `client/controller.py` (his half): duplicate and gap handling, resync and hash checks.
-- `client/discovery.py`: UDP LAN discovery ("Nearby servers"), and the multi-adapter fixes in
-  `server/discovery.py`.
-- `client/chaos.py` and `client/metrics.py`: the Chaos Lab fault injector and the network HUD
-  metrics.
-- Demo-day fixes for busy ports and machines with several network adapters.
-
-**Akula Sai Teja (CS24I1054): canvas and drawing tools** (slides 18 to 21)
-- `client/canvas/`: `CanvasView` (pan, zoom, image and PDF import, export), `CanvasScene`, the
-  canvas items, the drawing tools (pen, highlighter, eraser, shapes, text, sticky notes, select,
-  laser) and the minimap.
-- `common/geometry.py`: RDP stroke simplification, hit testing and Smart Ink shape recognition.
-- `common/undo.py`: per-user undo and redo with inverse ops and conflict filtering.
-- `common/model.py` (with Yashvanth): the board model that the tools submit ops against.
-- Builds: the cross-platform PyInstaller spec, the GitHub Actions builds for Windows, Linux and
-  macOS, the packaging smoke test, the release zip, and the macOS app and DMG (`packaging/`).
-
-**Nithillakrishi P Y (CS24I1039): UI and collaboration features** (slides 22 to 26)
-- `client/ui/`: the main window and its permission-aware controls, the connect dialog, the top bar
-  and sync badge, chat, the people list (roles, kick, follow), time-lapse history, the Network
-  Inspector, HUD and Chaos Lab panels, toasts, and the light and dark theme.
-- The canvas-first UI redesign.
-- The fix for the Qt library conflict in the Windows executable (`packaging/lanboard.spec`).
-
-Shared by the team: `common/auth.py` (password hashing and proofs), `common/config.py` (ports,
-timeouts and limits), and slides 1 and 27 to 30 (title, testing, challenges, demo plan, Q&A).
+Shared: `common/auth.py` (password hashing and proofs) and `common/config.py` (ports, timeouts and
+limits).
 
 ## How it works
 
@@ -195,25 +157,20 @@ The app is not notarised, so the first time you open it you need to right-click 
 *Open*. GitHub Actions builds all three platforms (and the DMG) on every push; see
 [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
-The submission zip (executables, source, documents) is put together by
+The submission zip (executables, source, documents, videos) is put together by
 `.venv/bin/python packaging/make_release.py`.
 
 ## Documentation
 
 | Document | What is in it |
 |---|---|
-| [`report/LANBoard_Contributions_Report.pdf`](report/LANBoard_Contributions_Report.pdf) | short report: who built what, how each part works, problems we fixed |
-| [`docs/LANBoard_Technical_Documentation.pdf`](docs/LANBoard_Technical_Documentation.pdf) | full technical documentation and user guide (source: [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)) |
-| [`docs/LANBoard_Presentation.pptx`](docs/LANBoard_Presentation.pptx) | the presentation deck |
-| [`docs/PRESENTER_GUIDE.md`](docs/PRESENTER_GUIDE.md) | talking points, viva questions and the live demo runbook |
-| [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md) | the project brief (original PDF in [`docs/brief/`](docs/brief/)) |
-| [`docs/CONCEPT.md`](docs/CONCEPT.md) | concept, scope and demo story |
-| [`docs/FEATURES.md`](docs/FEATURES.md) | feature list, including the signature features |
+| [`docs/LANBoard_Technical_Documentation.pdf`](docs/LANBoard_Technical_Documentation.pdf) | technical documentation and user guide (source: [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)) |
+| [`docs/LANBoard_Presentation.pptx`](docs/LANBoard_Presentation.pptx) | the presentation deck used in the explanation video |
+| [`docs/FEATURES.md`](docs/FEATURES.md) | feature list |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | architecture, wire protocol, sync and undo rules |
 | [`docs/CLIENT_API.md`](docs/CLIENT_API.md) | internal contracts between client modules |
 | [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) | code layout, testing and build |
-| [`docs/TODO.md`](docs/TODO.md) | plan, owners and checklist |
-| [`docs/RESEARCH.md`](docs/RESEARCH.md), [`docs/REFERENCES.md`](docs/REFERENCES.md) | prior-art study |
+| [`docs/brief/`](docs/brief/) | the original project brief (PDF) |
 
 ## Third-party software
 
