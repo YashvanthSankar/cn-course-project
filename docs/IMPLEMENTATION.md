@@ -161,7 +161,7 @@ python -m lanboard.client                      # each participant
 pytest -q
 pyinstaller --noconfirm packaging/lanboard.spec   # → dist/LANBoard/{lanboard-server,lanboard-client}
 python packaging/smoke_test.py                    # check the frozen bundle
-python packaging/make_release.py                  # → release/LANBoard_CN_Project_2026.zip
+python packaging/make_release.py                  # → release/CS24I1029_CN_PROJECT.zip
 ```
 
 ## 5. Definition of done (per feature)

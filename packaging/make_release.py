@@ -1,4 +1,4 @@
-"""Assemble the course submission zip: release/LANBoard_CN_Project_2026.zip.
+"""Assemble the course submission zip: release/CS24I1029_CN_PROJECT.zip.
 
 Usage (from anywhere; paths are relative to the repository)::
 
@@ -51,7 +51,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ZIP_NAME = "LANBoard_CN_Project_2026.zip"
+ZIP_NAME = "CS24I1029_CN_PROJECT.zip"
 DOCS = {
     "LANBoard_Technical_Documentation.pdf": "Technical Documentation (PDF)",
     "LANBoard_Presentation.pptx": "Presentation (PPT)",
@@ -342,7 +342,7 @@ macOS (Apple Silicon unless the folder name says x64)
 LINUX (x86-64, glibc; tested on Ubuntu)
                                     folder: executables/{lin}/LANBoard
 ----------------------------------------------------------------------
-  * Extract with:  unzip LANBoard_CN_Project_2026.zip   (keeps the +x bits;
+  * Extract with:  unzip CS24I1029_CN_PROJECT.zip   (keeps the +x bits;
     if they are lost:  chmod +x lanboard-server lanboard-client)
   * Run:  ./lanboard-server   and   ./lanboard-client
   * If the client says it could not load the Qt platform plugin "xcb",
